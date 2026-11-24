@@ -9,7 +9,10 @@ import net.conczin.mca.entity.ai.Genetics;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.Mourning;
 import net.conczin.mca.entity.ai.Traits;
+import net.conczin.mca.entity.ai.brain.VillagerTasksMCA;
+import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.conczin.mca.entity.ai.brain.tasks.EnterGraveyardTask;
+import net.conczin.mca.entity.ai.brain.tasks.ExtendedWalkTowardsTask;
 import net.conczin.mca.entity.ai.brain.tasks.GrieveTask;
 import net.conczin.mca.registry.BlocksMCA;
 import net.minecraft.core.BlockPos;
@@ -121,6 +124,45 @@ public final class MourningFailureGameTests {
                         + ", personalRetry=" + personalRetry);
             }
         });
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void expiredMourningFailureEndsOwnedMovementEvenWithActiveWalkTarget(GameTestHelper helper) {
+        BlockPos grave = prepareArena(helper);
+        encloseGrave(helper.getLevel(), grave);
+        long now = helper.getLevel().getGameTime();
+        GlobalPos standingPosition = GlobalPos.of(helper.getLevel().dimension(), grave.east());
+        for (boolean ambient : List.of(true, false)) {
+            VillagerEntityMCA mourner = spawnVillager(helper,
+                    ambient ? grave.east(6) : grave.offset(6, 0, 3),
+                    ambient ? "Expired Ambient Mourner" : "Expired Personal Mourner");
+            if (ambient) {
+                Mourning.startAmbient(mourner, grave);
+            } else {
+                Mourning.start(mourner, grave);
+            }
+            mourner.getBrain().setMemory(MemoryModuleTypeMCA.MOURNING_POSITION, standingPosition);
+            var producer = VillagerTasksMCA.getGrievingPackage().get(2).getSecond();
+            helper.assertTrue(producer.tryStart(helper.getLevel(), mourner, now)
+                            && ExtendedWalkTowardsTask.ownsWalkTarget(mourner, MemoryModuleTypeMCA.MOURNING_POSITION),
+                    "grieving producer did not publish the owned blocked approach");
+
+            WalkTargetFailureMemory.record(mourner, standingPosition, now - 1_202L);
+            helper.assertTrue(producer.tryStart(helper.getLevel(), mourner, now + 1L),
+                    "grieving producer did not inspect its expired owned path failure");
+            helper.assertTrue(!mourner.getBrain().hasMemoryValue(MemoryModuleType.WALK_TARGET),
+                    "expired mourning left its active owned movement running");
+            if (ambient) {
+                helper.assertTrue(!mourner.getBrain().hasMemoryValue(MemoryModuleTypeMCA.MOURNING_SITE),
+                        "expired ambient mourning retained its grave assignment");
+            } else {
+                helper.assertTrue(isAssignedTo(mourner, grave)
+                                && mourner.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_RETRY_AT)
+                                .filter(retryAt -> retryAt == helper.getLevel().getGameTime() + 4_800L).isPresent(),
+                        "expired personal mourning did not defer its original grave for four minutes");
+            }
+        }
+        helper.succeed();
     }
 
     @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena")

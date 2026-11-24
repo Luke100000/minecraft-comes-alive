@@ -75,6 +75,7 @@ import net.conczin.mca.server.world.data.FloorBatchRefreshGameTests;
 import net.conczin.mca.server.world.data.IndoorRoomCacheGameTests;
 import net.conczin.mca.server.world.data.MourningFailureGameTests;
 import net.conczin.mca.server.world.data.PlayerSaveDataDimensionGameTests;
+import net.conczin.mca.server.world.data.PlayerSaveDataSafetyGameTests;
 import net.conczin.mca.server.world.data.SavedDataDiskRecoveryGameTests;
 import net.conczin.mca.server.world.data.ReportedFloorInteractionGameTests;
 import net.conczin.mca.server.world.data.ReportedStairHouseGameTests;
@@ -174,6 +175,7 @@ public final class McaGameTestsRegistration {
             VillageMourningGameTests.class,
             MourningFailureGameTests.class,
             PlayerSaveDataDimensionGameTests.class,
+            PlayerSaveDataSafetyGameTests.class,
             SavedDataDiskRecoveryGameTests.class
     );
 

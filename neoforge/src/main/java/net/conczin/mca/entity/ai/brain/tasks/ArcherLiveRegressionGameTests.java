@@ -497,6 +497,9 @@ public final class ArcherLiveRegressionGameTests {
 
     private static void swoopingPhantom(GameTestHelper helper, long seed) {
         Arena a = new Arena(helper, 0);
+        for (Traits.Trait trait : a.archer.getTraits().getTraits()) a.archer.getTraits().removeTrait(trait);
+        a.archer.updateAttributes();
+        a.archer.refreshDimensions();
         a.archer.getAttribute(Attributes.MAX_HEALTH).setBaseValue(20);
         a.archer.setHealth(20);
         Phantom phantom = spawnPhantom(a, seed, 34);

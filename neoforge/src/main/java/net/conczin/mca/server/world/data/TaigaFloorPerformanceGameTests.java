@@ -24,13 +24,13 @@ public final class TaigaFloorPerformanceGameTests {
         RoomWorkflow workflow = new RoomWorkflow(manager, world);
 
         long coldStart = System.nanoTime();
-        BuildingScanResult cold = workflow.analyzeReportedBuildingAddition(source);
+        RoomWorkflow.Addition cold = workflow.analyzeReportedBuildingAddition(source);
         long coldNanos = System.nanoTime() - coldStart;
         helper.assertTrue(cold.result() == Building.validationResult.SUCCESS,
                 "Taiga Temple registration scan failed at " + source + ": " + cold.result());
 
         long warmStart = System.nanoTime();
-        BuildingScanResult warm = workflow.analyzeReportedBuildingAddition(source);
+        RoomWorkflow.Addition warm = workflow.analyzeReportedBuildingAddition(source);
         long warmNanos = System.nanoTime() - warmStart;
         helper.assertTrue(warm.result() == Building.validationResult.SUCCESS,
                 "Repeated Taiga Temple scan failed: " + warm.result());

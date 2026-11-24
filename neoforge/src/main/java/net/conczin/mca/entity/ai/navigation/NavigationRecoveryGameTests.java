@@ -952,8 +952,10 @@ public final class NavigationRecoveryGameTests {
             template = "bastion/blocks/air", timeoutTicks = 80)
     public static void remotePassageRepairWakesFailedExtendedSearch(GameTestHelper helper) {
         BlockPos start = helper.absolutePos(new BlockPos(65, 1, 65));
-        BlockPos farTurn = start.west(55);
-        BlockPos destination = start.east(100).south(8);
+        // Keep the long detour within the bounded extended A* node budget.
+        // Its remote turn still lies well beyond ordinary FOLLOW_RANGE.
+        BlockPos farTurn = start.west(35);
+        BlockPos destination = start.east(65).south(8);
         // The only route initially heads away from the destination to a distant
         // turn, then returns on a parallel lane. A blocked turn is not a useful partial path.
         net.conczin.mca.gametest.GameTestTerrain.prepareFlatPath(helper, farTurn, start);
@@ -1028,7 +1030,8 @@ public final class NavigationRecoveryGameTests {
             }
             Path freshRoute = new NavigationProbe(villager).createPath(destination, 0);
             helper.assertTrue(freshRoute != null && freshRoute.canReach(),
-                    "fixture repair did not actually create a reachable route: " + freshRoute);
+                    "fixture repair did not actually create a reachable route: " + freshRoute
+                            + "; end=" + (freshRoute == null ? null : freshRoute.getEndNode()));
             navigation.shouldRecomputePath(gate);
             helper.assertTrue(navigation.consumeRetryInvalidation(destination),
                     "opening the remote turn failed to notify the stalled destination producer");
@@ -1270,6 +1273,141 @@ public final class NavigationRecoveryGameTests {
             villager.discard();
         }
         helper.succeed();
+    }
+
+    @GameTest(batch = "mca_navigation_stopped_world_wake", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 50)
+    public static void stoppedFailedSearchWakesFromWorldBlockChangeWithoutManualRecompute(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(35, 1, 35));
+        BlockPos target = start.east(2);
+        prepareFlatArea(helper, start, 30, 3);
+        for (int z = -23; z <= 23; z++) {
+            for (int y = 0; y < 3; y++) {
+                helper.getLevel().setBlock(start.offset(1, y, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                if (dx == 0 && dz == 0) continue;
+                for (int y = 0; y < 3; y++) {
+                    helper.getLevel().setBlock(target.offset(dx, y, dz), Blocks.STONE.defaultBlockState(), 3);
+                }
+            }
+        }
+        VillagerEntityMCA villager = spawnStationary(helper, start);
+        Config config = Config.getInstance();
+        int previousHorizon = config.villagerPathfindingDistance;
+        try {
+            config.villagerPathfindingDistance = 160;
+            villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
+                    new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
+            MCAGroundPathNavigation navigation = (MCAGroundPathNavigation) villager.getNavigation();
+            Path blocked = navigation.createPath(target, 0);
+            helper.assertTrue(blocked != null && !blocked.canReach(), "sealed detour fixture was reachable");
+            navigation.stop();
+            helper.assertTrue(navigation.getPath() == null, "fixture must exercise a stopped navigator");
+            WalkTargetFailureMemory.record(villager, target, helper.getLevel().getGameTime());
+
+            // A non-colliding block update must not wake a stopped failed search.
+            helper.getLevel().setBlock(start.north(2), Blocks.TRIPWIRE.defaultBlockState(), 3);
+            helper.assertTrue(!navigation.consumeRetryInvalidation(target),
+                    "non-colliding block change invalidated stopped-navigator backoff");
+
+            long searchesBefore = PathRequestDiagnostics.snapshot(villager).extendedSearches();
+            BlockPos gap = target.east();
+            for (int y = 0; y < 3; y++) {
+                helper.getLevel().setBlock(gap.above(y), Blocks.AIR.defaultBlockState(), 3);
+            }
+            helper.assertTrue(navigation.consumeRetryInvalidation(target),
+                    "world block update did not wake stopped navigator without manual shouldRecomputePath");
+            helper.assertTrue(!navigation.consumeRetryInvalidation(target),
+                    "stopped-navigator retry invalidation was delivered more than once");
+            Path reopened = navigation.createPath(target, 0);
+            helper.assertTrue(PathRequestDiagnostics.snapshot(villager).extendedSearches() > searchesBefore
+                            && reopened != null && reopened.canReach(),
+                    "stopped navigator retained failed extended-search suppression after world block update");
+        } finally {
+            config.villagerPathfindingDistance = previousHorizon;
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_detour_approach_variants", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void openDoorWaterBorderAndStepApproachesAllowDetourWhileFireStaysSealed(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(65, 1, 65));
+        BlockPos endpoint = start.east();
+        BlockPos target = start.east(3);
+        prepareFlatArea(helper, start, 61, 4);
+        for (int z = -55; z <= 55; z++) {
+            for (int y = 0; y < 4; y++) {
+                helper.getLevel().setBlock(start.offset(2, y, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        for (BlockPos blocked : List.of(target.east(), target.north())) {
+            for (int y = 0; y < 4; y++) {
+                helper.getLevel().setBlock(blocked.above(y), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        Config config = Config.getInstance();
+        int previousDistance = config.villagerPathfindingDistance;
+        try {
+            config.villagerPathfindingDistance = 160;
+
+            // 1. Open wooden door at the sole cardinal approach (PathType.DOOR_OPEN)
+            var openDoor = Blocks.OAK_DOOR.defaultBlockState()
+                    .setValue(net.minecraft.world.level.block.DoorBlock.FACING, Direction.NORTH)
+                    .setValue(net.minecraft.world.level.block.DoorBlock.OPEN, true);
+            helper.getLevel().setBlock(target.south(), openDoor, 3);
+            helper.getLevel().setBlock(target.south().above(), openDoor.setValue(
+                    net.minecraft.world.level.block.DoorBlock.HALF,
+                    net.minecraft.world.level.block.state.properties.DoubleBlockHalf.UPPER), 3);
+            helper.assertTrue(startsDetourFromCompletedPartial(helper, start, endpoint, target),
+                    "target whose sole approach is an already-open door was denied detour recovery");
+            helper.getLevel().setBlock(target.south().above(), Blocks.AIR.defaultBlockState(), 3);
+            helper.getLevel().setBlock(target.south(), Blocks.AIR.defaultBlockState(), 3);
+
+            // 2. Water-bordered walkable approach (PathType.WATER_BORDER)
+            BlockPos waterTrough = target.south().east();
+            helper.getLevel().setBlock(waterTrough, Blocks.WATER.defaultBlockState(), 3);
+            helper.assertTrue(startsDetourFromCompletedPartial(helper, start, endpoint, target),
+                    "target whose sole approach borders water was denied detour recovery");
+            helper.getLevel().setBlock(waterTrough, Blocks.STONE.defaultBlockState(), 3);
+
+            // 3. Fire blocking the sole approach (PathType.DAMAGE_FIRE) stays sealed
+            helper.getLevel().setBlock(target.south(), Blocks.FIRE.defaultBlockState(), 3);
+            helper.assertTrue(!startsDetourFromCompletedPartial(helper, start, endpoint, target),
+                    "target sealed by fire still started a speculative detour");
+            helper.getLevel().setBlock(target.south(), Blocks.AIR.defaultBlockState(), 3);
+
+            // 4. 1-block step-up onto a raised target (approach at target Y is PathType.OPEN above walkable floor)
+            helper.getLevel().setBlock(target, Blocks.STONE.defaultBlockState(), 3);
+            BlockPos raisedTarget = target.above();
+            helper.assertTrue(startsDetourFromCompletedPartial(helper, start, endpoint, raisedTarget),
+                    "raised target with a 1-block step-up approach was denied detour recovery");
+        } finally {
+            config.villagerPathfindingDistance = previousDistance;
+        }
+        helper.succeed();
+    }
+
+    private static boolean startsDetourFromCompletedPartial(GameTestHelper helper, BlockPos start,
+                                                             BlockPos endpoint, BlockPos target) {
+        VillagerEntityMCA villager = spawnStationary(helper, start);
+        try {
+            villager.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
+            villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
+                    new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
+            Path completed = new Path(List.of(node(start), node(endpoint)), target, false);
+            villager.getNavigation().moveTo(completed, 0.5D);
+            villager.setPos(Vec3.atBottomCenterOf(endpoint));
+            while (!completed.isDone()) completed.advance();
+            villager.getNavigation().tick();
+            return ((MCAGroundPathNavigation) villager.getNavigation()).isTakingDetourTo(target);
+        } finally {
+            villager.discard();
+        }
     }
 
     @GameTest(batch = "mca_navigation_review_reopen", templateNamespace = "minecraft",

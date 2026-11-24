@@ -2,6 +2,7 @@ package net.conczin.mca.entity.ai;
 
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
+import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.conczin.mca.entity.ai.brain.tasks.ExtendedWalkTowardsTask;
 import net.conczin.mca.entity.ai.navigation.BedApproachTarget;
 import net.conczin.mca.gametest.GameTestTerrain;
@@ -385,7 +386,7 @@ public final class ResidencySetHomeGameTests {
         long now = helper.getLevel().getGameTime();
         walk.tryStart(helper.getLevel(), duplicate, now);
         duplicate.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
-        duplicate.getBrain().setMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE, now - 200L);
+        WalkTargetFailureMemory.record(duplicate, head, now - 200L);
         walk.tryStart(helper.getLevel(), duplicate, now + 1L);
 
         helper.assertTrue(duplicate.getBrain().getMemoryInternal(MemoryModuleType.HOME).isEmpty(),

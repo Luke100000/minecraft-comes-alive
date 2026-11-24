@@ -27,7 +27,7 @@ public final class ReportedFloorInteractionGameTests {
         RoomWorkflow workflow = new RoomWorkflow(manager, helper.getLevel());
         commit(helper, workflow, workflow.analyzeBuildingAddition(main));
         Village village = manager.findNearestVillage(main, Village.MERGE_MARGIN).orElseThrow();
-        RoomScanPlan addition = village.getRoomScanPlan(helper.getLevel(), upper);
+        RoomWorkflow.Plan addition = RoomWorkflow.analyze(village, helper.getLevel(), upper).plan();
         commit(helper, workflow, workflow.analyzeAttachedRoom(upper, addition.targetBuildingId()));
         Building room = village.findInteractionRoomAt(upper).orElseThrow();
         StructureFloor floor = village.getStructureFor(room).orElseThrow()
@@ -54,7 +54,7 @@ public final class ReportedFloorInteractionGameTests {
         RoomWorkflow workflow = new RoomWorkflow(manager, helper.getLevel());
         commit(helper, workflow, workflow.analyzeBuildingAddition(main));
         Village village = manager.findNearestVillage(main, Village.MERGE_MARGIN).orElseThrow();
-        RoomScanPlan addition = village.getRoomScanPlan(helper.getLevel(), landing);
+        RoomWorkflow.Plan addition = RoomWorkflow.analyze(village, helper.getLevel(), landing).plan();
         helper.assertTrue(addition.mode() == Village.RoomScanMode.ADD_ATTACHMENT,
                 "reported basement selected " + addition.mode());
         commit(helper, workflow,
@@ -80,8 +80,8 @@ public final class ReportedFloorInteractionGameTests {
 
     private static void assertRegisteredInteraction(GameTestHelper helper, Village village,
                                                      RoomWorkflow workflow, Building expected, BlockPos source) {
-        RoomScanPlanner.Analysis analysis = RoomScanPlanner.analyze(village, helper.getLevel(), source);
-        RoomScanPlan plan = analysis.plan();
+        RoomWorkflow.Analysis analysis = RoomWorkflow.analyze(village, helper.getLevel(), source);
+        RoomWorkflow.Plan plan = analysis.plan();
         helper.assertTrue(plan.mode() == Village.RoomScanMode.UPDATE_ROOM,
                 "reported interaction " + source + " selected " + plan.mode() + " seed=" + plan.scanSeed()
                         + " adjacent=" + (analysis.observation() == null ? "none"
@@ -103,7 +103,7 @@ public final class ReportedFloorInteractionGameTests {
                 "fresh registered Floor geometry changed at " + source
                         + ": persistedCells=" + persisted.geometry().cells().size()
                         + " freshCells=" + fresh.scannedFloor().cells().size());
-        RegisteredRoomUpdate update = workflow.analyzeRegisteredRoomUpdate(village, expected.getId(), source);
+        RoomWorkflow.RoomUpdate update = workflow.analyzeRegisteredRoomUpdate(village, expected.getId(), source);
         helper.assertTrue(update.result() == Building.validationResult.SUCCESS,
                 "reported interaction update failed: " + update.result());
     }
@@ -113,7 +113,7 @@ public final class ReportedFloorInteractionGameTests {
         return helper.absolutePos(new BlockPos(x, y - 120 + 1, z));
     }
 
-    private static void commit(GameTestHelper helper, RoomWorkflow workflow, BuildingScanResult scan) {
+    private static void commit(GameTestHelper helper, RoomWorkflow workflow, RoomWorkflow.Addition scan) {
         helper.assertTrue(scan.result() == Building.validationResult.SUCCESS,
                 "reported house registration failed: " + scan.result());
         String type = scan.isAmbiguous() ? scan.matchingTypes().getFirst() : null;

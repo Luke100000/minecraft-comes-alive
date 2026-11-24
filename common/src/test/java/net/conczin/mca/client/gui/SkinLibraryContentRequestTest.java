@@ -15,41 +15,55 @@ import static org.junit.jupiter.api.Assertions.*;
 class SkinLibraryContentRequestTest {
     @Test
     void staleSameQueryResponseDoesNotReplaceNewPendingRequest() throws Exception {
-        SkinLibraryScreen screen = screenWithPendingQuery();
+        var epoch = new SkinLibraryScreen.RequestEpoch();
+        var page = SkinLibraryScreen.Page.LIBRARY;
+        String token = Auth.getToken();
+        var earlier = epoch.beginContentRequest(token, page);
+        epoch.beginContentRequest(token, page);
+        epoch.beginContentRequest(token, page);
+        SkinLibraryScreen screen = screenWithPendingQuery(epoch);
         Object pending = field("pendingQuery").get(screen);
         ContentListResponse oldResponse = new ContentListResponse(new Content[0], false);
 
         // Query A was requested, then B, then A again. The earlier A is no longer current.
-        accept(screen, pending, 1L, 0L, Auth.getToken(), oldResponse, null);
+        accept(screen, pending, earlier.contentRequest(), earlier.account(), token, oldResponse, null);
 
         assertSame(pending, field("pendingQuery").get(screen));
         assertNull(field("loadedQuery").get(screen));
         assertNull(field("error").get(screen));
 
         // Even a late HTTP failure must not replace the newer query's error state.
-        accept(screen, pending, 1L, 0L, Auth.getToken(), null, new IllegalStateException("old request"));
+        accept(screen, pending, earlier.contentRequest(), earlier.account(), token,
+                null, new IllegalStateException("old request"));
         assertSame(pending, field("pendingQuery").get(screen));
         assertNull(field("error").get(screen));
     }
 
     @Test
     void priorAccountCannotClearPendingRequestFromCurrentSession() throws Exception {
-        SkinLibraryScreen screen = screenWithPendingQuery();
+        var epoch = new SkinLibraryScreen.RequestEpoch();
+        var page = SkinLibraryScreen.Page.LIBRARY;
+        String token = Auth.getToken();
+        long priorAccount = epoch.capture(token, page).account();
+        epoch.invalidateAccount();
+        var current = epoch.beginContentRequest(token, page);
+        SkinLibraryScreen screen = screenWithPendingQuery(epoch);
         Object pending = field("pendingQuery").get(screen);
 
-        accept(screen, pending, 3L, 1L, Auth.getToken(),
+        // Use the current request number to exercise the account check on its own.
+        accept(screen, pending, current.contentRequest(), priorAccount, token,
                 new ErrorResponse(401, "expired prior session"), null);
 
         assertSame(pending, field("pendingQuery").get(screen));
         assertNull(field("error").get(screen));
 
-        // The current session's failure is still handled after both obsolete callbacks.
-        accept(screen, pending, 3L, 2L, Auth.getToken(), null, new IllegalStateException("current request"));
+        accept(screen, pending, current.contentRequest(), current.account(), token,
+                null, new IllegalStateException("current request"));
         assertNull(field("pendingQuery").get(screen));
         assertNotNull(field("error").get(screen));
     }
 
-    private static SkinLibraryScreen screenWithPendingQuery() throws Exception {
+    private static SkinLibraryScreen screenWithPendingQuery(SkinLibraryScreen.RequestEpoch epoch) throws Exception {
         Field unsafeField = Unsafe.class.getDeclaredField("theUnsafe");
         unsafeField.setAccessible(true);
         SkinLibraryScreen screen = (SkinLibraryScreen) ((Unsafe) unsafeField.get(null))
@@ -64,8 +78,7 @@ class SkinLibraryContentRequestTest {
         @SuppressWarnings({"rawtypes", "unchecked"})
         Enum<?> subscriptionValue = Enum.valueOf((Class) subscription.getType(), "LIBRARY");
         subscription.set(screen, subscriptionValue);
-        field("accountGeneration").setLong(screen, 2L);
-        field("contentRequestGeneration").setLong(screen, 3L);
+        field("requestEpoch").set(screen, epoch);
 
         Method createQuery = SkinLibraryScreen.class.getDeclaredMethod("createQuery");
         createQuery.setAccessible(true);

@@ -4,7 +4,9 @@ import com.mojang.authlib.GameProfile;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
 import net.conczin.mca.entity.ai.Chore;
+import net.conczin.mca.entity.ai.Traits;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.resources.ResourceKey;
@@ -15,6 +17,7 @@ import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.animal.Cow;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -22,6 +25,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.storage.loot.LootTable;
@@ -45,6 +49,8 @@ public final class HuntingTaskGameTests {
         BlockPos start = helper.absolutePos(new BlockPos(4, 2, 4));
         HunterFixture fixture = spawnHunter(helper, start);
         VillagerEntityMCA hunter = fixture.hunter();
+        hunter.getTraits().removeTrait(Traits.WEAK);
+        hunter.updateAttributes();
         Player player = helper.makeMockPlayer(GameType.SURVIVAL);
         Vec3 playerPosition = Vec3.atBottomCenterOf(start.east(2));
         player.setPos(playerPosition.x, playerPosition.y, playerPosition.z);
@@ -95,6 +101,8 @@ public final class HuntingTaskGameTests {
         BlockPos start = helper.absolutePos(new BlockPos(4, 2, 4));
         HunterFixture fixture = spawnHunter(helper, start);
         VillagerEntityMCA hunter = fixture.hunter();
+        hunter.getTraits().removeTrait(Traits.WEAK);
+        hunter.updateAttributes();
         fillInventory(hunter.getInventory(), -1);
         Cow prey = spawnLootCow(helper.getLevel(), start.east(), () -> {
         });
@@ -127,6 +135,8 @@ public final class HuntingTaskGameTests {
         BlockPos start = helper.absolutePos(new BlockPos(4, 2, 4));
         HunterFixture fixture = spawnHunter(helper, start);
         VillagerEntityMCA hunter = fixture.hunter();
+        hunter.getTraits().removeTrait(Traits.WEAK);
+        hunter.updateAttributes();
         fillInventory(hunter.getInventory(), 63);
         Cow prey = spawnLootCow(helper.getLevel(), start.east(), () -> {
         });
@@ -160,6 +170,8 @@ public final class HuntingTaskGameTests {
         BlockPos start = helper.absolutePos(new BlockPos(4, 2, 4));
         HunterFixture fixture = spawnHunter(helper, start);
         VillagerEntityMCA hunter = fixture.hunter();
+        hunter.getTraits().removeTrait(Traits.WEAK);
+        hunter.updateAttributes();
         Cow prey = spawnLootCow(helper.getLevel(), start.east(), () -> {
         });
         Consumer<LivingDropsEvent> cancellation = event -> {
@@ -188,6 +200,8 @@ public final class HuntingTaskGameTests {
         BlockPos start = helper.absolutePos(new BlockPos(4, 2, 4));
         HunterFixture fixture = spawnHunter(helper, start);
         VillagerEntityMCA hunter = fixture.hunter();
+        hunter.getTraits().removeTrait(Traits.WEAK);
+        hunter.updateAttributes();
         Cow prey = spawnLootCow(helper.getLevel(), start.east(), () -> {
         });
         var rule = helper.getLevel().getGameRules().getRule(GameRules.RULE_DOMOBLOOT);
@@ -201,6 +215,119 @@ public final class HuntingTaskGameTests {
         } finally {
             rule.set(previous, helper.getLevel().getServer());
             discardItemsNear(helper.getLevel(), prey);
+            prey.discard();
+            fixture.close(helper);
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_hunting_cooldown_durability", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void huntingRespectsAttackCooldownAndDamagesSwordOnlyOnHits(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(4, 2, 4));
+        HunterFixture fixture = spawnHunter(helper, start);
+        VillagerEntityMCA hunter = fixture.hunter();
+        hunter.getTraits().removeTrait(Traits.WEAK);
+        hunter.updateAttributes();
+        Cow prey = new Cow(EntityType.COW, helper.getLevel());
+        Vec3 spawnPos = Vec3.atBottomCenterOf(start.east());
+        prey.setPos(spawnPos.x, spawnPos.y, spawnPos.z);
+        prey.setNoAi(true);
+        prey.getAttribute(Attributes.MAX_HEALTH).setBaseValue(20.0D);
+        prey.setHealth(20.0F);
+        helper.getLevel().addFreshEntity(prey);
+
+        Cow immunePrey = new Cow(EntityType.COW, helper.getLevel()) {
+            @Override
+            public boolean hurt(DamageSource source, float amount) {
+                return false;
+            }
+        };
+        preparePrey(helper.getLevel(), immunePrey, start.south());
+
+        try {
+            HuntingTask task = beginHunt(helper, hunter, prey);
+            long time = helper.getLevel().getGameTime();
+            task.tick(helper.getLevel(), hunter, time);
+
+            ItemStack sword = hunter.getItemInHand(hunter.getDominantHand());
+            float healthAfterFirstHit = prey.getHealth();
+            helper.assertTrue(healthAfterFirstHit < 20.0F, "hunter did not damage prey on its initial strike");
+            helper.assertTrue(hunter.getBrain().hasMemoryValue(MemoryModuleType.ATTACK_COOLING_DOWN),
+                    "hunting strike did not start ATTACK_COOLING_DOWN");
+            helper.assertTrue(sword.getDamageValue() == 1,
+                    "one successful strike did not consume exactly 1 durability; damage=" + sword.getDamageValue());
+
+            for (int i = 1; i <= 5; i++) {
+                task.tick(helper.getLevel(), hunter, time + i);
+            }
+            helper.assertTrue(prey.getHealth() == healthAfterFirstHit,
+                    "hunter bypassed ATTACK_COOLING_DOWN and struck again immediately");
+            helper.assertTrue(sword.getDamageValue() == 1,
+                    "cooldown ticks drained extra sword durability; damage=" + sword.getDamageValue());
+
+            hunter.getBrain().eraseMemory(MemoryModuleType.ATTACK_COOLING_DOWN);
+            try {
+                Field targetField = HuntingTask.class.getDeclaredField("target");
+                targetField.setAccessible(true);
+                targetField.set(task, immunePrey);
+            } catch (ReflectiveOperationException exception) {
+                throw new AssertionError("could not switch hunter target", exception);
+            }
+            task.tick(helper.getLevel(), hunter, time + 10);
+            helper.assertTrue(sword.getDamageValue() == 1,
+                    "rejected hit still damaged the hunter's sword; damage=" + sword.getDamageValue());
+        } finally {
+            discardItemsNear(helper.getLevel(), prey);
+            discardItemsNear(helper.getLevel(), immunePrey);
+            prey.discard();
+            immunePrey.discard();
+            fixture.close(helper);
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_hunting_fire_aspect", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void fireAspectSwordCapturesCookedMeatWithoutTouchingUnrelatedDrops(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(4, 2, 4));
+        HunterFixture fixture = spawnHunter(helper, start);
+        VillagerEntityMCA hunter = fixture.hunter();
+        hunter.getTraits().removeTrait(Traits.WEAK);
+        hunter.updateAttributes();
+        ItemStack enchantedSword = new ItemStack(Items.IRON_SWORD);
+        var enchantments = helper.getLevel().registryAccess().lookupOrThrow(Registries.ENCHANTMENT);
+        enchantedSword.enchant(enchantments.getOrThrow(Enchantments.FIRE_ASPECT), 2);
+        enchantedSword.enchant(enchantments.getOrThrow(Enchantments.SHARPNESS), 5);
+        hunter.getInventory().setItem(0, enchantedSword);
+
+        Cow prey = spawnOrdinaryCow(helper.getLevel(), start.east());
+        // Full 10 HP (> old 6.0F flat damage) proves doHurtTarget applies weapon attributes + Sharpness V.
+        prey.setHealth(prey.getMaxHealth());
+        ItemEntity unrelated = new ItemEntity(helper.getLevel(), start.getX() + 1.5, start.getY(),
+                start.getZ() + 0.5, new ItemStack(Items.EMERALD));
+        helper.getLevel().addFreshEntity(unrelated);
+
+        try {
+            HuntingTask task = beginHunt(helper, hunter, prey);
+            hunter.tick();
+            helper.assertTrue(hunter.getAttributeValue(Attributes.ATTACK_DAMAGE) > 6.0D,
+                    "hunter did not sync equipped sword attack damage before striking");
+            long time = helper.getLevel().getGameTime();
+            task.tick(helper.getLevel(), hunter, time);
+            helper.assertTrue(prey.isDeadOrDying(),
+                    "Sharpness V iron sword strike did not kill full-health (10 HP) cow; remaining=" + prey.getHealth());
+            task.tick(helper.getLevel(), hunter, time + 1);
+
+            helper.assertTrue(inventoryCount(hunter.getInventory(), Items.COOKED_BEEF) >= 1,
+                    "Fire Aspect hunting kill did not capture cooked beef into the hunter's inventory");
+            helper.assertTrue(inventoryCount(hunter.getInventory(), Items.BEEF) == 0,
+                    "Fire Aspect hunting kill left raw beef unsmelted");
+            helper.assertTrue(helper.getLevel().getEntity(unrelated.getId()) == unrelated
+                            && unrelated.getItem().is(Items.EMERALD)
+                            && inventoryCount(hunter.getInventory(), Items.EMERALD) == 0,
+                    "Fire Aspect hunting kill collected an unrelated ground item");
+        } finally {
+            discardItemsNear(helper.getLevel(), prey);
+            unrelated.discard();
             prey.discard();
             fixture.close(helper);
         }

@@ -11,7 +11,6 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.FluidState;
 
-import java.lang.reflect.Constructor;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.OptionalInt;
@@ -59,23 +58,15 @@ public final class ShelterLookupProbeGameTests {
     }
 
     public static void log(IndoorRoomCache cache, BlockPos bed, String label) {
-        try {
-            Class<?> type = Class.forName(IndoorRoomCache.class.getName() + "$LoadedBlocks");
-            Constructor<?> constructor = type.getDeclaredConstructor(IndoorRoomCache.class, boolean.class);
-            constructor.setAccessible(true);
-            var delegate = (SelectedFloorScanner.LoadedColumns) constructor.newInstance(cache, true);
-            CountingBlocks blocks = new CountingBlocks(delegate);
-            var scan = SelectedFloorScanner.scan(blocks, bed, 512, 16);
-            if (scan.result() == Building.validationResult.SUCCESS) BuildingRoomScanner.components(blocks, scan);
-            long air = blocks.reads.values().stream().filter(BlockState::isAir).count();
-            long highAir = blocks.reads.entrySet().stream()
-                    .filter(entry -> entry.getKey().getY() > bed.getY() + 16 && entry.getValue().isAir()).count();
-            int highest = blocks.reads.keySet().stream().mapToInt(BlockPos::getY).max().orElse(bed.getY());
-            MCA.LOGGER.info("[MCA Shelter Lookup] {} discoveryResult={} uniqueBlockReads={} airReads={} airReadsOver16AboveBed={} highestReadY={} bedY={}",
-                    label, scan.result(), blocks.reads.size(), air, highAir, highest, bed.getY());
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("Room discovery diagnostic unavailable", e);
-        }
+        CountingBlocks blocks = new CountingBlocks(cache.nonLoadingBlocks());
+        var scan = SelectedFloorScanner.scan(blocks, bed, 512, 16);
+        if (scan.result() == Building.validationResult.SUCCESS) StructureScanner.components(blocks, scan);
+        long air = blocks.reads.values().stream().filter(BlockState::isAir).count();
+        long highAir = blocks.reads.entrySet().stream()
+                .filter(entry -> entry.getKey().getY() > bed.getY() + 16 && entry.getValue().isAir()).count();
+        int highest = blocks.reads.keySet().stream().mapToInt(BlockPos::getY).max().orElse(bed.getY());
+        MCA.LOGGER.info("[MCA Shelter Lookup] {} discoveryResult={} uniqueBlockReads={} airReads={} airReadsOver16AboveBed={} highestReadY={} bedY={}",
+                label, scan.result(), blocks.reads.size(), air, highAir, highest, bed.getY());
     }
 
     private static final class CountingBlocks implements SelectedFloorScanner.LoadedColumns, FloorCeilingResolver.ColumnHeight {

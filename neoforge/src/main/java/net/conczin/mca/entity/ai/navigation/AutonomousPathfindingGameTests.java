@@ -932,6 +932,7 @@ public final class AutonomousPathfindingGameTests {
         int[] headNodeTicks = {0};
         boolean[] passed = {false};
         boolean[] loggedPath = {false};
+        String[] prematureCloseState = {null};
         DynamicGameEventListener<GameEventListener> listener = new DynamicGameEventListener<>(new GameEventListener() {
             public PositionSource getListenerSource() { return new BlockPositionSource(gate); }
             public int getListenerRadius() { return 16; }
@@ -941,6 +942,23 @@ public final class AutonomousPathfindingGameTests {
                         opens[0]++;
                     } else if (event == GameEvent.BLOCK_CLOSE && villager.getX() < gate.getX()) {
                         closesBeforeCrossing[0]++;
+                        if (prematureCloseState[0] == null) {
+                            Path navigationPath = villager.getNavigation().getPath();
+                            Path memoryPath = villager.getBrain().getMemory(MemoryModuleType.PATH).orElse(null);
+                            prematureCloseState[0] = "time=" + world.getGameTime()
+                                    + ", closingEntity=" + context.sourceEntity()
+                                    + ", closingEntityId=" + (context.sourceEntity() == null ? null : context.sourceEntity().getUUID())
+                                    + ", body=" + villager.getBoundingBox()
+                                    + ", motion=" + villager.getDeltaMovement()
+                                    + ", navPath=" + navigationPath
+                                    + ", navPrevious=" + (navigationPath == null ? null : navigationPath.getPreviousNode())
+                                    + ", navNext=" + (navigationPath == null || navigationPath.isDone() ? null : navigationPath.getNextNode())
+                                    + ", memoryPath=" + memoryPath
+                                    + ", memoryPrevious=" + (memoryPath == null ? null : memoryPath.getPreviousNode())
+                                    + ", memoryNext=" + (memoryPath == null || memoryPath.isDone() ? null : memoryPath.getNextNode())
+                                    + ", walkTarget=" + villager.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null)
+                                    + ", doorsToClose=" + villager.getBrain().getMemory(MemoryModuleType.DOORS_TO_CLOSE).orElse(null);
+                        }
                     }
                     if (event == GameEvent.BLOCK_OPEN || event == GameEvent.BLOCK_CLOSE) {
                         Path path = villager.getNavigation().getPath();
@@ -969,7 +987,7 @@ public final class AutonomousPathfindingGameTests {
             helper.assertTrue(closesBeforeCrossing[0] == 0,
                     "head-height gate closed before the approaching villager reached it; opens=" + opens[0]
                             + ", closes=" + closesBeforeCrossing[0] + ", headNodeTicks=" + headNodeTicks[0]
-                            + ", pos=" + villager.position());
+                            + ", pos=" + villager.position() + ", firstClose=" + prematureCloseState[0]);
             if (villager.position().distanceToSqr(Vec3.atBottomCenterOf(destination)) < 2.25D) {
                 helper.assertTrue(passed[0] && opens[0] > 0 && headNodeTicks[0] > 0,
                         "fixture did not exercise an autonomous path beneath the gate; opens=" + opens[0]

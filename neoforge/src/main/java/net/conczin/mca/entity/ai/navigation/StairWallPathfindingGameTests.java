@@ -8,6 +8,7 @@ import net.conczin.mca.entity.ai.Genetics;
 import net.conczin.mca.entity.ai.Traits;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.GlobalPos;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.util.Mth;
 import net.minecraft.gametest.framework.GameTest;
@@ -19,13 +20,18 @@ import net.minecraft.world.level.GameType;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.ai.behavior.EntityTracker;
+import net.minecraft.world.entity.ai.village.poi.PoiTypes;
 import net.minecraft.world.entity.schedule.Activity;
+import net.minecraft.world.entity.schedule.Schedule;
+import net.minecraft.world.entity.schedule.ScheduleBuilder;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.DoublePlantBlock;
 import net.minecraft.world.level.block.SlabBlock;
 import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.Half;
+import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.block.state.properties.SlabType;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.Vec3;
@@ -612,6 +618,25 @@ public final class StairWallPathfindingGameTests {
     @GameTest(batch = "mca_stair_spin_repeated_interaction_target", templateNamespace = "mca",
             template = "gametest/copied_open_house", timeoutTicks = 560)
     public static void unreachableInteractionTargetRetriesWithoutSpinningAndRecovers(GameTestHelper helper) {
+        runUnreachableInteractionTargetTest(helper, Activity.IDLE, false, "repeated-interaction");
+    }
+
+    /** REST movement must not repeatedly replan a blocked player interaction. */
+    @GameTest(batch = "mca_stair_spin_rest_interaction_target", templateNamespace = "mca",
+            template = "gametest/copied_open_house", timeoutTicks = 560)
+    public static void restingVillagerInteractingWithUnreachablePlayerRetriesWithoutSpinningAndRecovers(GameTestHelper helper) {
+        runUnreachableInteractionTargetTest(helper, Activity.REST, false, "rest-interaction");
+    }
+
+    /** A real HOME POI must not erase failure backoff for the player's blocked interaction target. */
+    @GameTest(batch = "mca_stair_spin_rest_home_interaction_target", templateNamespace = "mca",
+            template = "gametest/copied_open_house", timeoutTicks = 560)
+    public static void restingVillagerWithHomeRetriesBlockedInteractionWithoutSpinningAndRecovers(GameTestHelper helper) {
+        runUnreachableInteractionTargetTest(helper, Activity.REST, true, "rest-home-interaction");
+    }
+
+    private static void runUnreachableInteractionTargetTest(GameTestHelper helper, Activity scheduledActivity,
+                                                           boolean withHome, String reportLabel) {
         BlockPos lower = prepareThreeStepDescent(helper, true, null);
         VillagerEntityMCA villager = spawnVillager(helper, lower.east(4).above(3), "Stair interaction walker");
         // The mock player is a stationary interaction reference, not a registered or ticking player.
@@ -636,6 +661,17 @@ public final class StairWallPathfindingGameTests {
         }
         WalkTarget target = new WalkTarget(player, 0.5F, 2);
         setBrainWalkTarget(helper, villager, target);
+        if (withHome) {
+            assignValidHomeBesideStairEntrance(helper, villager, lower);
+        }
+        // Keep the intended activity stable without changing the shared GameTest world's time.
+        villager.getBrain().setSchedule(new ScheduleBuilder(new Schedule())
+                .changeActivityAt(0, scheduledActivity).build());
+        villager.getBrain().setActiveActivityIfPossible(scheduledActivity);
+        if (scheduledActivity == Activity.REST) {
+            helper.assertTrue(villager.getBrain().getActiveNonCoreActivity().orElse(null) == Activity.REST,
+                    "The nighttime interaction fixture must activate REST movement");
+        }
         villager.getInteractions().interactAt(player, Vec3.ZERO, InteractionHand.MAIN_HAND);
         StairTurnObservation observation = new StairTurnObservation(villager, target);
         int[] ticks = {0};
@@ -648,6 +684,16 @@ public final class StairWallPathfindingGameTests {
                 lookingAtPlayerTicks[0]++;
             }
             if (ticks[0] == 300) {
+                if (scheduledActivity == Activity.REST) {
+                    helper.assertTrue(villager.getBrain().getActiveNonCoreActivity().orElse(null) == Activity.REST,
+                            "REST must remain active throughout the blocked interaction window");
+                }
+                if (withHome) {
+                    GlobalPos expectedHome = GlobalPos.of(helper.getLevel().dimension(), lower.west(2));
+                    helper.assertTrue(villager.getBrain().getMemory(MemoryModuleType.HOME)
+                                    .filter(expectedHome::equals).isPresent(),
+                            "The valid HOME assignment must persist during blocked interaction");
+                }
                 PathRequestDiagnostics.SearchSnapshot searches = PathRequestDiagnostics.snapshot(villager);
                 closedRouteSearches[0] = searches.ordinarySearches() + searches.extendedSearches();
                 MCA.LOGGER.info("[MCA-STAIR-STRESS] event=interaction-route-open closedSearches={} stats={}",
@@ -661,10 +707,13 @@ public final class StairWallPathfindingGameTests {
                         .setValue(SlabBlock.TYPE, SlabType.BOTTOM), 3);
             }
             if (ticks[0] == 500) {
-                observation.report("repeated-interaction", ticks[0]);
+                observation.report(reportLabel, ticks[0]);
                 boolean reachedPlayer = villager.onGround() && Math.abs(villager.getY() - player.getY()) <= 1.0D
                         && villager.distanceToSqr(player) < 9.0D;
                 villager.getInteractions().stopInteracting();
+                if (withHome) {
+                    villager.releasePoi(MemoryModuleType.HOME);
+                }
                 villager.discard();
                 player.discard();
                 helper.assertTrue(lookingAtPlayerTicks[0] >= 400,
@@ -677,6 +726,27 @@ public final class StairWallPathfindingGameTests {
                 helper.succeed();
             }
         });
+    }
+
+    private static void assignValidHomeBesideStairEntrance(GameTestHelper helper, VillagerEntityMCA villager,
+                                                          BlockPos lower) {
+        // The prepared flat floor west of the first stair lies inside this template and
+        // keeps the bed out of the blocked player enclosure and its later doorway.
+        BlockPos foot = lower.west();
+        BlockPos head = foot.west();
+        var bed = Blocks.RED_BED.defaultBlockState().setValue(BedBlock.FACING, Direction.WEST);
+        helper.getLevel().setBlock(foot, bed.setValue(BedBlock.PART, BedPart.FOOT), 3);
+        helper.getLevel().setBlock(head, bed.setValue(BedBlock.PART, BedPart.HEAD), 3);
+        helper.assertTrue(helper.getLevel().getPoiManager().existsAtPosition(PoiTypes.HOME, head),
+                "The REST interaction fixture must register a real HOME bed POI");
+        helper.assertTrue(BedApproachTarget.create(helper.getLevel(), head)
+                        .filter(approach -> !approach.getPathTargets(villager).isEmpty()).isPresent(),
+                "The REST interaction fixture HOME must have a usable bedside approach");
+        helper.assertTrue(helper.getLevel().getPoiManager().take(poi -> poi.is(PoiTypes.HOME),
+                        (poi, pos) -> pos.equals(head), head, 1).isPresent(),
+                "The REST interaction fixture villager must claim its HOME POI");
+        villager.getBrain().setMemory(MemoryModuleType.HOME,
+                GlobalPos.of(helper.getLevel().dimension(), head));
     }
 
     private static void setBrainWalkTarget(GameTestHelper helper, VillagerEntityMCA villager, WalkTarget target) {

@@ -7,6 +7,7 @@ import net.conczin.mca.entity.ai.ActivitiesMCA;
 import net.conczin.mca.entity.ai.Chore;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ClientInformation;
@@ -18,8 +19,10 @@ import net.minecraft.world.entity.schedule.Activity;
 import net.minecraft.world.entity.schedule.Schedule;
 import net.minecraft.world.entity.schedule.ScheduleBuilder;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CropBlock;
@@ -372,14 +375,14 @@ public final class HarvestingTaskGameTests {
     private static int droppedWheatCount(GameTestHelper helper, BlockPos pos) {
         return helper.getLevel().getEntitiesOfClass(ItemEntity.class,
                         new net.minecraft.world.phys.AABB(pos).inflate(0.2),
-                        drop -> drop.getItem().is(Items.WHEAT))
+                        drop -> drop.getItem().is(Items.WHEAT) && drop.blockPosition().equals(pos))
                 .stream().mapToInt(drop -> drop.getItem().getCount()).sum();
     }
 
     private static void discardWheatDrops(GameTestHelper helper, BlockPos pos) {
         helper.getLevel().getEntitiesOfClass(ItemEntity.class,
                         new net.minecraft.world.phys.AABB(pos).inflate(0.2),
-                        drop -> drop.getItem().is(Items.WHEAT))
+                        drop -> drop.getItem().is(Items.WHEAT) && drop.blockPosition().equals(pos))
                 .forEach(ItemEntity::discard);
     }
 
@@ -466,6 +469,96 @@ public final class HarvestingTaskGameTests {
             villager.discard();
         }
         helper.succeed();
+    }
+
+    @GameTest(batch = "mca_harvesting_bonemeal_swap", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void bonemealFromInventoryGrowsImmatureCropWhileHoeWasHeld(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(4, 2, 4));
+        BlockPos crop = start.east();
+        prepareFarmland(helper, crop.below());
+        helper.getLevel().setBlock(crop, Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 0), 3);
+
+        VillagerEntityMCA villager = spawnHarvester(helper, start);
+        ServerPlayer assigner = connectedAssigner(villager);
+        villager.getInventory().addItem(new ItemStack(Items.BONE_MEAL, 4));
+        try {
+            HarvestingTask task = new HarvestingTask();
+            long time = helper.getLevel().getGameTime();
+            task.start(helper.getLevel(), villager, time);
+            // Simulate arriving at an immature crop while the main hand still holds the hoe.
+            ItemStack hoe = villager.getInventory().getItem(0);
+            villager.setItemInHand(villager.getDominantHand(), hoe);
+            setObjectField(task, "currentPos", crop);
+            setIntField(task, "workingTick", 40);
+
+            task.tick(helper.getLevel(), villager, time + 1);
+
+            int ageAfter = helper.getLevel().getBlockState(crop).getValue(CropBlock.AGE);
+            int remainingBoneMeal = inventoryItemCount(villager, Items.BONE_MEAL);
+            helper.assertTrue(ageAfter > 0,
+                    "bonemeal swapped from inventory did not grow the immature wheat; age=" + ageAfter);
+            helper.assertTrue(remainingBoneMeal == 3,
+                    "bonemeal growth did not consume exactly one bonemeal from inventory; remaining=" + remainingBoneMeal);
+        } finally {
+            removeConnectedPlayerIfPresent(helper, assigner);
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_harvesting_fortune_hoe", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void fortuneHoeAppliesToolLootContextToMatureCropHarvest(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(4, 2, 4));
+        BlockPos crop = start.east();
+        prepareFarmland(helper, crop.below());
+
+        VillagerEntityMCA villager = spawnHarvester(helper, start);
+        ServerPlayer assigner = connectedAssigner(villager);
+        ItemStack fortuneHoe = new ItemStack(Items.IRON_HOE);
+        var enchantments = helper.getLevel().registryAccess().lookupOrThrow(Registries.ENCHANTMENT);
+        fortuneHoe.enchant(enchantments.getOrThrow(Enchantments.FORTUNE), 3);
+        villager.getInventory().setItem(0, fortuneHoe);
+
+        try {
+            HarvestingTask task = new HarvestingTask();
+            long time = helper.getLevel().getGameTime();
+            task.start(helper.getLevel(), villager, time);
+            helper.assertTrue(villager.getItemInHand(villager.getDominantHand()) == fortuneHoe,
+                    "harvesting did not equip the Fortune III hoe");
+
+            // Without LootContextParams.TOOL, mature carrots yield 1 + Binomial(3, 4/7) <= 4 net carrots after replant.
+            // With Fortune III, 1 + Binomial(6, 4/7) yields >= 5 on ~48.5% of harvests.
+            int maxSingleHarvestNetGain = 0;
+            for (int i = 0; i < 32; i++) {
+                helper.getLevel().setBlock(crop,
+                        Blocks.CARROTS.defaultBlockState().setValue(CropBlock.AGE, CropBlock.MAX_AGE), 3);
+                int before = inventoryItemCount(villager, Items.CARROT);
+                harvestPreparedCrop(helper, villager, task, crop);
+                int gain = inventoryItemCount(villager, Items.CARROT) - before;
+                maxSingleHarvestNetGain = Math.max(maxSingleHarvestNetGain, gain);
+            }
+            helper.assertTrue(maxSingleHarvestNetGain >= 5,
+                    "Fortune III hoe never exceeded unenchanted max net carrot yield (4); maxGain="
+                            + maxSingleHarvestNetGain);
+        } finally {
+            helper.getLevel().getEntitiesOfClass(ItemEntity.class, new net.minecraft.world.phys.AABB(crop).inflate(1.0))
+                    .forEach(ItemEntity::discard);
+            removeConnectedPlayerIfPresent(helper, assigner);
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
+    private static int inventoryItemCount(VillagerEntityMCA villager, Item item) {
+        var inventory = villager.getInventory();
+        int count = 0;
+        for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
+            ItemStack stack = inventory.getItem(slot);
+            if (stack.is(item)) {
+                count += stack.getCount();
+            }
+        }
+        return count;
     }
 
     private static void setIntField(HarvestingTask task, String name, int value) {

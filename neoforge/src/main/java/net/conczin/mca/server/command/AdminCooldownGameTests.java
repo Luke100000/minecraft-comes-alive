@@ -32,6 +32,18 @@ public final class AdminCooldownGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "mca_admin_diagnose", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void diagnoseRequiresOperatorAndAcceptsVerboseFlag(GameTestHelper helper) {
+        CommandDispatcher<CommandSourceStack> dispatcher = helper.getLevel().getServer().getCommands().getDispatcher();
+        CommandSourceStack operator = helper.getLevel().getServer().createCommandSourceStack()
+                .withLevel(helper.getLevel()).withPermission(2);
+        helper.assertTrue(parses(dispatcher, operator, "mca-admin diagnose"), "operator cannot access diagnose");
+        helper.assertTrue(parses(dispatcher, operator, "mca-admin diagnose true"), "verbose diagnose is unavailable");
+        helper.assertTrue(!parses(dispatcher, operator.withPermission(0), "mca-admin diagnose"),
+                "a non-operator could access diagnose");
+        helper.succeed();
+    }
+
     private static boolean parses(CommandDispatcher<CommandSourceStack> dispatcher,
                                   CommandSourceStack source, String command) {
         ParseResults<CommandSourceStack> result = dispatcher.parse(command, source);
