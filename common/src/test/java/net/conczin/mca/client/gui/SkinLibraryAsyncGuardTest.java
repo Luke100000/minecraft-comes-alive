@@ -213,6 +213,7 @@ class SkinLibraryAsyncGuardTest {
 
     private ObservedScreen screen(SkinLibraryScreen.Page page) throws Exception {
         ObservedScreen screen = allocate(ObservedScreen.class);
+        field(SkinLibraryScreen.class, "requestEpoch").set(screen, new SkinLibraryScreen.RequestEpoch());
         field(SkinLibraryScreen.class, "page").set(screen, page);
         field(SkinLibraryScreen.class, "thread").set(screen, Thread.currentThread());
         field(Screen.class, "children").set(screen, new ArrayList<>());

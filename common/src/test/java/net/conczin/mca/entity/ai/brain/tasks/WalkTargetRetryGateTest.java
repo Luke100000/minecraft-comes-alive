@@ -191,4 +191,29 @@ class WalkTargetRetryGateTest {
             gate.reset(nearbyDestination);
         }
     }
+
+    @Test
+    void closedPreemptionIntervalsShiftStalledAndUnresolvedFailureWithoutAccruingPostPreemptionIdleTicks() {
+        WalkTargetRetryGate gate = new WalkTargetRetryGate(100, 16, 1, null);
+        assertTrue(gate.tryReserve(DESTINATION, START, 100));
+        gate.noteFailure(DESTINATION, 100);
+
+        // Preemption flash 1: [115, 165) = 50 ticks, closed at 165 before consumer runs at 180.
+        gate.observePreemption(115, true);
+        gate.observePreemption(140, true);
+        gate.observePreemption(165, false);
+        // Non-preempted idle ticks [165, 180) must NOT accrue into shift.
+        gate.observePreemption(175, false);
+
+        // Preemption flash 2: [180, 210) = 30 ticks, still open when consumer resumes at 210.
+        gate.observePreemption(180, true);
+        assertEquals(80L, gate.consumeFailureShift(210));
+        assertEquals(180L, gate.stalledSince());
+        assertEquals(180L, gate.unresolvedFailureSince(DESTINATION));
+        assertEquals(0L, gate.consumeFailureShift(215));
+
+        // Real progress toward target clears unresolvedFailureSince.
+        assertTrue(gate.noteProgress(DESTINATION, START.east(5), 220));
+        assertEquals(Long.MIN_VALUE, gate.unresolvedFailureSince(DESTINATION));
+    }
 }

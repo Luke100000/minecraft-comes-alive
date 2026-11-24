@@ -148,7 +148,7 @@ class StructureFloorResolutionTest {
         village.registerStructure(basement, basementRoom);
 
         BlockPos trapdoorBlock = new BlockPos(0, 87, 0);
-        RoomScanPlan plan = village.getRoomScanPlan(null, trapdoorBlock);
+        RoomWorkflow.Plan plan = RoomWorkflow.plan(village, null, trapdoorBlock);
 
         assertEquals(Village.RoomScanMode.UPDATE_ROOM, plan.mode());
         assertEquals(groundRoom, plan.currentRoom().orElseThrow());
@@ -169,7 +169,7 @@ class StructureFloorResolutionTest {
 
         Structure.InteractionPosition interaction = structure.resolveInteractionPosition(
                 trapdoor, List.of(room)).orElseThrow();
-        RoomScanPlan plan = village.getRoomScanPlan(null, trapdoor);
+        RoomWorkflow.Plan plan = RoomWorkflow.plan(village, null, trapdoor);
 
         assertEquals(floor, interaction.floor());
         assertEquals(room, interaction.room());
@@ -200,7 +200,7 @@ class StructureFloorResolutionTest {
         village.registerStructure(lower, lowerRoom);
         village.registerStructure(upper, upperRoom);
 
-        RoomScanPlan plan = village.getRoomScanPlan(null, trapdoor);
+        RoomWorkflow.Plan plan = RoomWorkflow.plan(village, null, trapdoor);
 
         assertEquals(Village.RoomScanMode.UPDATE_ROOM, plan.mode());
         assertEquals(upperRoom, plan.currentRoom().orElseThrow());
@@ -254,7 +254,7 @@ class StructureFloorResolutionTest {
 
         Structure.InteractionPosition interaction = structure
                 .resolveInteractionPosition(connector, List.of(room)).orElseThrow();
-        RoomScanPlan plan = village.getRoomScanPlan(null, connector);
+        RoomWorkflow.Plan plan = RoomWorkflow.plan(village, null, connector);
 
         assertEquals(persistedFloor, interaction.floor());
         assertEquals(room, interaction.room());
@@ -298,7 +298,7 @@ class StructureFloorResolutionTest {
         legacy.registerStructure(structure, room);
 
         Village loaded = new Village(legacy.save(), null);
-        RoomScanPlan plan = loaded.getRoomScanPlan(null, connector);
+        RoomWorkflow.Plan plan = RoomWorkflow.plan(loaded, null, connector);
 
         assertEquals(Village.RoomScanMode.ADD_ROOM, plan.mode());
         assertTrue(plan.currentRoom().isEmpty());
@@ -323,7 +323,7 @@ class StructureFloorResolutionTest {
         legacy.registerRoom(larger);
 
         Village loaded = new Village(legacy.save(), null);
-        RoomScanPlan plan = loaded.getRoomScanPlan(null, connector);
+        RoomWorkflow.Plan plan = RoomWorkflow.plan(loaded, null, connector);
 
         assertEquals(Village.RoomScanMode.ADD_ROOM, plan.mode());
         assertTrue(plan.currentRoom().isEmpty());

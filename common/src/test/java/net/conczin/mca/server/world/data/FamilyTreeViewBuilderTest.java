@@ -333,7 +333,8 @@ class FamilyTreeViewBuilderTest {
         assertTrue(view.nodes().containsKey(SIBLING));
         assertFalse(view.nodes().containsKey(GRANDCHILD));
         assertTrue(view.continuations().contains(new FamilyTreeView.Continuation(SIBLING, DESCENDANTS)));
-        assertEquals(Set.of(GRANDCHILD), view.nodes().get(SIBLING).streamChildren().collect(Collectors.toSet()));
+        assertTrue(view.nodes().get(SIBLING).children().isEmpty(),
+                "Bounded snapshots must rely on explicit continuations instead of a 1-child sentinel");
         assertFalse(view.continuations().contains(new FamilyTreeView.Continuation(DESCENDANT_2, DESCENDANTS)));
     }
 
@@ -478,7 +479,7 @@ class FamilyTreeViewBuilderTest {
     }
 
     @Test
-    void generationPageIncludesDirectChildrenButNotGrandchildrenOrSiblings() {
+    void singleGenerationDescendantsIncludesDirectChildrenButNotGrandchildrenOrSiblings() {
         FamilyTree tree = tree();
         FamilyTreeNode root = node(tree, ROOT, Gender.MALE);
         FamilyTreeNode parent = node(tree, FATHER, Gender.MALE);
@@ -490,18 +491,17 @@ class FamilyTreeViewBuilderTest {
         child.setFather(root);
         grandchild.setFather(child);
 
-        FamilyTreeViewBuilder.GenerationPage page = FamilyTreeViewBuilder.buildGenerationPage(
-                tree, ROOT, DESCENDANTS, Optional.empty(), id -> Optional.empty()).orElseThrow();
+        FamilyTreeView view = FamilyTreeViewBuilder.buildGeneration(
+                tree, ROOT, DESCENDANTS, id -> Optional.empty()).orElseThrow();
 
-        assertEquals(Set.of(ROOT, CHILD), page.view().nodes().keySet());
-        assertTrue(page.nextCursor().isEmpty());
-        assertTrue(page.view().continuations().contains(new FamilyTreeView.Continuation(CHILD, DESCENDANTS)));
-        assertFalse(page.view().nodes().containsKey(GRANDCHILD));
-        assertFalse(page.view().nodes().containsKey(SIBLING));
+        assertEquals(Set.of(ROOT, CHILD), view.nodes().keySet());
+        assertTrue(view.continuations().contains(new FamilyTreeView.Continuation(CHILD, DESCENDANTS)));
+        assertFalse(view.nodes().containsKey(GRANDCHILD));
+        assertFalse(view.nodes().containsKey(SIBLING));
     }
 
     @Test
-    void ancestorGenerationPageIncludesOnlyParentsWithoutGrandparentsOrSiblings() {
+    void singleGenerationAncestorsIncludesOnlyParentsWithoutGrandparentsOrSiblings() {
         FamilyTree tree = tree();
         FamilyTreeNode root = node(tree, ROOT, Gender.MALE);
         FamilyTreeNode father = node(tree, FATHER, Gender.MALE);
@@ -513,91 +513,38 @@ class FamilyTreeViewBuilderTest {
         father.setFather(grandfather);
         sibling.setFather(father);
 
-        FamilyTreeViewBuilder.GenerationPage page = FamilyTreeViewBuilder.buildGenerationPage(
-                tree, ROOT, ANCESTORS, Optional.empty(), id -> Optional.empty()).orElseThrow();
+        FamilyTreeView view = FamilyTreeViewBuilder.buildGeneration(
+                tree, ROOT, ANCESTORS, id -> Optional.empty()).orElseThrow();
 
-        assertEquals(Set.of(ROOT, FATHER, MOTHER), page.view().nodes().keySet());
-        assertTrue(page.nextCursor().isEmpty());
-        assertTrue(page.view().continuations().contains(new FamilyTreeView.Continuation(FATHER, ANCESTORS)));
-        assertFalse(page.view().nodes().containsKey(PATERNAL_GRANDFATHER));
-        assertFalse(page.view().nodes().containsKey(SIBLING));
+        assertEquals(Set.of(ROOT, FATHER, MOTHER), view.nodes().keySet());
+        assertTrue(view.continuations().contains(new FamilyTreeView.Continuation(FATHER, ANCESTORS)));
+        assertFalse(view.nodes().containsKey(PATERNAL_GRANDFATHER));
+        assertFalse(view.nodes().containsKey(SIBLING));
     }
 
     @Test
-    void generationPagesAdvanceAcrossMoreThanOneResponseBudgetWithoutRepeatingChildren() {
+    void singleGenerationCapsAtNodeBudgetAndOffersContinuation() {
         FamilyTree tree = tree();
         FamilyTreeNode root = node(tree, ROOT, Gender.MALE);
-        for (int index = 0; index < 300; index++) {
-            node(tree, uuid(1_000 + index), Gender.MALE).setFather(root);
+        for (int index = 0; index < 200; index++) {
+            FamilyTreeNode child = node(tree, uuid(1_000 + index), Gender.MALE);
+            child.setFather(root);
+            child.updatePartner(node(tree, uuid(2_000 + index), Gender.FEMALE));
         }
 
-        Set<UUID> collected = new HashSet<>();
-        Optional<UUID> after = Optional.empty();
-        int pages = 0;
-        do {
-            FamilyTreeViewBuilder.GenerationPage page = FamilyTreeViewBuilder.buildGenerationPage(
-                    tree, ROOT, DESCENDANTS, after, id -> Optional.empty()).orElseThrow();
-            assertTrue(page.view().nodes().size() <= FamilyTreeView.MAX_NODES);
-            for (UUID id : page.view().nodes().keySet()) {
-                if (!id.equals(ROOT)) {
-                    assertTrue(collected.add(id), "Page returned duplicate child " + id);
-                }
-            }
-            pages++;
-            assertTrue(pages <= 5, "Pagination must terminate");
-            if (page.nextCursor().isEmpty()) {
-                break;
-            }
-            if (after.isPresent()) {
-                assertTrue(page.nextCursor().orElseThrow().compareTo(after.orElseThrow()) > 0,
-                        "Cursor must progress");
-            }
-            after = page.nextCursor();
-        } while (true);
-
-        assertEquals(300, collected.size());
-        assertTrue(pages > 1);
-    }
-
-    @Test
-    void removingAnEarlierChildBetweenPagesMustNotSkipTheNextChild() {
-        FamilyTree tree = tree();
-        FamilyTreeNode root = node(tree, ROOT, Gender.MALE);
-        for (int index = 0; index < 300; index++) {
-            node(tree, uuid(1_000 + index), Gender.MALE).setFather(root);
-        }
-
-        FamilyTreeViewBuilder.GenerationPage first = FamilyTreeViewBuilder.buildGenerationPage(
+        var first = FamilyTreeViewBuilder.buildGenerationPage(
                 tree, ROOT, DESCENDANTS, Optional.empty(), id -> Optional.empty()).orElseThrow();
-        assertEquals(Optional.of(uuid(1_125)), first.nextCursor());
-        root.children().remove(uuid(1_000));
-
-        FamilyTreeViewBuilder.GenerationPage second = FamilyTreeViewBuilder.buildGenerationPage(
+        var next = FamilyTreeViewBuilder.buildGenerationPage(
                 tree, ROOT, DESCENDANTS, first.nextCursor(), id -> Optional.empty()).orElseThrow();
-        assertTrue(second.view().nodes().containsKey(uuid(1_126)),
-                "Removing a child before the page boundary must not skip the next child");
-    }
 
-    @Test
-    void insertingAnEarlierChildBetweenPagesMustNotRepeatTheLastChild() {
-        FamilyTree tree = tree();
-        FamilyTreeNode root = node(tree, ROOT, Gender.MALE);
-        for (int index = 0; index < 300; index++) {
-            node(tree, uuid(1_000 + index), Gender.MALE).setFather(root);
-        }
-
-        FamilyTreeViewBuilder.GenerationPage first = FamilyTreeViewBuilder.buildGenerationPage(
-                tree, ROOT, DESCENDANTS, Optional.empty(), id -> Optional.empty()).orElseThrow();
-        node(tree, uuid(999), Gender.MALE).setFather(root);
-
-        FamilyTreeViewBuilder.GenerationPage second = FamilyTreeViewBuilder.buildGenerationPage(
-                tree, ROOT, DESCENDANTS, first.nextCursor(), id -> Optional.empty()).orElseThrow();
-        Set<UUID> firstChildren = new HashSet<>(first.view().nodes().keySet());
-        firstChildren.remove(ROOT);
-        Set<UUID> secondChildren = new HashSet<>(second.view().nodes().keySet());
-        secondChildren.remove(ROOT);
-        assertTrue(Collections.disjoint(firstChildren, secondChildren),
-                "An insertion before the boundary must not repeat a previously delivered child");
+        assertEquals(255, first.view().nodes().size(), "The first page should include the children's partners");
+        assertEquals(Optional.of(uuid(1126)), first.nextCursor());
+        assertTrue(first.view().continuations().contains(new FamilyTreeView.Continuation(ROOT, DESCENDANTS)));
+        assertEquals(147, next.view().nodes().size());
+        assertTrue(next.view().nodes().containsKey(uuid(1199)));
+        assertTrue(next.view().nodes().containsKey(uuid(2199)));
+        assertFalse(next.view().nodes().containsKey(uuid(1126)));
+        assertTrue(next.nextCursor().isEmpty());
     }
 
     @Test
@@ -614,7 +561,8 @@ class FamilyTreeViewBuilderTest {
         root.addChild(uuid(9_999));
 
         assertEquals(ROOT.toString(), snapshot.getName());
-        assertTrue(snapshot.children().size() <= 1);
+        assertTrue(snapshot.children().isEmpty());
+        assertTrue(view.continuations().contains(new FamilyTreeView.Continuation(ROOT, DESCENDANTS)));
         assertTrue(!snapshot.children().contains(uuid(9_999)));
     }
 

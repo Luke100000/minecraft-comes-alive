@@ -48,7 +48,7 @@ class SelectedFloorScannerDoorwayTest {
             assertEquals(Building.validationResult.SUCCESS, scan.result());
             assertTrue(scan.floor().cellAt(world.pos(2, 64, 2)).isPresent());
             assertTrue(scan.floor().cellAt(world.pos(7, 64, 2)).isEmpty());
-            assertEquals(1, BuildingRoomScanner.components(world, scan).size());
+            assertEquals(1, StructureScanner.components(world, scan).size());
         }
     }
 
@@ -84,7 +84,7 @@ class SelectedFloorScannerDoorwayTest {
                     assertEquals(expected, scan.floor().cells().stream()
                             .map(FloorGeometry.Cell::feet).collect(Collectors.toSet()));
                     assertTrue(scan.floor().connectorMarkers().isEmpty(), "empty arch invented a connector");
-                    assertEquals(1, BuildingRoomScanner.components(world, scan).size(),
+                    assertEquals(1, StructureScanner.components(world, scan).size(),
                             "empty arch partitioned the room");
                 }
             }
@@ -189,7 +189,7 @@ class SelectedFloorScannerDoorwayTest {
                 var scan = SelectedFloorScanner.scan(world, world.pos(2, 64, 2), 512, 16);
                 assertEquals(Building.validationResult.SUCCESS, scan.result());
                 assertEquals(16 + width, scan.floor().cells().size(), "exterior-only threshold was retained");
-                assertEquals(1, BuildingRoomScanner.components(world, scan).size());
+                assertEquals(1, StructureScanner.components(world, scan).size());
             }
         }
     }
@@ -219,7 +219,7 @@ class SelectedFloorScannerDoorwayTest {
         assertEquals(Building.validationResult.SUCCESS, second.result());
         assertEquals(35, first.floor().cells().size(), "enclosed passage disconnected the other Room");
         assertTrue(first.floor().sameExactGeometry(second.floor()));
-        var components = BuildingRoomScanner.components(world, first);
+        var components = StructureScanner.components(world, first);
         assertNotSame(RoomPartitioner.select(new BlockPos(2, 64, 2), first.floor(), components),
                 RoomPartitioner.select(new BlockPos(9, 64, 2), first.floor(), components));
     }
@@ -248,7 +248,7 @@ class SelectedFloorScannerDoorwayTest {
         assertEquals(Building.validationResult.SUCCESS, right.result());
         assertTrue(left.floor().sameExactGeometry(right.floor()));
         assertEquals(34, left.floor().cells().size());
-        assertEquals(1, BuildingRoomScanner.components(world, left).size());
+        assertEquals(1, StructureScanner.components(world, left).size());
     }
 
     @Test

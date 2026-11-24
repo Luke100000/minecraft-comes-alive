@@ -57,11 +57,11 @@ class SelectedFloorScannerConnectorTest {
                 assertTrue(baseline.floor().sameExactGeometry(scan.floor()), source.toString());
                 assertEquals(baseline.anchorY(), scan.anchorY());
                 assertEquals(roomCells, RoomPartitioner.select(scan.seed(), scan.floor(),
-                        BuildingRoomScanner.components(world, scan)).floorCells());
+                        StructureScanner.components(world, scan)).floorCells());
                 var fresh = new StructureScanner.FloorObservation(scan, Set.of(), Set.of());
                 assertEquals(Village.RoomScanMode.ADD_BUILDING,
-                        RoomScanPlanner.analyzeFresh(new Village(2, null), source, fresh).plan().mode());
-                var plan = RoomScanPlanner.analyzeFresh(registered, source, fresh).plan();
+                        RoomWorkflow.analyzeFresh(new Village(2, null), world, source, fresh).plan().mode());
+                var plan = RoomWorkflow.analyzeFresh(registered, world, source, fresh).plan();
                 assertEquals(Village.RoomScanMode.UPDATE_ROOM, plan.mode(), source.toString());
                 assertEquals(42, plan.currentRoom().orElseThrow().getId());
                 assertEquals(10, plan.targetStructureId());
@@ -85,7 +85,7 @@ class SelectedFloorScannerConnectorTest {
             assertEquals(Building.validationResult.SUCCESS, after.result());
             assertTrue(before.floor().sameExactGeometry(after.floor()),
                     "a bed created duplicate cells for the same walking surface");
-            var component = RoomPartitioner.select(after.seed(), after.floor(), BuildingRoomScanner.components(world, after));
+            var component = RoomPartitioner.select(after.seed(), after.floor(), StructureScanner.components(world, after));
             assertEquals(256, component.area());
         }
     }
