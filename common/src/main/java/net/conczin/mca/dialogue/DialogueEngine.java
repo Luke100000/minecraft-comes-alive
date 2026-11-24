@@ -81,6 +81,13 @@ public final class DialogueEngine {
         return begin(player, villager, true);
     }
 
+    /** Checks the current interaction before creating an offer or changing dialogue history. */
+    public Optional<DialogueOptions> beginIfEligible(ServerPlayer player, VillagerEntityMCA villager, boolean showOpening) {
+        return canInteract(player, villager)
+                ? Optional.of(begin(player, villager, showOpening))
+                : Optional.empty();
+    }
+
     public DialogueOptions begin(ServerPlayer player, VillagerEntityMCA villager, boolean showOpening) {
         Objects.requireNonNull(player, "player");
         Objects.requireNonNull(villager, "villager");
@@ -835,10 +842,9 @@ public final class DialogueEngine {
                 continue;
             }
             VillagerEntityMCA villager = resolveBoundVillager(player, stale.getValue().villagerId()).orElse(null);
-            if (villager != null
-                    && canInteract(player, villager)
-                    && villager.getInteractions().getInteractingPlayer().filter(player::equals).isPresent()) {
-                Network.sendToPlayer(InteractionDialogueOptionsResponse.from(begin(player, villager)), player);
+            if (villager != null) {
+                beginIfEligible(player, villager, true).ifPresent(options ->
+                        Network.sendToPlayer(InteractionDialogueOptionsResponse.from(options), player));
             }
         }
     }
@@ -1485,7 +1491,9 @@ public final class DialogueEngine {
     }
 
     private static boolean canInteract(ServerPlayer player, VillagerEntityMCA villager) {
-        return villager.isAlive()
+        return player.isAlive()
+                && !player.isRemoved()
+                && villager.isAlive()
                 && !villager.isRemoved()
                 && villager.level() == player.level()
                 && villager.getInteractions().matchesInteraction(player, villager.getInteractions().interactionId())

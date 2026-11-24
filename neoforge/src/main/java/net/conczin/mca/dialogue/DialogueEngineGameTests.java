@@ -14,6 +14,7 @@ import net.conczin.mca.entity.ai.Chore;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.network.c2s.InteractionCloseRequest;
 import net.conczin.mca.network.c2s.InteractionDialogueAdvanceMessage;
+import net.conczin.mca.network.c2s.InteractionDialogueBeginMessage;
 import net.conczin.mca.network.c2s.InteractionDialogueChoiceMessage;
 import net.conczin.mca.network.c2s.InteractionDialogueLeaveMessage;
 import net.conczin.mca.network.c2s.InteractionDialogueSelectMessage;
@@ -345,6 +346,57 @@ public final class DialogueEngineGameTests {
                 "closing dialogue must preserve assigned chore identity");
         villager.discard();
         helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void beginPacketRequiresCurrentEligibleInteraction(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        ServerPlayer player = fixture.player();
+        VillagerEntityMCA villager = fixture.villager();
+        var interactions = villager.getInteractions();
+        DialogueEngine engine = MCA.getDialogueEngine().orElseThrow();
+        InteractionDialogueBeginMessage begin = new InteractionDialogueBeginMessage(villager.getUUID(), false);
+        Vec3 originalPosition = player.position();
+        try {
+            UUID owner = interactions.interactionId();
+            helper.assertTrue(interactions.matchesInteraction(player, owner), "fixture must own the interaction");
+            helper.assertTrue(player.canInteractWithEntity(villager, 1.0), "fixture must start within dialogue reach");
+
+            ServerPlayer intruder = new FakePlayer(helper.getLevel(),
+                    new GameProfile(UUID.randomUUID(), "dialogue-intruder"));
+            intruder.setPos(originalPosition);
+            begin.handleServer(intruder);
+            helper.assertTrue(!offers(engine).containsKey(intruder.getUUID()), "foreign player must not receive an offer");
+            helper.assertTrue(interactions.matchesInteraction(player, owner), "foreign begin must not release the owner");
+
+            player.setPos(originalPosition.add(10.0D, 0, 0));
+            helper.assertTrue(interactions.matchesInteraction(player, owner),
+                    "test must exercise the stale ownership window before the next tick");
+            helper.assertTrue(!player.canInteractWithEntity(villager, 1.0), "fixture must now be outside dialogue reach");
+            begin.handleServer(player);
+            helper.assertTrue(!offers(engine).containsKey(player.getUUID()),
+                    "out-of-range begin must not issue a dialogue offer");
+
+            player.setPos(originalPosition);
+            interactions.interactAt(player, Vec3.ZERO, InteractionHand.MAIN_HAND);
+            begin.handleServer(player);
+            helper.assertTrue(offers(engine).containsKey(player.getUUID()), "eligible owner must receive a fresh offer");
+            interactions.stopInteracting();
+
+            interactions.interactAt(player, Vec3.ZERO, InteractionHand.MAIN_HAND);
+            villager.setTradingPlayer(player);
+            helper.assertTrue(villager.isTrading() && interactions.matchesInteraction(player, interactions.interactionId()),
+                    "fixture must still own an interaction while trading");
+            begin.handleServer(player);
+            helper.assertTrue(!offers(engine).containsKey(player.getUUID()), "trading villager must not issue a dialogue offer");
+            helper.assertTrue(villager.getTradingPlayer() == player, "rejecting dialogue must not stop the trade");
+            helper.succeed();
+        } finally {
+            player.setPos(originalPosition);
+            villager.setTradingPlayer(null);
+            interactions.stopInteracting();
+            villager.discard();
+        }
     }
 
     @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")

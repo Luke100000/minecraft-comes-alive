@@ -41,10 +41,12 @@ public record InteractionDialogueBeginMessage(UUID villagerUUID, boolean showOpe
             return;
         }
 
-        MCA.getDialogueEngine().ifPresent(engine -> Network.sendToPlayer(
-                InteractionDialogueOptionsResponse.from(engine.begin(player, villager, showOpening)),
-                player
-        ));
+        var interactions = villager.getInteractions();
+        UUID interactionId = interactions.interactionId();
+        MCA.getDialogueEngine().ifPresent(engine ->
+                engine.beginIfEligible(player, villager, showOpening).ifPresentOrElse(
+                        options -> Network.sendToPlayer(InteractionDialogueOptionsResponse.from(options), player),
+                        () -> interactions.closeInteractionScreen(player, interactionId)));
     }
 
     @Override
