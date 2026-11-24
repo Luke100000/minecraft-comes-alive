@@ -277,9 +277,6 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
         void invalidateAccount() {
             account++;
-            authPoll++;
-            upload++;
-            contentRequest++;
         }
 
         boolean matchesAccount(long session, String token) {

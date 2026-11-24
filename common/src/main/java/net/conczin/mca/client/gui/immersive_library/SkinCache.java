@@ -21,7 +21,6 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.AccessDeniedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Base64;
@@ -29,7 +28,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.locks.LockSupport;
 
 import static net.conczin.mca.client.gui.immersive_library.Api.request;
 
@@ -75,16 +73,7 @@ public class SkinCache {
         Path normalized = path.toAbsolutePath().normalize();
         // A Windows reader can temporarily prevent replacing the target file.
         synchronized (fileLock(normalized)) {
-            for (int attempt = 0; ; attempt++) {
-                try {
-                    return Files.readAllBytes(normalized);
-                } catch (AccessDeniedException e) {
-                    if (attempt >= 25) {
-                        throw e;
-                    }
-                    LockSupport.parkNanos(2_000_000L);
-                }
-            }
+            return Files.readAllBytes(normalized);
         }
     }
 
