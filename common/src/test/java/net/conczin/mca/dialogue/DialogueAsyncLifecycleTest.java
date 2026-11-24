@@ -56,6 +56,21 @@ class DialogueAsyncLifecycleTest {
     }
 
     @Test
+    void temporaryPauseRetainsResolvedLineForFreshResumeToken() {
+        DialoguePendingRequests pending = new DialoguePendingRequests();
+        var original = ticket(PLAYER, 10L, 200L);
+        pending.install(original);
+        assertTrue(pending.finish(original, Component.literal("found")));
+        assertTrue(pending.cancelPending(PLAYER).isEmpty());
+        var resumed = ticket(PLAYER, 11L, 300L);
+        pending.resumeResolved(original.key(), resumed.key());
+        assertEquals("found", pending.lineFor(resumed.key()).orElseThrow().getString());
+        assertTrue(pending.lineFor(original.key()).isEmpty());
+        pending.invalidate(PLAYER);
+        assertTrue(pending.lineFor(resumed.key()).isEmpty());
+    }
+
+    @Test
     void independentPlayersHaveIndependentTicketsAndTimeoutWindows() {
         DialoguePendingRequests pending = new DialoguePendingRequests();
         var one = ticket(PLAYER, 42L, 600L);

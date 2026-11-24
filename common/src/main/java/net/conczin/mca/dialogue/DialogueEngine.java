@@ -140,8 +140,7 @@ public final class DialogueEngine {
         DialogueSession retained = expirePaused(playerId, gameTime);
         if (retained != null && retained.status() == DialogueSession.Status.ACTIVE
                 && retained.villagerId().equals(villager.getUUID())) {
-            cancelPending(playerId);
-            retained = retained.pause(saturatingAdd(gameTime, PAUSE_TICKS));
+            retained = suspendSession(retained, gameTime);
             sessions.put(playerId, retained);
         }
         DialogueEventHistory history = DialogueEventHistory.get(player.serverLevel());
@@ -625,12 +624,10 @@ public final class DialogueEngine {
         UUID playerId = player.getUUID();
         offers.remove(playerId);
         DialogueSession session = sessions.get(playerId);
-        if (session == null || session.status() == DialogueSession.Status.PAUSED) {
+        if (session == null) {
             return;
         }
-        cancelPending(playerId);
-        long deadline = saturatingAdd(overworldTime(player), PAUSE_TICKS);
-        sessions.put(playerId, session.pause(deadline));
+        sessions.put(playerId, suspendSession(session, overworldTime(player)));
     }
 
     /** Revokes only the dialogue state belonging to the released Interact screen. */
@@ -646,8 +643,7 @@ public final class DialogueEngine {
         DialogueSession session = sessions.get(playerId);
         if (session != null && session.status() == DialogueSession.Status.ACTIVE
                 && session.villagerId().equals(villagerId)) {
-            cancelPending(playerId);
-            sessions.put(playerId, session.pause(saturatingAdd(gameTime, PAUSE_TICKS)));
+            sessions.put(playerId, suspendSession(session, gameTime));
         }
     }
 
@@ -690,8 +686,7 @@ public final class DialogueEngine {
         if (matchingActiveSession || matchingPendingMenu || (matchingUnseenMenu
                 && session != null && session.status() == DialogueSession.Status.ACTIVE
                 && session.villagerId().equals(villagerId))) {
-            cancelPending(playerId);
-            sessions.put(playerId, session.pause(saturatingAdd(overworldTime(player), PAUSE_TICKS)));
+            sessions.put(playerId, suspendSession(session, overworldTime(player)));
         }
         return true;
     }
@@ -713,17 +708,15 @@ public final class DialogueEngine {
             if (!session.villagerId().equals(villager.getUUID())) {
                 return session;
             }
-            invalidatePending(playerId);
             ServerPlayer player = server == null ? null : server.getPlayerList().getPlayer(playerId);
             if (destroyed) {
+                invalidatePending(playerId);
                 if (player != null) {
                     notifyEnded(player, session);
                 }
                 return session;
             }
-            DialogueSession paused = session.status() == DialogueSession.Status.PAUSED
-                    ? session
-                    : session.pause(saturatingAdd(gameTime, PAUSE_TICKS));
+            DialogueSession paused = suspendSession(session, gameTime);
             if (player != null) {
                 notifyPaused(player, paused);
             }
@@ -787,7 +780,7 @@ public final class DialogueEngine {
 
             Entity entity = player.serverLevel().getEntity(session.villagerId());
             if (entity == null) {
-                DialogueSession paused = session.pause(saturatingAdd(gameTime, PAUSE_TICKS));
+                DialogueSession paused = suspendSession(session, gameTime);
                 entry.setValue(paused);
                 offers.remove(session.playerId());
                 notifyPaused(player, paused);
@@ -799,7 +792,7 @@ public final class DialogueEngine {
                 return true;
             }
             if (!canInteract(player, villager)) {
-                DialogueSession paused = session.pause(saturatingAdd(gameTime, PAUSE_TICKS));
+                DialogueSession paused = suspendSession(session, gameTime);
                 entry.setValue(paused);
                 offers.remove(session.playerId());
                 notifyPaused(player, paused);
@@ -1455,6 +1448,15 @@ public final class DialogueEngine {
         pendingRequests.cancelPending(playerId).ifPresent(DialogueEngine::cancelOperation);
     }
 
+    /** Temporary suspension keeps the resolved line and the original pause deadline. */
+    private DialogueSession suspendSession(DialogueSession session, long gameTime) {
+        if (session.status() == DialogueSession.Status.ACTIVE) {
+            cancelPending(session.playerId());
+            return session.pause(saturatingAdd(gameTime, PAUSE_TICKS));
+        }
+        return session;
+    }
+
     private static void cancelOperation(DialoguePendingRequests.Ticket ticket) {
         try {
             ticket.resolver().cancel(ticket.operationId());
@@ -1504,8 +1506,7 @@ public final class DialogueEngine {
 
     private void pauseUnavailable(ServerPlayer player, DialogueSession session) {
         if (session.status() == DialogueSession.Status.ACTIVE) {
-            cancelPending(player.getUUID());
-            sessions.put(player.getUUID(), session.pause(saturatingAdd(overworldTime(player), PAUSE_TICKS)));
+            sessions.put(player.getUUID(), suspendSession(session, overworldTime(player)));
             offers.remove(player.getUUID());
         }
     }

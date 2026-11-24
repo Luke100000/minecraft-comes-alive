@@ -483,13 +483,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         getInteractions().getInteractingPlayer().filter(ServerPlayer.class::isInstance)
                 .map(ServerPlayer.class::cast).ifPresent(player -> {
                     UUID id = getInteractions().interactionId();
-                    MCA.getDialogueEngine().ifPresent(engine -> {
-                        if (terminal) {
-                            engine.end(player);
-                        } else {
-                            engine.pause(player);
-                        }
-                    });
+                    if (terminal) {
+                        MCA.getDialogueEngine().ifPresent(engine -> engine.end(player));
+                    }
                     getInteractions().stopInteracting(player, id);
                     Network.sendToPlayer(new OpenGuiRequest(OpenGuiRequest.Type.CLOSE, this, id), player);
                 });

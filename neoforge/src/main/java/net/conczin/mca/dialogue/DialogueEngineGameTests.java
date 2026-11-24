@@ -2793,6 +2793,46 @@ public final class DialogueEngineGameTests {
     }
 
     @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void resolvedLookupSurvivesTemporaryVillagerUnload(GameTestHelper helper) {
+        ResourceLocation providerId = ResourceLocation.parse("mca:resolved_unload_gametest");
+        CompletableFuture<DialogueAsyncResolver.Result> completion = new CompletableFuture<>();
+        DialogueAsyncResolver.register(providerId, Codec.STRING.fieldOf("sample").codec(),
+                (sample, context, operationId) -> completion);
+        Fixture fixture = presentFixture(helper);
+        DialogueEngine engine = MCA.getDialogueEngine().orElseThrow();
+        DialogueEvent event = pendingLookupEvent(ResourceLocation.parse("mca:test/resolved_unload"), providerId);
+        DialogueSession session = DialogueSession.start(fixture.player().getUUID(), fixture.villager().getUUID(),
+                UUID.randomUUID(), DialogueEvents.INSTANCE.generation(), 912_349L, event);
+        sessions(engine).put(fixture.player().getUUID(), session);
+        engine.sendView(fixture.player(), new DialogueEngine.DialogueNodeView(session.id(), event.id(),
+                session.offerToken(), Component.translatable("dialogue.test.line"), false, List.of(),
+                DialogueEngine.AdvanceKind.BACK_TO_TOPICS));
+        completion.complete(DialogueAsyncResolver.Result.withKey("dialogue.location.igloo", "9,70,12"));
+        helper.runAfterDelay(2, () -> {
+            try {
+                DialoguePendingRequests.Key key = DialoguePendingRequests.Key.from(session);
+                Component resolved = pendingRequests(engine).lineFor(key).orElseThrow();
+                fixture.villager().remove(Entity.RemovalReason.UNLOADED_TO_CHUNK);
+                DialogueSession paused = sessions(engine).get(fixture.player().getUUID());
+                helper.assertTrue(paused != null && paused.status() == DialogueSession.Status.PAUSED,
+                        "temporary unload must pause the resolved dialogue");
+                helper.assertTrue(pendingRequests(engine).lineFor(key).filter(resolved::equals).isPresent(),
+                        "temporary unload must preserve the already resolved line");
+                engine.end(fixture.player());
+                helper.assertTrue(pendingRequests(engine).lineFor(key).isEmpty(),
+                        "terminal end must discard the retained line");
+                helper.succeed();
+            } finally {
+                engine.end(fixture.player());
+                if (!fixture.villager().isRemoved()) {
+                    fixture.villager().discard();
+                }
+                removePresentPlayer(fixture.player());
+            }
+        });
+    }
+
+    @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
     public static void offlineTickDiscardsResolvedLookupAlongWithSession(GameTestHelper helper) {
         ResourceLocation providerId = ResourceLocation.parse("mca:resolved_logout_cleanup_gametest");
         CompletableFuture<DialogueAsyncResolver.Result> completion = new CompletableFuture<>();

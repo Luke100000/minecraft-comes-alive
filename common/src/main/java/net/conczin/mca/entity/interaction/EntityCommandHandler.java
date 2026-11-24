@@ -96,7 +96,6 @@ public abstract class EntityCommandHandler<T extends Entity & VillagerLike<?>> {
             if (interactingPlayer instanceof ServerPlayer priorPlayer) {
                 // Superseding the screen must close only the previous interaction ID.
                 UUID oldId = interactionId;
-                MCA.getDialogueEngine().ifPresent(engine -> engine.pause(priorPlayer));
                 stopInteracting(priorPlayer, oldId);
                 Network.sendToPlayer(new OpenGuiRequest(OpenGuiRequest.Type.CLOSE, entity, oldId), priorPlayer);
             }
@@ -108,7 +107,6 @@ public abstract class EntityCommandHandler<T extends Entity & VillagerLike<?>> {
                             if (other.getInteractions().getInteractingPlayer()
                                     .filter(serverPlayer::equals).isPresent()) {
                                 UUID previousId = other.getInteractions().interactionId();
-                                MCA.getDialogueEngine().ifPresent(engine -> engine.pause(serverPlayer));
                                 other.getInteractions().stopInteracting(serverPlayer, previousId);
                                 Network.sendToPlayer(
                                         new OpenGuiRequest(OpenGuiRequest.Type.CLOSE, other, previousId), serverPlayer);

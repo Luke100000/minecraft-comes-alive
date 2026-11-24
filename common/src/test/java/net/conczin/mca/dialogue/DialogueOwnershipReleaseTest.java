@@ -36,6 +36,9 @@ class DialogueOwnershipReleaseTest {
         assertEquals(3_400L, paused.pauseDeadline());
         assertFalse(paused.acceptsOffer(41L, 0L), "released screen must not retain a usable dialogue token");
         assertFalse(offers(engine).containsKey(PLAYER), "released screen must not retain a menu offer");
+
+        engine.onInteractionReleased(PLAYER, VILLAGER, 1_100L);
+        assertSame(paused, sessions(engine).get(PLAYER), "repeat release must not extend the pause window");
     }
 
     @Test
