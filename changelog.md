@@ -2,6 +2,17 @@
 
 * ***__Back up__*** your world before updating. MCA updates existing 7.7.36 building and floor data when the world loads.
 
+## Highlights
+
+* Villagers find their way through stairs, ladders, doors, gates, partial blocks, and difficult terrain more reliably. They also recover better when a path fails.
+* Mourning now sends smaller groups to graves at staggered times without interrupting important activities. You can turn it on or off with `enableMourning`.
+* Harvesting and woodcutting are more dependable, from choosing crops and collecting drops to moving between jobs and managing inventories.
+* Fishing now shows villagers casting, getting bites, and catching fish. They choose fishing spots more carefully and account for enchantments and weather.
+* The Blueprint handles multi-floor and irregular buildings more accurately. Room rescans are faster, floor management is easier, and the map supports panning and zooming.
+* The Family Tree has a redesigned layout, better search and zoom controls, and easier relationship navigation.
+* The Skin Library has better search, Hot and Popular sorting, similar-skin suggestions, and an easier sign-in flow.
+* Villagers are more reliable about finding homes, beds, workplaces, and night shelter. There are also fixes for combat, guard behaviour, interactions, saves, voices, and skins.
+
 ## Buildings and Blueprint
 
 * Improved building, floor, and room detection for multi-floor and irregular builds, including stairs, doorways, porches, and slab floors.
@@ -35,8 +46,17 @@
 * Villager interaction memories survive infection and curing. Revived villagers can also regain their previous mood and marriage.
 * Improved baby creation and placement, including inventory checks for twins and safer placement from baby items.
 * Improved the Villager Editor, Tracker, whistle, and gift interactions. Added `whistleCallMakesVillagersFollow`.
+* Gifts can now be given using Enter or numpad Enter, as well as right-click.
+* Fixed the family whistle listing divorced ex-partners through shared children.
 * Destiny can discover vanilla and modded villages across dimensions. New settings control discovery and allowed destinations.
+* Destiny no longer repeatedly reopens its screen over other mods' menus when joining a world.
 * Destiny and villager structure lookups no longer block normal server work.
+
+## Skin Library
+
+* Updated the **Skin Library** for Immersive Library v3 with tag-aware search, Hot and Popular sorting, and suggestions for similar skins.
+* Added descriptive tags when publishing skins, a searchable profession picker for large modpacks, and a clearer sign-in flow with options to open or copy the login link.
+* You can now withdraw reports submitted for skins.
 * Server-wide Skin Library pool changes no longer require cheats in singleplayer.
 
 ## Music and voices
