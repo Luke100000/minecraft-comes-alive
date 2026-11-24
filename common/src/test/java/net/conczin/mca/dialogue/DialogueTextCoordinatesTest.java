@@ -21,7 +21,7 @@ class DialogueTextCoordinatesTest {
 
     @Test
     void structureCoordinatesAreTealUnderlinedAndCopyOnlyCoordinates() {
-        Component component = DialogueEngine.styledStructureCoordinates("234,70,-980");
+        Component component = DialogueCoordinates.styled("234,70,-980");
         assertEquals("234,70,-980", component.getString());
         Style style = component.getStyle();
         assertEquals(TextColor.fromRgb(0x237B80), style.getColor());
@@ -35,7 +35,7 @@ class DialogueTextCoordinatesTest {
     @Test
     void invalidResolverDataRemainsPlainAndNonClickable() {
         for (String invalid : new String[]{"", "123,67", "0,0,99999999999", "one,64,three"}) {
-            Component component = DialogueEngine.styledStructureCoordinates(invalid);
+            Component component = DialogueCoordinates.styled(invalid);
             assertEquals(invalid, component.getString());
             assertNull(component.getStyle().getClickEvent());
             assertNull(component.getStyle().getHoverEvent());

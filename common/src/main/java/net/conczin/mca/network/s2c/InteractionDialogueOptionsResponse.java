@@ -4,6 +4,7 @@ import io.netty.buffer.ByteBuf;
 import net.conczin.mca.ClientProxy;
 import net.conczin.mca.MCA;
 import net.conczin.mca.dialogue.DialogueEngine;
+import net.conczin.mca.dialogue.DialogueEvent;
 import net.conczin.mca.network.HandleablePayload;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
@@ -32,7 +33,7 @@ public record InteractionDialogueOptionsResponse(
             ByteBufCodecs.VAR_INT.map(InteractionDialogueOptionsResponse::modeById, Enum::ordinal);
     private static final StreamCodec<ByteBuf, Component> COMPONENT_CODEC =
             ComponentSerialization.TRUSTED_CONTEXT_FREE_STREAM_CODEC;
-    public static final int MAX_TOPIC_LENGTH = 64;
+    public static final int MAX_TOPIC_LENGTH = DialogueEvent.MAX_TOPIC_LENGTH;
     private static final StreamCodec<ByteBuf, String> TOPIC_CODEC =
             ByteBufCodecs.stringUtf8(MAX_TOPIC_LENGTH);
     private static final StreamCodec<ByteBuf, Optional<Component>> OPTIONAL_COMPONENT_CODEC =

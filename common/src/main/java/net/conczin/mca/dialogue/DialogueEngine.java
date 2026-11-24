@@ -12,10 +12,6 @@ import net.conczin.mca.network.s2c.OpenGuiRequest;
 import net.conczin.mca.resources.DialogueEvents;
 import net.conczin.mca.server.world.data.DialogueEventHistory;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.ClickEvent;
-import net.minecraft.network.chat.HoverEvent;
-import net.minecraft.network.chat.Style;
-import net.minecraft.network.chat.TextColor;
 import net.minecraft.Util;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
@@ -1423,7 +1419,7 @@ public final class DialogueEngine {
             if (result != null && result.found() && error == null
                     && ticket.resolver() instanceof DialogueAsyncResolver.StructureLocation
                     && arguments.length > 0 && arguments[0] instanceof String coordinates) {
-                arguments[0] = styledStructureCoordinates(coordinates);
+                arguments[0] = DialogueCoordinates.styled(coordinates);
             }
             line = result != null && result.found() && error == null
                     ? villager.getTranslatable(player, translationKey, arguments)
@@ -1437,17 +1433,6 @@ public final class DialogueEngine {
         }
         Network.sendToPlayer(InteractionDialogueNodeResponse.active(view(session, context(player, villager))), player);
         return true;
-    }
-
-    static Component styledStructureCoordinates(String text) {
-        return DialogueCoordinates.copyValue(text)
-                .<Component>map(copy -> Component.literal(text).setStyle(Style.EMPTY
-                        .withColor(TextColor.fromRgb(0x237B80))
-                        .withUnderlined(true)
-                        .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
-                                Component.translatable("gui.dialogue.copy_coordinates")))
-                        .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, copy))))
-                .orElseGet(() -> Component.literal(text));
     }
 
     private void invalidatePending(UUID playerId) {
@@ -1568,10 +1553,8 @@ public final class DialogueEngine {
 
     private EventOption option(DialogueEvent event, VillagerEntityMCA villager) {
         String prompt = event.presentation().prompt().orElseThrow();
-        String topic = event.presentation().topic()
-                .filter(value -> !value.isBlank() && value.length() <= 64)
-                .orElse("other");
-        return new EventOption(event.id(), Component.translatable(prompt, villager.getDisplayName()), topic);
+        return new EventOption(event.id(), Component.translatable(prompt, villager.getDisplayName()),
+                event.presentation().menuTopic());
     }
 
     private long nextToken() {

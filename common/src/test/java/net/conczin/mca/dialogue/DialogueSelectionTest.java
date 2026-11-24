@@ -22,6 +22,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class DialogueSelectionTest {
 
     @Test
+    void menuTopicFallsBackOnlyWhenAbsentBlankOrTooLong() {
+        var mode = DialogueEvent.PresentationMode.ASK;
+        var prompt = Optional.of("dialogue.prompt");
+        assertEquals("other", new DialogueEvent.Presentation(mode, prompt, "resume", Optional.empty()).menuTopic());
+        assertEquals("other", new DialogueEvent.Presentation(mode, prompt, "resume", Optional.of(" ")).menuTopic());
+        String boundary = "x".repeat(64);
+        assertEquals(boundary, new DialogueEvent.Presentation(mode, prompt, "resume", Optional.of(boundary)).menuTopic());
+        assertEquals("other", new DialogueEvent.Presentation(mode, prompt, "resume", Optional.of(boundary + "x")).menuTopic());
+    }
+
+    @Test
     void disablingFatigueSuppressesStoredWeightWithoutHidingOtherPriorities() {
         DialogueEvent.Outcome ordinary = new DialogueEvent.Outcome(List.of(), 4.0, List.of(), "ordinary", 0);
         DialogueEvent.Outcome tired = new DialogueEvent.Outcome(List.of(), 0.0, List.of(), "tired", 20, 1.0);

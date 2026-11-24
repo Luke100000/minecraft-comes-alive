@@ -34,6 +34,7 @@ public record DialogueEvent(
 ) {
     public static final int MAX_CHOICES = 32;
     public static final int MAX_CHOICE_ID_LENGTH = 96;
+    public static final int MAX_TOPIC_LENGTH = 64;
 
     private static final Codec<DialogueEvent> CODEC = RecordCodecBuilder.create(instance -> instance.group(
             Trigger.CODEC.fieldOf("trigger").forGetter(DialogueEvent::trigger),
@@ -301,6 +302,10 @@ public record DialogueEvent(
                 DialogueCodecs.nonblankStringCodec("resume_prompt").fieldOf("resume_prompt").forGetter(Presentation::resumePrompt),
                 DialogueCodecs.nonblankStringCodec("topic").optionalFieldOf("topic").forGetter(Presentation::topic)
         ).apply(instance, Presentation::new));
+
+        String menuTopic() {
+            return topic.filter(value -> !value.isBlank() && value.length() <= MAX_TOPIC_LENGTH).orElse("other");
+        }
 
         private void validate() {
             if (mode != PresentationMode.AMBIENT && prompt.isEmpty()) {

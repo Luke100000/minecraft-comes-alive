@@ -163,6 +163,12 @@ class DialogueEventCodecTest {
                                 ResourceLocation.parse("addon:zombie/identity"),
                                 Component.translatable("dialogue.addon.zombie.prompt"),
                                 "addon_custom"
+                        ),
+                        new InteractionDialogueOptionsResponse.EventOption(
+                                InteractionDialogueOptionsResponse.Mode.ASK,
+                                ResourceLocation.parse("addon:long_topic"),
+                                Component.literal("Topic boundary"),
+                                "x".repeat(64)
                         )
                 ),
                 true
