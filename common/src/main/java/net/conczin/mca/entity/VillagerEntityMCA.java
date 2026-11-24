@@ -1263,7 +1263,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
             // Player genetics rendering is client-only. Preserve its original visual adjustment without moving the physical box.
             if (isClientSide()) {
-                Optional<Float> passengerScale = ClientProxy.getGeneticsPassengerScale(vehicle);
+                Optional<Float> passengerScale = ClientProxy.getGeneticsPassengerScale(player.getUUID());
                 if (passengerScale.isPresent()) {
                     float height = passengerScale.get();
                     offset = offset.multiply(1.0f, height, 1.0f);

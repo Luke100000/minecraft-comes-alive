@@ -1,10 +1,8 @@
 package net.conczin.mca;
 
-import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.network.ClientHandler;
 import net.conczin.mca.network.ClientHandlerImpl;
-import net.minecraft.world.entity.Entity;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -23,15 +21,7 @@ public abstract class ClientProxyAbstractImpl extends ClientProxy.Impl {
     }
 
     @Override
-    public Optional<Float> getGeneticsPassengerScale(Entity vehicle) {
-        if (vehicle != null && MCAClient.useGeneticsRenderer(vehicle.getUUID())) {
-            return Optional.of(CommonVillagerModel.getVillager(vehicle).getVisualVerticalScaleFactor());
-        }
-        return Optional.empty();
-    }
-
-    @Override
-    public boolean useExpandedPersonalityTranslations() {
-        return MCAClient.useExpandedPersonalityTranslations();
+    public Optional<Float> getGeneticsPassengerScale(UUID playerId) {
+        return MCAClient.getRenderedGeneticsPlayerData(playerId).map(VillagerLike::getVisualVerticalScaleFactor);
     }
 }

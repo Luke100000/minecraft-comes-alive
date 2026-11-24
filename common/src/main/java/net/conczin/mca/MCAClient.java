@@ -63,9 +63,14 @@ public class MCAClient {
     }
 
     public static boolean useGeneticsRenderer(UUID uuid) {
-        return isPlayerRendererAllowed() && getOrRequestPlayerData(uuid)
-                .filter(data -> data.getPlayerModel() != VillagerLike.PlayerModel.VANILLA)
-                .isPresent();
+        return getRenderedGeneticsPlayerData(uuid).isPresent();
+    }
+
+    static Optional<VillagerLike<?>> getRenderedGeneticsPlayerData(UUID uuid) {
+        if (!isPlayerRendererAllowed()) {
+            return Optional.empty();
+        }
+        return getOrRequestPlayerData(uuid).filter(data -> data.getPlayerModel() != VillagerLike.PlayerModel.VANILLA);
     }
 
     public static boolean useVillagerRenderer(UUID uuid) {
