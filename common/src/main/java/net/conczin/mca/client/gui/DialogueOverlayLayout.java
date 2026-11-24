@@ -3,6 +3,7 @@ package net.conczin.mca.client.gui;
 /** Geometry in scaled GUI pixels. The world and entity remain visible behind both panels. */
 final class DialogueOverlayLayout {
     private static final int INSPECTOR_GAP = 8;
+    private static final int MENU_BOTTOM_MARGIN = 4;
 
     private DialogueOverlayLayout() {
     }
@@ -27,8 +28,7 @@ final class DialogueOverlayLayout {
     /** Maximum menu height that leaves the speech bubble its minimum vertical space. */
     static int maximumMenuHeightForSpeech(int height, int minimumSpeechHeight) {
         int bubbleTop = Math.max(12, Math.min(50, height / 11));
-        int bottomMargin = Math.min(height / 3, 44);
-        return Math.max(0, height - bottomMargin - bubbleTop - 8 - minimumSpeechHeight);
+        return Math.max(0, height - MENU_BOTTOM_MARGIN - bubbleTop - 8 - minimumSpeechHeight);
     }
 
     /** Extra wrapped lines scroll rather than consuming the two-line reservation for the menu. */
@@ -87,11 +87,9 @@ final class DialogueOverlayLayout {
 
     static Geometry calculate(int width, int height, int menuHeight, int bubbleHeight, int desiredBubbleWidth,
                               Column column) {
-        // Hearts and hunger start 39 GUI pixels above the bottom; leave a five-pixel gap.
-        int bottomMargin = Math.min(height / 3, 44);
-        int maximumMenuHeight = Math.max(1, Math.min(height - bottomMargin - 26, height * 2 / 5));
+        int maximumMenuHeight = Math.max(1, height / 2);
         int actualMenuHeight = Math.min(Math.max(1, menuHeight), maximumMenuHeight);
-        Rect menu = new Rect(column.x(), height - bottomMargin - actualMenuHeight, column.width(), actualMenuHeight);
+        Rect menu = new Rect(column.x(), height - MENU_BOTTOM_MARGIN - actualMenuHeight, column.width(), actualMenuHeight);
 
         if (bubbleHeight <= 0) {
             return new Geometry(menu, new Rect(0, 0, 0, 0));

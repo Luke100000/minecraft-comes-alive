@@ -137,7 +137,7 @@ The JSON event contains **translation keys**, not the displayed sentences. Every
 2. Enable **Villager Stories Text** in **Options > Resource Packs** on the client.
 3. Enter the world, run `/datapack list` to check the datapack is enabled, and run `/reload` after adding or editing dialogue JSON. Reload client resources with **F3+T** after editing translations.
 4. Interact with an awake, available **MCA villager**, open **Talk**, expand **Conversations** and choose **How are you doing?**.
-5. Pick a reply. On the final line, click **Finish conversation**. This returns you to the topic list and applies any earned reward.
+5. Pick a reply. On the final line, click **Finish & return to topics**. This returns you to the topic list and applies any earned reward.
 
 If you quit the Talk screen midway, MCA can offer a topic-specific continuation when you return to that villager. Closing the screen is **not** the same as completing the dialogue.
 
@@ -231,11 +231,11 @@ An installed Java addon may also expose a namespaced interaction command. You ca
 
 The addon must register `myaddon:inspect` through the server's Java `InteractionCommands` API. Otherwise that choice cannot successfully commit. You cannot define executable commands, scripts or `.mcfunction` behavior in a dialogue datapack. Authors can use the same command in an existing resource-pack menu layout via an optional button `"command": "myaddon:inspect"`, but the server still decides whether it is permitted. See the [developer guide](dialogue-system-guide.md#register-a-server-side-interaction-command) for Java registration and a complete button example.
 
-**Rewards and story history are saved only when the player selects Finish conversation on a `complete: true` ending.** Walking away, closing the menu or reaching an `end: true` node does not count as successful completion.
+**Rewards and story history are saved only when the player selects Finish & return to topics on a `complete: true` ending.** Walking away, closing the menu or reaching an `end: true` node does not count as successful completion.
 
 ## 9. Resolve a dialogue line with an addon or a structure search
 
-An optional `resolve` object lets a **registered server-side resolver** supply a line while the Talk screen stays open. MCA shows one disabled grey three-square reply row while it waits. A genuine server-confirmed async lookup also displays a localized pending sentence and an indeterminate bar **inside the parchment**. When the result arrives, the bar disappears and the result reveals character by character. **Finish conversation** or the actual reply choices appear together only after the line is revealed. Ordinary text reveal uses the grey row without the async bar.
+An optional `resolve` object lets a **registered server-side resolver** supply a line while the Talk screen stays open. MCA shows one disabled grey three-square reply row while it waits. A genuine server-confirmed async lookup also displays a localized pending sentence and an indeterminate bar **inside the parchment**. When the result arrives, the bar disappears and the result reveals character by character. **Finish & return to topics** or the actual reply choices appear together only after the line is revealed. Ordinary text reveal uses the grey row without the async bar.
 
 Version 1 requires a single `line` on a resolved node and exactly one continuation (`choices`, `next`, `complete`, or `end`). Do not use `lines` or automatic `outcomes` on that node. The `resolve` object needs a registered namespaced `type` and a `failure_line`; `pending_line` is optional and defaults to `gui.dialogue.searching`. Any extra fields belong to the registered resolver's codec. Unrecognized resolver IDs, invalid fields or conflicting node shapes cause the event to be rejected on `/reload`.
 
@@ -376,7 +376,7 @@ Check these common problems in order:
 4. **Conditions don't match:** Temporarily remove `requirements` and use `mode: "ask"`. Check villager availability, hearts, personality, weather and time as appropriate.
 5. **Text displays as a key:** Enable the separate client resource pack and check the exact spelling of the translation key in `en_us.json`. Try F3+T.
 6. **The story is unavailable again:** Check `repeat`, a previous completion, or whether you have a paused run with that villager.
-7. **The reward doesn't happen:** Finish at `complete: true` and click **Finish conversation**. Verify the action is on the selected choice or outcome.
+7. **The reward doesn't happen:** Finish at `complete: true` and click **Finish & return to topics**. Verify the action is on the selected choice or outcome.
 8. **An async event is rejected:** Verify its addon is installed and registered before `/reload`; check the log for an unknown `resolve.type`, invalid codec parameter, missing `failure_line`, unsupported `lines`/`outcomes`, or an extra field. `landmarkaddon:landmark_note` exists only if your addon registers it.
 9. **A lookup shows the fallback:** For `mca:structure_location`, check the configured structure pool or explicit registry ID. A missing/empty pool, unsuccessful lookup, provider error or 600-tick timeout returns the localized failure line. For an addon, confirm its provider returns `Result.found(...)` for the input.
 10. **A result is missing or appears as a key:** Keep the resource pack enabled on each client and reload assets with F3+T. Remember that the built-in structure success uses MCA's dynamic `dialogue.location.<structurePath>` **numbered variants**, and the failure uses `dialogue.location.forgot` variants. The async bar appears only for a genuine server pending state; the three dots during regular typing are expected.

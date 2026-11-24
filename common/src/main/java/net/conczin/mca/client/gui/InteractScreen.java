@@ -737,9 +737,7 @@ public class InteractScreen extends AbstractDynamicScreen {
 
     private int dialogueTargetHeight(List<DialogueRow> rows, int panelWidth) {
         int listHeight = rows.isEmpty() ? 0 : rows.stream().mapToInt(row -> dialogueRowHeight(row, panelWidth)).sum() + 10;
-        int desiredHeight = listHeight + dialogueFooterHeight();
-        int maximumHeight = Math.max(dialogueFooterHeight() + 20, Math.min(height - 54, height * 3 / 5));
-        return Math.min(maximumHeight, Math.max(dialogueFooterHeight() + 20, desiredHeight));
+        return dialogueFooterHeight() + Math.max(20, listHeight);
     }
 
     private void drawDialogueEventState(GuiGraphics context, int mouseX, int mouseY, float tickDelta,
@@ -824,7 +822,6 @@ public class InteractScreen extends AbstractDynamicScreen {
                 int dividerY = bubble.y() + dialoguePixels(23);
                 DialogueOverlayLayout.Rect speaker = DialogueOverlayLayout.speakerHeader(bubble, dialogueTextScale());
                 if (speaker.width() > 0 && speaker.height() > 0) {
-                    context.fill(speaker.x(), speaker.y(), speaker.right(), speaker.bottom(), 0x336B482F);
                     context.enableScissor(speaker.x(), speaker.y(), speaker.right(), speaker.bottom());
                     drawDialogueText(context, villager.asEntity().getName().copy().withStyle(style -> style.withBold(true)),
                             speaker.x() + dialoguePixels(3), speaker.y() + dialoguePixels(3), 0xFF58331E, false);

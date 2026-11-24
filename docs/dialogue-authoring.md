@@ -314,13 +314,13 @@ may instead use concise confirmations and direct feedback.
 ## Completion, ending, and rewards
 
 `complete: true` makes a successful ending. Normally the player must select
-**Finish conversation**, which returns to the topic list, to save their choices,
+**Finish & return to topics**, which returns to the topic list, to save their choices,
 history, cooldown and pending effects. A provoking reply that leads directly to a
 single-line, completed slap reaction is the exception: accepting the reply
 completes the dialogue immediately, closes the entire interaction UI, and commits
 history and other authorized effects once. The server applies the slap three ticks
 later, then sends the final authored reaction in localized chat once, without a
-final **Finish conversation** click.
+final **Finish & return to topics** click.
 
 ```json
 "good_end": {
@@ -794,7 +794,7 @@ one Unicode-safe grapheme every **40 ms**. This is presentation only: there is n
 network packet per character, no instant-reveal control, and clicking during reveal
 does not skip, accelerate, advance, or queue an advance.
 
-For a multi-line node, `Next` appears after the current passage is fully revealed and advances to the next passage. Replies appear after the final passage. Ordinary terminals show **Finish conversation** and return the player to the topic list. The server commits history, cooldown and pending effects only for a `complete: true` terminal; `end: true` closes without completion. The slap-ending exception completes and closes the interaction on the provoking reply, with the final localized line delivered in chat after the delayed hit.
+For a multi-line node, `Next` appears after the current passage is fully revealed and advances to the next passage. Replies appear after the final passage. Ordinary terminals show **Finish & return to topics** and return the player to the topic list. The server commits history, cooldown and pending effects only for a `complete: true` terminal; `end: true` closes without completion. The slap-ending exception completes and closes the interaction on the provoking reply, with the final localized line delivered in chat after the delayed hit.
 
 ## Author checklist
 
@@ -820,7 +820,7 @@ Before submitting an event, check that:
   or raid survival come from an authoritative condition owner;
 - actions are necessary, server-owned, and cannot be applied twice through an
   equivalent legacy effect;
-- completion is intended to commit after the final `Finish conversation`
+- completion is intended to commit after the final `Finish & return to topics`
   acknowledgement, unless the reply leads directly to a completed slap reaction.
 
 ## Personality story examples

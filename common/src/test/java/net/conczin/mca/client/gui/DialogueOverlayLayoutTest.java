@@ -20,21 +20,21 @@ class DialogueOverlayLayoutTest {
     }
 
     @Test
-    void speechSpaceLimitsTallMenusButNeverMovesFooterIntoHud() {
+    void tallChoicesUseMoreHeightWhileLeavingRoomForSpeech() {
         int desiredSpeechHeight = DialogueOverlayLayout.minimumSpeechHeight(2, 0, false, 1.0f);
         int menuLimit = DialogueOverlayLayout.maximumMenuHeightForSpeech(360, desiredSpeechHeight);
-        assertEquals(213, menuLimit);
         DialogueOverlayLayout.Geometry upper = DialogueOverlayLayout.calculate(640, 360, menuLimit,
                 desiredSpeechHeight);
+        assertTrue(upper.menu().height() > 144, "long menus can show more than the old 40% cap allowed");
         assertEquals(desiredSpeechHeight, upper.bubble().height());
         assertTrue(upper.bubble().bottom() + 8 <= upper.menu().y());
-        assertEquals(360 - 44, upper.menu().bottom());
+        assertEquals(356, upper.menu().bottom());
 
-        int tinyLimit = DialogueOverlayLayout.maximumMenuHeightForSpeech(150, desiredSpeechHeight);
+        int tinyLimit = DialogueOverlayLayout.maximumMenuHeightForSpeech(110, desiredSpeechHeight);
         assertTrue(tinyLimit < 52, "tiny screens should fall back to speech overflow instead of hiding menu actions");
-        DialogueOverlayLayout.Geometry tiny = DialogueOverlayLayout.calculate(320, 150, 52,
+        DialogueOverlayLayout.Geometry tiny = DialogueOverlayLayout.calculate(320, 110, 52,
                 desiredSpeechHeight);
-        assertTrue(tiny.menu().bottom() <= 150 - 44);
+        assertEquals(106, tiny.menu().bottom());
         assertTrue(tiny.bubble().bottom() + 8 <= tiny.menu().y());
     }
 
@@ -42,32 +42,31 @@ class DialogueOverlayLayoutTest {
     void longSpeechStillReservesTwoLinesBeforeGivingHeightToChoices() {
         int fourLines = DialogueOverlayLayout.minimumSpeechHeight(4, 0, false, 1.0f);
         int twoLines = DialogueOverlayLayout.minimumSpeechHeight(2, 0, false, 1.0f);
-        int menuHeight = DialogueOverlayLayout.menuHeightWithSpeechMinimum(200, 120, 52, twoLines);
-        DialogueOverlayLayout.Geometry layout = DialogueOverlayLayout.calculate(320, 200, menuHeight, fourLines);
+        int menuHeight = DialogueOverlayLayout.menuHeightWithSpeechMinimum(180, 120, 52, twoLines);
+        DialogueOverlayLayout.Geometry layout = DialogueOverlayLayout.calculate(320, 180, menuHeight, fourLines);
 
-        assertEquals(67, menuHeight, "the 4-line request must not discard a feasible 2-line reservation");
-        assertTrue(layout.bubble().height() >= 63);
+        assertEquals(twoLines, layout.bubble().height(), "two lines fit even when the menu requests more height");
         assertTrue(layout.menu().height() >= 52);
         assertTrue(layout.bubble().bottom() + 8 <= layout.menu().y());
     }
 
     @Test
     void tinyViewportKeepsStandardSpeechInsetWithoutMovingControls() {
-        int menuHeight = DialogueOverlayLayout.menuHeightWithSpeechMinimum(150, 120, 52, 63);
-        DialogueOverlayLayout.Geometry layout = DialogueOverlayLayout.calculate(320, 150, menuHeight, 63);
+        int menuHeight = DialogueOverlayLayout.menuHeightWithSpeechMinimum(110, 120, 52, 63);
+        DialogueOverlayLayout.Geometry layout = DialogueOverlayLayout.calculate(320, 110, menuHeight, 63);
         DialogueOverlayLayout.SpeechViewport text = DialogueOverlayLayout.speechViewport(layout.bubble(),
                 0, false, 1.0f);
 
         assertEquals(52, menuHeight, "an impossible 2-line reservation must not give extra space to choices");
         assertEquals(layout.bubble().y() + 31, text.top(), "the speech inset must not change into a compact layout");
         assertTrue(text.bottom() <= text.top(), "unplayably small sizes may have no speech viewport");
-        assertTrue(layout.menu().bottom() <= 150 - 44);
+        assertEquals(106, layout.menu().bottom());
     }
 
     @Test
     void casualMessageLoadingRowFitsInsideTheAvailablePromptViewport() {
-        DialogueOverlayLayout.Rect tinyMenu = DialogueOverlayLayout.calculate(320, 150, 68, 0).menu();
-        // The 40%-of-screen menu cap leaves 18 pixels after the 32-pixel footer and 10-pixel insets.
+        DialogueOverlayLayout.Rect tinyMenu = DialogueOverlayLayout.calculate(320, 120, 68, 0).menu();
+        // The half-screen cap leaves 18 pixels after the 32-pixel footer and 10-pixel insets.
         assertEquals(60, tinyMenu.height());
         assertEquals(18, DialogueOverlayLayout.loadingRowHeight(tinyMenu, 32, 26));
 
@@ -108,7 +107,7 @@ class DialogueOverlayLayoutTest {
         assertEquals(docked.bubble().width(), docked.menu().width());
         assertTrue(docked.menu().y() >= docked.bubble().bottom() + 8);
         assertFalse(docked.canShowTail());
-        assertTrue(docked.menu().bottom() <= 330);
+        assertEquals(356, docked.menu().bottom());
         assertInside(docked.menu(), 640, 360);
     }
 
@@ -150,7 +149,7 @@ class DialogueOverlayLayoutTest {
     }
 
     @Test
-    void pendingStateKeepsFooterAndHudClearAt320By150() {
+    void pendingStateKeepsFooterInsideFrameAt320By150() {
         DialogueOverlayLayout.Geometry normal = DialogueOverlayLayout.calculate(320, 150, 100, 80);
         for (DialogueOverlayLayout.Geometry geometry : new DialogueOverlayLayout.Geometry[]{
                 normal, DialogueOverlayLayout.speechAboveChoices(normal)}) {
@@ -160,8 +159,7 @@ class DialogueOverlayLayoutTest {
             assertInside(strip, 320, 150);
             assertTrue(strip.height() == 0 || strip.bottom() <= geometry.bubble().bottom());
             assertTrue(geometry.bubble().bottom() + 8 <= geometry.menu().y());
-            assertTrue(footer.close().bottom() <= 150 - 44 - 3,
-                    "the dialogue footer must stay above the hearts and hunger region");
+            assertEquals(143, footer.close().bottom(), "the footer must end inside the bottom frame border");
         }
     }
 
@@ -253,12 +251,11 @@ class DialogueOverlayLayoutTest {
     }
 
     @Test
-    void normalScaleKeepsChoicesCompactAndJustAboveHeartsAndHunger() {
+    void normalScaleKeepsShortChoicesCompactAndNearScreenBottom() {
         DialogueOverlayLayout.Rect menu = DialogueOverlayLayout.calculate(530, 300, 115, 85).menu();
         assertTrue(menu.width() >= 300 && menu.width() <= 350,
                 "The conversation menu should occupy about 60% of the available width");
-        assertEquals(300 - 39 - 5, menu.bottom(),
-                "Menu must sit just above hearts and hunger without reserving armour space");
+        assertEquals(296, menu.bottom());
         assertTrue(menu.height() <= 120);
     }
 

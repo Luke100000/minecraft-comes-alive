@@ -57,18 +57,17 @@ def frame(name: str, interior: str, outside: str, border: str, shine: str) -> No
 
 def tail() -> None:
     image = Image.new("RGBA", (20, 20), (0, 0, 0, 0))
-    # One joined silhouette: two stepped diagonal borders converge on the
-    # left-facing tip. The warm interior extends past the panel's outer stroke
-    # into its fill, without the old rectangular renderer-side patch.
+    # Keep XainenVoltaire's two-pixel dark edge and the frame's copper border.
+    # Move one pixel per row so the shorter tip has a regular diagonal.
     for y in range(2, 19):
-        distance = abs(y - 10)
-        left = 1 + round(distance * 14 / 8)
-        image.putpixel((left, y), (41, 25, 16, 255))
-        if left + 1 < 19:
-            image.putpixel((left + 1, y), (181, 128, 81, 255))
+        left = 7 + abs(y - 10)
+        for x in range(left, min(left + 2, 19)):
+            image.putpixel((x, y), (41, 25, 16, 255))
+        if left + 2 < 19:
+            image.putpixel((left + 2, y), (181, 128, 81, 255))
         # These source rows approximate the lower centre of the nine-slice.
         colour = paper_colour(14 + (y - 2) * 3 / 16)
-        for x in range(left + 2, 19):
+        for x in range(left + 3, 19):
             image.putpixel((x, y), colour)
     save(image, "paper_tail")
 
