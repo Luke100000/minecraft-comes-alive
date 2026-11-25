@@ -699,46 +699,53 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
         Entity attacker = source.getEntity();
 
-        // Notify the surrounding guards when a villager is attacked. Yoinks!
-        if (!level().isClientSide && attacker instanceof LivingEntity livingEntity && !isHostile() && !isFriend(attacker.getType())) {
-            int victimBountyBeforeHit = getSmallBounty();
-
-            // remember the specific attacker
-            getBrain().setMemory(MemoryModuleTypeMCA.HIT_BY_PLAYER, Optional.of(livingEntity));
-            getBrain().setMemory(MemoryModuleTypeMCA.SMALL_BOUNTY, victimBountyBeforeHit + 1);
-
-            Vec3 pos = position();
-            level().getEntitiesOfClass(VillagerEntityMCA.class, new AABB(pos, pos).inflate(32)).forEach(v -> {
-                if (this.distanceToSqr(v) <= (v.getTarget() == null ? 1024 : 64)) {
-                    if (attacker instanceof Player player) {
-                        int bounty = v == this ? victimBountyBeforeHit : v.getSmallBounty();
-                        if (v.isGuard()) {
-                            int maxWarning = v.getMaxWarnings(player);
-                            if (bounty > maxWarning) {
-                                // ok, that was enough
-                                v.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, livingEntity);
-                            } else if (bounty == 0 || bounty == maxWarning) {
-                                // just a warning
-                                v.getBrain().eraseMemory(MemoryModuleType.ATTACK_TARGET);
-                                v.sendChatMessage(player, "villager.warning");
-                            }
-                            v.getBrain().setMemory(MemoryModuleTypeMCA.SMALL_BOUNTY, bounty + 1);
-                        }
-                    } else if (v.isGuard()) {
-                        // non players get attacked straight away
-                        VillagerTasksMCA.respondToGuardAlarm(v, this, livingEntity);
-                    }
-                }
-            });
+        // Notify the surrounding guards when a villager is attacked.
+        if (attacker instanceof LivingEntity livingEntity) {
+            notifyNearbyGuards(this, livingEntity);
         }
 
         // Iron Golem got his revenge, now chill
-        if (attacker instanceof IronGolem golem) {
+        if (attacker instanceof IronGolem golem && !isHostile()) {
             golem.stopBeingAngry();
             damageAmount *= 0.0f;
         }
 
         return super.hurt(source, damageAmount);
+    }
+
+    public static void notifyNearbyGuards(LivingEntity victim, LivingEntity attacker) {
+        if (victim.level().isClientSide || isVillageFriendly(attacker)) {
+            return;
+        }
+        int victimBountyBeforeHit = 0;
+        if (victim instanceof VillagerEntityMCA villager) {
+            if (villager.isHostile()) {
+                return;
+            }
+            victimBountyBeforeHit = villager.getSmallBounty();
+            villager.getBrain().setMemory(MemoryModuleTypeMCA.HIT_BY_PLAYER, Optional.of(attacker));
+            villager.getBrain().setMemory(MemoryModuleTypeMCA.SMALL_BOUNTY, victimBountyBeforeHit + 1);
+        }
+
+        Vec3 pos = victim.position();
+        for (VillagerEntityMCA guard : victim.level().getEntitiesOfClass(VillagerEntityMCA.class, new AABB(pos, pos).inflate(32))) {
+            if (!guard.isGuard() || victim.distanceToSqr(guard) > (guard.getTarget() == null ? 1024 : 64)) {
+                continue;
+            }
+            if (attacker instanceof Player player) {
+                int bounty = guard == victim ? victimBountyBeforeHit : guard.getSmallBounty();
+                int maxWarning = guard.getMaxWarnings(player);
+                if (bounty > maxWarning) {
+                    guard.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, attacker);
+                } else if (bounty == 0 || bounty == maxWarning) {
+                    guard.getBrain().eraseMemory(MemoryModuleType.ATTACK_TARGET);
+                    guard.sendChatMessage(player, "villager.warning");
+                }
+                guard.getBrain().setMemory(MemoryModuleTypeMCA.SMALL_BOUNTY, bounty + 1);
+            } else {
+                VillagerTasksMCA.respondToGuardAlarm(guard, victim, attacker);
+            }
+        }
     }
 
     private boolean requestCooldown() {
@@ -1949,9 +1956,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         return getProfession() == ProfessionsMCA.OUTLAW;
     }
 
-    //friends will not get slapped in revenge
-    public boolean isFriend(EntityType<?> type) {
-        return type == EntityType.IRON_GOLEM || type == EntitiesMCA.FEMALE_VILLAGER || type == EntitiesMCA.MALE_VILLAGER;
+    public static boolean isVillageFriendly(Entity entity) {
+        return entity instanceof IronGolem
+                || entity instanceof Villager && (!(entity instanceof VillagerEntityMCA villager) || !villager.isHostile());
     }
 
     @Override
