@@ -9,6 +9,7 @@ import net.conczin.mca.entity.VillagerVoicePitchGameTests;
 import net.conczin.mca.entity.VillagerEquipmentOwnershipGameTests;
 import net.conczin.mca.entity.ai.ProcreationInventoryGameTests;
 import net.conczin.mca.entity.ai.BedOccupancyLifecycleGameTests;
+import net.conczin.mca.entity.ai.BedPoiCompatibilityGameTests;
 import net.conczin.mca.entity.ai.ResidencyGoHomeGameTests;
 import net.conczin.mca.entity.ai.ResidencySetHomeGameTests;
 import net.conczin.mca.entity.ai.brain.ForcedHomeOccupiedBedGameTests;
@@ -105,6 +106,7 @@ public final class McaGameTestsRegistration {
             VillagerEquipmentOwnershipGameTests.class,
             ProcreationInventoryGameTests.class,
             BedOccupancyLifecycleGameTests.class,
+            BedPoiCompatibilityGameTests.class,
             ResidencyGoHomeGameTests.class,
             ResidencySetHomeGameTests.class,
             ForcedHomeOccupiedBedGameTests.class,
