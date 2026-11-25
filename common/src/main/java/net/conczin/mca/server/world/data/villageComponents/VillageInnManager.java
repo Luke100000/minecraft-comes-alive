@@ -4,12 +4,15 @@ import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.registry.ProfessionsMCA;
+import net.conczin.mca.registry.TagsMCA;
 import net.conczin.mca.resources.Names;
 import net.conczin.mca.server.world.data.Village;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Holder;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.npc.WanderingTrader;
 import net.minecraft.world.level.BlockGetter;
@@ -58,10 +61,15 @@ public class VillageInnManager {
         if (this.doesNotSuffocateAt(world, blockPos)) {
             int i = world.random.nextInt(10);
             if (i == 0 && Config.getInstance().innSpawnsWanderingTraders) {
-                WanderingTrader trader = EntityType.WANDERING_TRADER.spawn(world, blockPos, MobSpawnType.EVENT);
-                if (trader != null) {
-                    name = trader.getName().getString();
-                    trader.setDespawnDelay(Config.getInstance().adventurerStayTime);
+                Entity visitor = BuiltInRegistries.ENTITY_TYPE.getRandomElementOf(TagsMCA.EntityTypes.SPAWN_AT_INN, world.random)
+                        .map(Holder::value)
+                        .map(type -> type.spawn(world, blockPos, MobSpawnType.EVENT))
+                        .orElse(null);
+                if (visitor != null) {
+                    name = visitor.getName().getString();
+                    if (visitor instanceof WanderingTrader trader) {
+                        trader.setDespawnDelay(Config.getInstance().adventurerStayTime);
+                    }
                 }
             } else if (i == 1 && Config.getInstance().innSpawnsCultists) {
                 VillagerEntityMCA adventurer = spawnInnVillager(world, blockPos, Gender.getRandom());
