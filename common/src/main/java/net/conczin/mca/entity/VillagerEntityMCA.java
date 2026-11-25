@@ -1800,6 +1800,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         }
 
         getTypeDataManager().load(this, data);
+        restoreGenderAfterLoad();
         relations.cancelInterruptedProcreationAfterLoad();
         relations.readFromNbt(data);
         longTermMemory.readFromNbt(data);
@@ -1821,9 +1822,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             this.interactedWith = data.getBoolean("InteractedWith");
         }
 
-        if (data.contains("Clothes")) {
-            validateClothes();
-        }
+        validateClothes();
 
         if (getVillagerBrain().getPersonality() == Personality.UNASSIGNED) {
             getVillagerBrain().randomize();

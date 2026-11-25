@@ -277,6 +277,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         CompoundTag data = McaDataFixers.update(nbt);
         super.readAdditionalSaveData(data);
         getTypeDataManager().load(this, data);
+        restoreGenderAfterLoad();
         relations.readFromNbt(data);
         chatAIPrompt = data.getString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY);
         nicknameData = data.getCompound(VillagerEntityMCA.NICKNAMES_KEY).copy();

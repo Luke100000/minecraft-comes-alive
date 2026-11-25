@@ -567,6 +567,14 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         setHairStyleId("");
     }
 
+    default void restoreGenderAfterLoad() {
+        if (getGenetics().getGender() == Gender.UNASSIGNED) {
+            EntityType<?> type = asEntity().getType();
+            getGenetics().setGender(type == EntitiesMCA.FEMALE_VILLAGER || type == EntitiesMCA.FEMALE_ZOMBIE_VILLAGER
+                    ? Gender.FEMALE : Gender.MALE);
+        }
+    }
+
     default void validateClothes() {
         if (!asEntity().level().isClientSide) {
             migrateLegacyHairStyle();
