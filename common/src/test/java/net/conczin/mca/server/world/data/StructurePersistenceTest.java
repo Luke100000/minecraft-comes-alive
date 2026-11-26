@@ -71,6 +71,6 @@ class StructurePersistenceTest {
         StructureFloor loaded = StructureFloor.load(tag);
 
         assertEquals(66, loaded.anchorY());
-        assertEquals(0, FloorGrouping.prospectiveNumber(List.of(loaded), loaded, 68).number().orElseThrow());
+        assertEquals(0, RoomWorkflow.prospectiveFloorNumber(List.of(loaded), loaded, 68).number().orElseThrow());
     }
 }

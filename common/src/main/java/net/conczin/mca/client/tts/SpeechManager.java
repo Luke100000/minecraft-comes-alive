@@ -28,15 +28,16 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class SpeechManager {
     public static final SpeechManager INSTANCE = new SpeechManager();
 
-    private final Minecraft client;
     private final Map<UUID, EntityBoundSoundInstance> currentlyPlaying = new ConcurrentHashMap<>();
     private final Map<UUID, Long> latestVoiceRequest = new ConcurrentHashMap<>();
     private final AtomicLong voiceRequestCounter = new AtomicLong();
+    private volatile Object lastClientLevel;
 
     private final RealtimeSpeechManager realtimeSpeechManager = new RealtimeSpeechManager(Config.getInstance().onlineTTSServer);
     private final Player2SpeechManager player2SpeechManager = new Player2SpeechManager(Config.getInstance().player2Url);
@@ -46,10 +47,12 @@ public class SpeechManager {
     @SuppressWarnings("deprecation")
     private final RandomSource threadSafeRandom = RandomSource.createThreadSafe();
     private long lastHealthCheckTime = 0;
-    private boolean firstRun = true;
+    private final AtomicBoolean firstRun = new AtomicBoolean(true);
+    private final AtomicBoolean healthCheckInFlight = new AtomicBoolean(false);
 
     public SpeechManager() {
-        client = Minecraft.getInstance();
+        Minecraft client = Minecraft.getInstance();
+        lastClientLevel = client == null ? null : client.level;
     }
 
     public EntityBoundSoundInstance getSound(float pitch, Entity entity, Identifier soundLocation) {
@@ -59,15 +62,32 @@ public class SpeechManager {
     }
 
     public void playSound(float pitch, Entity entity, Identifier soundLocation, long request) {
+        UUID uuid = entity.getUUID();
+        Minecraft client = Minecraft.getInstance();
+        if (client == null) {
+            finishVoiceRequest(uuid, request);
+            return;
+        }
         client.execute(() -> {
-            UUID uuid = entity.getUUID();
-            if (!isLatestVoiceRequest(uuid, request)) return;
-            EntityBoundSoundInstance sound = SpeechManager.INSTANCE.getSound(pitch, entity, soundLocation);
-            playAndTrack(uuid, sound);
+            try {
+                // The world can change before a downloaded voice reaches the client executor.
+                if (client.level != entity.level() || !isLatestVoiceRequest(uuid, request)) {
+                    return;
+                }
+                EntityBoundSoundInstance sound = getSound(pitch, entity, soundLocation);
+                playAndTrack(client, uuid, sound);
+            } finally {
+                finishVoiceRequest(uuid, request);
+            }
         });
     }
 
     long beginVoiceRequest(UUID sender) {
+        // Network messages may arrive in a newly joined level before the next client tick.
+        Minecraft client = Minecraft.getInstance();
+        if (client != null) {
+            updateClientLevel(client);
+        }
         long request = voiceRequestCounter.incrementAndGet();
         latestVoiceRequest.put(sender, request);
         return request;
@@ -77,11 +97,15 @@ public class SpeechManager {
         return Long.valueOf(request).equals(latestVoiceRequest.get(sender));
     }
 
+    void finishVoiceRequest(UUID sender, long request) {
+        latestVoiceRequest.remove(sender, request);
+    }
+
     /**
      * Stops any currently playing voice line for the given villager and starts the new, given, voice line.
      */
-    private void playAndTrack(UUID uuid, EntityBoundSoundInstance sound) {
-        stopTrackedSound(uuid);
+    private void playAndTrack(Minecraft client, UUID uuid, EntityBoundSoundInstance sound) {
+        stopTrackedSound(client, uuid);
         currentlyPlaying.put(uuid, sound);
         client.getSoundManager().play(sound);
     }
@@ -89,9 +113,9 @@ public class SpeechManager {
     /**
      * Stops any currently playing voice line for the given villager.
      */
-    private void stopTrackedSound(UUID uuid) {
+    private void stopTrackedSound(Minecraft client, UUID uuid) {
         EntityBoundSoundInstance sound = currentlyPlaying.remove(uuid);
-        if (sound != null) {
+        if (sound != null && client != null) {
             client.getSoundManager().stop(sound);
         }
     }
@@ -111,7 +135,14 @@ public class SpeechManager {
     }
 
     public void stopPreview(VillagerEntityMCA villager) {
-        stopTrackedSound(villager.getUUID());
+        if (villager != null) {
+            stopPreview(villager.getUUID());
+        }
+    }
+
+    void stopPreview(UUID uuid) {
+        latestVoiceRequest.remove(uuid);
+        stopTrackedSound(Minecraft.getInstance(), uuid);
     }
 
     public void onChatMessage(Component message, UUID sender) {
@@ -136,7 +167,7 @@ public class SpeechManager {
 
     private void speak(String phrase, UUID sender, boolean translatable) {
         Minecraft client = Minecraft.getInstance();
-        if (client.level == null) return;
+        if (client == null || client.level == null) return;
 
         // Note: we intentionally do NOT skip this when a voice line is already playing for this
         // villager. Instead, whichever voice line becomes ready to play first (offline pack
@@ -153,7 +184,7 @@ public class SpeechManager {
 
     private void speak(String phrase, UUID sender, VillagerEntityMCA villager, boolean translatable) {
         Minecraft client = Minecraft.getInstance();
-        if (client.level == null) return;
+        if (client == null || client.level == null) return;
 
         if (villager.isSpeechImpaired()) return;
         if (villager.isToYoungToSpeak()) return;
@@ -187,7 +218,7 @@ public class SpeechManager {
 
     private boolean tryPlayVoicePackSound(String phrase, UUID sender, VillagerEntityMCA villager) {
         Minecraft client = Minecraft.getInstance();
-        if (client.level == null || client.player == null) {
+        if (client == null || client.level == null || client.player == null) {
             return false;
         }
 
@@ -201,28 +232,55 @@ public class SpeechManager {
             return false;
         }
 
-        beginVoiceRequest(sender);
-        EntityBoundSoundInstance instance = new EntityBoundSoundInstance(SoundEvent.createVariableRangeEvent(sound), SoundSource.NEUTRAL, 1.0f, pitch, villager, threadSafeRandom.nextLong());
-        playAndTrack(sender, instance);
+        long request = beginVoiceRequest(sender);
+        try {
+            EntityBoundSoundInstance instance = new EntityBoundSoundInstance(SoundEvent.createVariableRangeEvent(sound), SoundSource.NEUTRAL, 1.0f, pitch, villager, threadSafeRandom.nextLong());
+            playAndTrack(client, sender, instance);
+        } finally {
+            finishVoiceRequest(sender, request);
+        }
         return true;
     }
 
     private boolean hasVoicePackSounds() {
+        Minecraft client = Minecraft.getInstance();
+        if (client == null) {
+            return false;
+        }
         return client.getSoundManager().getAvailableSounds().stream()
                 .anyMatch(sound -> sound.getNamespace().equals("mca_voices"));
     }
 
+    private void updateClientLevel(Minecraft client) {
+        if (client.level == null || client.level != lastClientLevel) {
+            latestVoiceRequest.clear();
+            if (client.level != lastClientLevel && !currentlyPlaying.isEmpty()) {
+                currentlyPlaying.values().forEach(client.getSoundManager()::stop);
+                currentlyPlaying.clear();
+            }
+            lastClientLevel = client.level;
+        }
+    }
+
     public void tick(Minecraft client) {
+        updateClientLevel(client);
         if (client.level != null) {
             currentlyPlaying.entrySet().removeIf(entry -> !client.getSoundManager().isActive(entry.getValue()));
             long time = client.level.getGameTime();
             if (Math.abs(time - lastHealthCheckTime) > 1200) {
                 boolean enabled = Config.getInstance().villagerChatAIModel.equals("player2");
-                if (firstRun || enabled) {
+                if ((firstRun.get() || enabled) && healthCheckInFlight.compareAndSet(false, true)) {
                     CompletableFuture.runAsync(() -> {
-                        if (player2SpeechManager.checkHealth() && firstRun && !enabled) {
-                            client.gui.getChat().addClientSystemMessage(Component.translatable("command.chat_ai.player2.hint", "/mca chatAI player2"));
-                            firstRun = false;
+                        try {
+                            if (player2SpeechManager.checkHealth() && !enabled && firstRun.compareAndSet(true, false)) {
+                                client.execute(() -> {
+                                    if (client.gui != null) {
+                                        client.gui.getChat().addClientSystemMessage(Component.translatable("command.chat_ai.player2.hint", "/mca chatAI player2"));
+                                    }
+                                });
+                            }
+                        } finally {
+                            healthCheckInFlight.set(false);
                         }
                     });
                 }

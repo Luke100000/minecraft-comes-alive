@@ -27,4 +27,8 @@ public final class PersistentPathTarget extends BlockPosTracker {
     public boolean isInactiveFor(Mob mob) {
         return requiredActivity != null && !mob.getBrain().isActive(requiredActivity);
     }
+
+    public boolean isRequiredFor(Activity activity) {
+        return requiredActivity == activity;
+    }
 }

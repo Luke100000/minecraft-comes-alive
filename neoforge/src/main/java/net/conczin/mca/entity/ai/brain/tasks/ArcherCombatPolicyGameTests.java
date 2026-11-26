@@ -3,10 +3,13 @@ package net.conczin.mca.entity.ai.brain.tasks;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
 import net.conczin.mca.entity.ai.Genetics;
+import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
+import net.conczin.mca.entity.ai.RangedWeaponHelper;
 import net.conczin.mca.entity.ai.Traits;
 import net.conczin.mca.gametest.GameTestTerrain;
 import net.conczin.mca.registry.ProfessionsMCA;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.component.DataComponents;
 import net.conczin.mca.neoforge.gametest.AfterBatch;
 import net.conczin.mca.neoforge.gametest.BeforeBatch;
 import net.conczin.mca.neoforge.gametest.GameTest;
@@ -15,19 +18,25 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.ai.behavior.BehaviorUtils;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.ai.memory.NearestVisibleLivingEntities;
+import net.minecraft.world.entity.monster.Blaze;
 import net.minecraft.world.entity.monster.skeleton.Skeleton;
 import net.minecraft.world.entity.monster.spider.Spider;
 import net.minecraft.world.entity.monster.zombie.Zombie;
 import net.minecraft.world.entity.npc.villager.VillagerProfession;
 import net.minecraft.world.entity.projectile.arrow.AbstractArrow;
 import net.minecraft.world.entity.schedule.Activity;
-
-
+import net.minecraft.world.item.CrossbowItem;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.ItemStackTemplate;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.component.ChargedProjectiles;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -248,8 +257,21 @@ public final class ArcherCombatPolicyGameTests {
         crossbowSpacing(helper, true);
     }
 
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 420)
+    public static void acceleratedCrossbowRetreatStaysWithinFiringRange(GameTestHelper helper) {
+        crossbowSpacing(helper, false, true);
+    }
+
     private static void crossbowSpacing(GameTestHelper helper, boolean hill) {
+        crossbowSpacing(helper, hill, false);
+    }
+
+    private static void crossbowSpacing(GameTestHelper helper, boolean hill, boolean accelerated) {
         Arena a = new Arena(helper);
+        if (accelerated) {
+            var speed = a.guard.getAttribute(Attributes.MOVEMENT_SPEED);
+            speed.setBaseValue(speed.getBaseValue() * 2.0D);
+        }
         if (hill) {
             for (int x = -2; x <= 2; x++) {
                 for (int z = -2; z <= 2; z++) {
@@ -439,6 +461,140 @@ public final class ArcherCombatPolicyGameTests {
                         "approach-to-strafe handoff did not resume moving and shooting");
                 a.succeed();
             }
+        });
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 80)
+    public static void crossbowReconcilesChargedStateAcrossStopAndEquipmentSwaps(GameTestHelper helper) {
+        Arena a = new Arena(helper);
+        Zombie target = a.zombie(a.start.east(6));
+        target.getAttribute(Attributes.MAX_HEALTH).setBaseValue(100);
+        target.setHealth(100);
+        a.guard.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, target);
+        a.guard.getBrain().setMemory(MemoryModuleTypeMCA.RANGED_COMBAT_STATE, RangedCombatState.HOLD);
+        a.guard.getBrain().setMemory(MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES,
+                new NearestVisibleLivingEntities(helper.getLevel(), a.guard, List.of(target)));
+
+        ItemStack preCharged = Items.CROSSBOW.getDefaultInstance();
+        preCharged.set(DataComponents.CHARGED_PROJECTILES, ChargedProjectiles.of(new ItemStackTemplate(Items.ARROW)));
+        a.guard.setItemSlot(a.guard.getDominantSlot(), preCharged);
+
+        ExtendedCrossbowAttackTask<VillagerEntityMCA, LivingEntity> task = new ExtendedCrossbowAttackTask<>();
+        long time = helper.getLevel().getGameTime();
+        helper.assertTrue(task.tryStart(helper.getLevel(), a.guard, time),
+                "crossbow task did not start with a valid target in range");
+        helper.assertTrue(!a.guard.isUsingItem(),
+                "already-charged crossbow unnecessarily started charging on task start");
+
+        task.doStop(helper.getLevel(), a.guard, time + 1);
+
+        // Swap to an uncharged crossbow after stop(): must start charging instead of dry-firing.
+        ItemStack uncharged = Items.CROSSBOW.getDefaultInstance();
+        a.guard.setItemSlot(a.guard.getDominantSlot(), uncharged);
+        helper.assertTrue(task.tryStart(helper.getLevel(), a.guard, time + 2),
+                "crossbow task did not restart with an uncharged crossbow");
+        task.tickOrStop(helper.getLevel(), a.guard, time + 2);
+        helper.assertTrue(a.guard.isUsingItem() && !CrossbowItem.isCharged(uncharged),
+                "uncharged crossbow after stop() did not enter charging state (dry-fired stale CHARGED state)");
+        task.doStop(helper.getLevel(), a.guard, time + 3);
+
+        // Equip an already-charged crossbow after stop(): must skip 25-tick charging and fire after AIM_TICKS.
+        ItemStack chargedAgain = Items.CROSSBOW.getDefaultInstance();
+        chargedAgain.set(DataComponents.CHARGED_PROJECTILES, ChargedProjectiles.of(new ItemStackTemplate(Items.ARROW)));
+        a.guard.setItemSlot(a.guard.getDominantSlot(), chargedAgain);
+        helper.assertTrue(task.tryStart(helper.getLevel(), a.guard, time + 4),
+                "crossbow task did not restart with a charged crossbow");
+        for (int i = 0; i <= 10; i++) {
+            task.tickOrStop(helper.getLevel(), a.guard, time + 4 + i);
+            helper.assertTrue(!a.guard.isUsingItem(),
+                    "already-charged crossbow entered item-use recharge instead of aiming at tick " + i);
+            if (!CrossbowItem.isCharged(chargedAgain)) {
+                break;
+            }
+        }
+        long arrows = helper.getLevel().getEntitiesOfClass(AbstractArrow.class, a.guard.getBoundingBox().inflate(16),
+                arrow -> arrow.getOwner() == a.guard).size();
+        helper.assertTrue(!CrossbowItem.isCharged(chargedAgain) && arrows >= 1,
+                "already-charged crossbow did not fire after its aim window; arrows=" + arrows);
+        a.succeed();
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 80)
+    public static void crossbowHoldsFireBehindLowCoverWithClearEyeLineOfSight(GameTestHelper helper) {
+        Arena a = new Arena(helper);
+        Zombie target = a.zombie(a.start.east(6));
+        // Bottom slabs at y+1 span [1.0, 1.5]: clear eye LOS (1.62 -> 1.74), blocked upper-torso bolt trajectory (1.52 -> 1.365).
+        BlockPos coverNear = a.start.east(4).above();
+        BlockPos coverFar = a.start.east(5).above();
+        helper.getLevel().setBlock(coverNear, Blocks.STONE_SLAB.defaultBlockState(), 3);
+        helper.getLevel().setBlock(coverFar, Blocks.STONE_SLAB.defaultBlockState(), 3);
+
+        ItemStack charged = Items.CROSSBOW.getDefaultInstance();
+        charged.set(DataComponents.CHARGED_PROJECTILES, ChargedProjectiles.of(new ItemStackTemplate(Items.ARROW)));
+        a.guard.setItemSlot(a.guard.getDominantSlot(), charged);
+        a.guard.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, target);
+        a.guard.getBrain().setMemory(MemoryModuleTypeMCA.RANGED_COMBAT_STATE, RangedCombatState.HOLD);
+        a.guard.getBrain().setMemory(MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES,
+                new NearestVisibleLivingEntities(helper.getLevel(), a.guard, List.of(target)));
+
+        helper.assertTrue(BehaviorUtils.canSee(a.guard, target),
+                "low-cover fixture must preserve eye-to-eye line of sight");
+        helper.assertTrue(!RangedWeaponHelper.canShootCrossbowFrom(a.guard, a.guard.position(), target),
+                "low-cover fixture must block the crossbow bolt trajectory");
+
+        ExtendedCrossbowAttackTask<VillagerEntityMCA, LivingEntity> task = new ExtendedCrossbowAttackTask<>();
+        long time = helper.getLevel().getGameTime();
+        helper.assertTrue(task.tryStart(helper.getLevel(), a.guard, time),
+                "crossbow task did not start with clear eye LOS");
+        for (int i = 0; i < 16; i++) {
+            task.tickOrStop(helper.getLevel(), a.guard, time + i);
+        }
+        long blockedArrows = helper.getLevel().getEntitiesOfClass(AbstractArrow.class, a.guard.getBoundingBox().inflate(16),
+                arrow -> arrow.getOwner() == a.guard).size();
+        helper.assertTrue(CrossbowItem.isCharged(charged) && blockedArrows == 0,
+                "crossbow fired into low cover instead of holding its shot; arrows=" + blockedArrows);
+
+        helper.getLevel().setBlock(coverNear, Blocks.AIR.defaultBlockState(), 3);
+        helper.getLevel().setBlock(coverFar, Blocks.AIR.defaultBlockState(), 3);
+        helper.assertTrue(RangedWeaponHelper.canShootCrossbowFrom(a.guard, a.guard.position(), target),
+                "clearing low cover did not restore a clear crossbow trajectory");
+        task.tickOrStop(helper.getLevel(), a.guard, time + 17);
+        long firedArrows = helper.getLevel().getEntitiesOfClass(AbstractArrow.class, a.guard.getBoundingBox().inflate(16),
+                arrow -> arrow.getOwner() == a.guard).size();
+        helper.assertTrue(!CrossbowItem.isCharged(charged) && firedArrows == 1,
+                "crossbow did not fire once low cover was removed; arrows=" + firedArrows);
+        a.succeed();
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 80)
+    public static void crossbowArcherSwitchesOffHighFlyerToShootableGroundEnemy(GameTestHelper helper) {
+        Arena a = new Arena(helper);
+        a.guard.getInventory().addItem(Items.CROSSBOW.getDefaultInstance());
+        a.guard.setItemSlot(a.guard.getDominantSlot(), Items.CROSSBOW.getDefaultInstance());
+
+        Blaze highFlyer = EntityType.BLAZE.create(helper.getLevel(), EntitySpawnReason.STRUCTURE);
+        if (highFlyer == null) throw new IllegalStateException("No blaze for high-flyer fixture");
+        highFlyer.setNoGravity(true);
+        a.prepareMob(highFlyer, a.start.above(12));
+
+        Zombie reachable = a.zombie(a.start.east(6));
+        a.guard.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, highFlyer);
+        a.guard.getBrain().setMemory(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY, reachable);
+        a.guard.getBrain().setMemory(MemoryModuleType.NEAREST_LIVING_ENTITIES, List.of(highFlyer, reachable));
+        a.guard.getBrain().setMemory(MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES,
+                new NearestVisibleLivingEntities(helper.getLevel(), a.guard, List.of(highFlyer, reachable)));
+
+        double rangeSq = RangedWeaponHelper.getAttackRangeSquared(a.guard,
+                RangedWeaponHelper.GUARD_ATTACK_RANGE * RangedWeaponHelper.GUARD_ATTACK_RANGE);
+        helper.assertTrue(RangedWeaponHelper.isFlyingTargetAboveRange(a.guard, highFlyer, rangeSq),
+                "fixture blaze must be above crossbow firing range");
+        helper.assertTrue(RangedWeaponHelper.canShootFrom(a.guard, a.guard.position(), reachable),
+                "fixture ground enemy must be shootable with a crossbow");
+
+        a.guard.setNoAi(false);
+        helper.runAfterDelay(5, () -> {
+            assertTarget(helper, a.guard, reachable);
+            a.succeed();
         });
     }
 

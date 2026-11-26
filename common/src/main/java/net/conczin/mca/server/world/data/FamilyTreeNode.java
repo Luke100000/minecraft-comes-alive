@@ -19,11 +19,14 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.npc.villager.VillagerProfession;
 import org.jetbrains.annotations.Nullable;
 
+import java.text.Normalizer;
 import java.util.*;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 public final class FamilyTreeNode {
+    private static final Pattern COMBINING_MARKS = Pattern.compile("\\p{M}");
     public static final StreamCodec<ByteBuf, FamilyTreeNode> STREAM_CODEC = StreamCodec.of(
             (out, value) -> {
                 ByteBufCodecs.COMPOUND_TAG.encode(out, value.save());
@@ -44,6 +47,8 @@ public final class FamilyTreeNode {
     private UUID partner = Util.NIL_UUID;
     private RelationshipState relationshipState = RelationshipState.SINGLE;
     private boolean deceased;
+    @Nullable
+    private transient String normalizedSearchName;
 
     public FamilyTreeNode(FamilyTree rootNode, UUID id, String name, boolean isPlayer, Gender gender, UUID father, UUID mother) {
         this.rootNode = rootNode;
@@ -88,6 +93,7 @@ public final class FamilyTreeNode {
         copy.partner = source.partner;
         copy.relationshipState = source.relationshipState;
         copy.deceased = source.deceased;
+        copy.normalizedSearchName = source.normalizedSearchName;
         copy.children.addAll(children);
         return copy;
     }
@@ -196,7 +202,26 @@ public final class FamilyTreeNode {
 
     public void setName(String name) {
         this.name = name;
+        this.normalizedSearchName = null;
         markDirty();
+    }
+
+    public String normalizedSearchName() {
+        String cached = normalizedSearchName;
+        if (cached == null) {
+            cached = normalizeSearchName(name);
+            normalizedSearchName = cached;
+        }
+        return cached;
+    }
+
+    static String normalizeSearchName(@Nullable String value) {
+        if (value == null || value.isEmpty()) {
+            return "";
+        }
+        String normalized = Normalizer.normalize(value, Normalizer.Form.NFD);
+        return COMBINING_MARKS.matcher(normalized).replaceAll("")
+                .toLowerCase(Locale.ROOT);
     }
 
     public VillagerProfession getProfession() {

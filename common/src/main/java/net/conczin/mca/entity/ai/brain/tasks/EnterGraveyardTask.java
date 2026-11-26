@@ -158,12 +158,13 @@ public class EnterGraveyardTask extends Behavior<VillagerEntityMCA> {
 
         // Keep the established preference when usable. Search the alternatives
         // together so an enclosed stand cannot monopolize an accessible grave.
-        Path preferredPath = villager.getNavigation().createPath(Set.of(preferred), 0);
+        var navigation = villager.getNavigation();
+        Path preferredPath = MCAGroundPathNavigation.probePath(navigation, Set.of(preferred), 0);
         if (preferredPath != null && preferredPath.canReach()) {
             return Optional.of(preferred);
         }
         positions.remove(preferred);
-        Path alternativePath = villager.getNavigation().createPath(positions, 0);
+        Path alternativePath = MCAGroundPathNavigation.probePath(navigation, positions, 0);
         if (alternativePath != null && alternativePath.canReach()) {
             return Optional.of(alternativePath.getTarget());
         }

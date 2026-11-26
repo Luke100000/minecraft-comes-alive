@@ -17,6 +17,7 @@ final class FloorCeilingResolver {
     private final Map<BlockPos, OptionalInt> cache = new HashMap<>();
     private final Map<BlockPos, Integer> inferred = new HashMap<>();
     private final Map<BlockPos, List<BlockPos>> roofGaps = new HashMap<>();
+    private final Map<BlockPos, OptionalInt> steppedRoofGaps = new HashMap<>();
 
     FloorCeilingResolver(BlockGetter world) {
         this.world = world;
@@ -58,8 +59,17 @@ final class FloorCeilingResolver {
         if (known.isPresent()) return known;
         if (knownRoofY <= feet.getY() + 1 || knownRoofY > feet.getY() + MAX_SCAN_HEIGHT
                 || world.isOutsideBuildHeight(knownRoofY)) return OptionalInt.empty();
-        List<BlockPos> gaps = roofGaps.computeIfAbsent(feet.atY(knownRoofY), this::resolveSmallRoofGap);
-        if (gaps.isEmpty()) return OptionalInt.empty();
+        BlockPos roof = feet.atY(knownRoofY);
+        List<BlockPos> gaps = roofGaps.computeIfAbsent(roof, this::resolveSmallRoofGap);
+        if (gaps.isEmpty()) {
+            OptionalInt stepped = steppedRoofGaps.computeIfAbsent(roof, this::resolveSingleSteppedRoofGap);
+            if (stepped.isPresent() && stepped.getAsInt() > feet.getY() + 1
+                    && stepped.getAsInt() <= feet.getY() + MAX_SCAN_HEIGHT) {
+                inferred.put(feet.immutable(), stepped.getAsInt());
+                return stepped;
+            }
+            return OptionalInt.empty();
+        }
         for (BlockPos gap : gaps) inferred.put(gap.atY(feet.getY()), knownRoofY);
         return OptionalInt.of(knownRoofY);
     }
@@ -84,6 +94,33 @@ final class FloorCeilingResolver {
             }
         }
         return List.copyOf(gaps);
+    }
+
+    /** Require four physical borders for a single gap where two roof heights meet. */
+    private OptionalInt resolveSingleSteppedRoofGap(BlockPos roof) {
+        if (!world.getBlockState(roof).isAir()) return OptionalInt.empty();
+        int minY = Integer.MAX_VALUE;
+        int maxY = Integer.MIN_VALUE;
+        for (Direction direction : Direction.Plane.HORIZONTAL) {
+            BlockPos border = roof.relative(direction);
+            if (!hasColumn(border)) return OptionalInt.empty();
+            BlockState state = world.getBlockState(border);
+            if (!isRoofBlock(border, state)) {
+                if (!state.isAir()) return OptionalInt.empty();
+                BlockPos above = border.above();
+                BlockPos below = border.below();
+                if (!world.isOutsideBuildHeight(above) && isRoofBlock(above, world.getBlockState(above))) {
+                    border = above;
+                } else if (!world.isOutsideBuildHeight(below) && isRoofBlock(below, world.getBlockState(below))) {
+                    border = below;
+                } else {
+                    return OptionalInt.empty();
+                }
+            }
+            minY = Math.min(minY, border.getY());
+            maxY = Math.max(maxY, border.getY());
+        }
+        return maxY - minY == 1 ? OptionalInt.of(maxY) : OptionalInt.empty();
     }
 
     @SuppressWarnings("deprecation")

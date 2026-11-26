@@ -37,6 +37,107 @@ public final class NavigationRecoveryGameTests {
     private NavigationRecoveryGameTests() {
     }
 
+    @GameTest(batch = "mca_probe_keeps_route", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 40)
+    public static void reachabilityProbeKeepsActiveReplanTarget(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(10, 1, 10));
+        BlockPos destination = start.east(5);
+        BlockPos candidate = start.south(5);
+        prepareFlatArea(helper, start, 8, 4);
+        VillagerEntityMCA villager = spawnStationary(helper, start);
+        try {
+            NavigationProbe navigation = new NavigationProbe(villager);
+            Path active = navigation.createPath(destination, 0);
+            helper.assertTrue(active != null && active.canReach() && navigation.moveTo(active, 0.5D),
+                    "The original route must be active");
+            for (int i = 0; i < 2; i++) {
+                Path probe = navigation.createPathForPersistentIntent(Set.of(candidate), 0);
+                helper.assertTrue(probe != null && probe.canReach() && probe.getTarget().equals(candidate),
+                        "A reachability check returned the route for a different destination");
+            }
+            Path airborneProbe = MCAGroundPathNavigation.probePath(navigation, candidate.above(2), 0);
+            helper.assertTrue(airborneProbe != null && airborneProbe.canReach() && airborneProbe.getTarget().equals(candidate),
+                    "A block-target probe must retain vanilla destination normalization");
+            helper.assertTrue(navigation.getPath() == active, "Probing must preserve the active route");
+            navigation.recomputeNow();
+            Path replanned = navigation.getPath();
+            helper.assertTrue(replanned != null && replanned.getTarget().equals(destination),
+                    "Recomputation must keep heading to the original destination");
+
+            Path nextJourney = navigation.createPath(candidate, 0);
+            helper.assertTrue(nextJourney != null && nextJourney.canReach() && navigation.moveTo(nextJourney, 0.5D),
+                    "The ordinary createPath and moveTo sequence must still start a new journey");
+            navigation.recomputeNow();
+            helper.assertTrue(navigation.getPath() != null && navigation.getPath().getTarget().equals(candidate),
+                    "Recomputation must follow the destination accepted through the ordinary API");
+
+            Path acceptedProbe = navigation.createPathForPersistentIntent(Set.of(destination), 0);
+            navigation.createPathForPersistentIntent(Set.of(start.west(4)), 0);
+            acceptedProbe = acceptedProbe == null ? null : acceptedProbe.copy();
+            helper.assertTrue(acceptedProbe != null && navigation.moveTo(acceptedProbe, 0.5D),
+                    "A verified probe result must be usable as the next journey");
+            navigation.recomputeNow();
+            helper.assertTrue(navigation.getPath() != null && navigation.getPath().getTarget().equals(destination),
+                    "Accepting a probe must commit its destination for subsequent replans");
+
+            BlockPos nearbyTarget = start.north(5);
+            Path nearbyProbe = navigation.createPathForPersistentIntent(Set.of(nearbyTarget), 2);
+            helper.assertTrue(nearbyProbe != null && nearbyProbe.getEndNode().distanceManhattan(nearbyTarget) > 0.0F
+                            && navigation.moveTo(nearbyProbe.copy(), 0.5D),
+                    "The fixture must accept a probe with a nonzero arrival range");
+            navigation.recomputeNow();
+            Path nearbyReplan = navigation.getPath();
+            helper.assertTrue(nearbyReplan != null && nearbyReplan.canReach()
+                            && nearbyReplan.getTarget().equals(nearbyTarget)
+                            && nearbyReplan.getEndNode().distanceManhattan(nearbyTarget) > 0.0F
+                            && nearbyReplan.getEndNode().distanceManhattan(nearbyTarget) <= 2.0F,
+                    "Accepting a copied probe must preserve its arrival range on recomputation");
+        } finally {
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_addon_probe_dispatch", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 40)
+    public static void addonProbeDoesNotAcceptPendingCreatePath(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(10, 1, 10));
+        BlockPos candidate = start.east(4);
+        prepareFlatArea(helper, start, 6, 4);
+        VillagerEntityMCA villager = spawnStationary(helper, start);
+        try {
+            MCAGroundPathNavigation navigation = new MCAGroundPathNavigation(villager, helper.getLevel()) {
+                @Override
+                public Path probePath(Set<BlockPos> targets, int reachRange) {
+                    // An async addon has not verified a route yet.
+                    return null;
+                }
+
+                @Override
+                public Path probePath(BlockPos target, int reachRange) {
+                    return probePath(Set.of(target), reachRange);
+                }
+
+                @Override
+                public Path createPath(BlockPos target, int reachRange) {
+                    return new Path(List.of(node(start)), target, true);
+                }
+
+                @Override
+                protected Path createPath(Set<BlockPos> targets, int radiusOffset, boolean above, int reachRange) {
+                    return createPath(targets.iterator().next(), reachRange);
+                }
+            };
+            helper.assertTrue(MCAGroundPathNavigation.probePath(navigation, Set.of(candidate), 0) == null,
+                    "A set probe must use the addon's verified reachability entry point");
+            helper.assertTrue(MCAGroundPathNavigation.probePath(navigation, candidate, 0) == null,
+                    "A block probe must use the addon's verified reachability entry point");
+        } finally {
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
     @GameTest(batch = "mca_nearby_persistent_detour", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 80)
     public static void nearbyPersistentIntentFindsItsWalkableDetour(GameTestHelper helper) {
@@ -602,6 +703,60 @@ public final class NavigationRecoveryGameTests {
 
     @GameTest(batch = "mca_navigation_owned_detour", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void partialFlankKeepsAcceptedTargetAfterOppositeProbe(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(65, 1, 65));
+        BlockPos target = start.east(2);
+        prepareFlatArea(helper, start, 61, 3);
+        for (int z = -55; z <= 55; z++) {
+            for (int y = 0; y < 3; y++) {
+                helper.getLevel().setBlock(start.offset(1, y, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        VillagerEntityMCA villager = spawnStationary(helper, start);
+        Config config = Config.getInstance();
+        int previousDistance = config.villagerPathfindingDistance;
+        try {
+            config.villagerPathfindingDistance = 32;
+            villager.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
+            int flankDistance = (int) (MCAGroundPathNavigation.getOrdinaryPathLength(villager) * 0.5F);
+            for (int side : new int[]{-1, 1}) {
+                BlockPos flank = start.offset(0, 0, side * flankDistance);
+                for (int x = -1; x <= 1; x++) {
+                    for (int z = -1; z <= 1; z++) {
+                        if (x == 0 && z == 0) continue;
+                        for (int y = 0; y < 3; y++) {
+                            helper.getLevel().setBlock(flank.offset(x, y, z), Blocks.STONE.defaultBlockState(), 3);
+                        }
+                    }
+                }
+            }
+            villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
+                    new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
+            var navigation = villager.getNavigation();
+            Path blocked = navigation.createPath(target, 0);
+            helper.assertTrue(blocked != null && !blocked.canReach()
+                            && !MCAGroundPathNavigation.isUsefulPartialPath(blocked, target),
+                    "the long-wall fixture must require detour recovery");
+            WalkTargetFailureMemory.record(villager, target, helper.getLevel().getGameTime());
+            navigation.moveTo(blocked, 0.5D);
+            while (!blocked.isDone()) blocked.advance();
+            navigation.tick();
+            Path selected = navigation.getPath();
+            helper.assertTrue(selected != null && !selected.isDone() && !selected.canReach()
+                            && !selected.getTarget().equals(target)
+                            && MCAGroundPathNavigation.isUsefulPartialPath(selected, selected.getTarget()),
+                    "both enclosed flank candidates must leave a useful partial flank to select");
+            helper.assertTrue(selected.getTarget().equals(navigation.getTargetPos()),
+                    "the opposite rejected probe replaced the accepted flank's replanning target");
+        } finally {
+            config.villagerPathfindingDistance = previousDistance;
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_navigation_owned_detour", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
     public static void completedPersistentPathPrefersReachableExtendedRouteBeforeSidewaysDetour(GameTestHelper helper) {
         BlockPos start = helper.absolutePos(new BlockPos(65, 1, 65));
         BlockPos target = start.east(2);
@@ -798,8 +953,10 @@ public final class NavigationRecoveryGameTests {
             template = "bastion/blocks/air", timeoutTicks = 80)
     public static void remotePassageRepairWakesFailedExtendedSearch(GameTestHelper helper) {
         BlockPos start = helper.absolutePos(new BlockPos(65, 1, 65));
-        BlockPos farTurn = start.west(55);
-        BlockPos destination = start.east(100).south(8);
+        // Keep the long detour within the bounded extended A* node budget.
+        // Its remote turn still lies well beyond ordinary FOLLOW_RANGE.
+        BlockPos farTurn = start.west(35);
+        BlockPos destination = start.east(65).south(8);
         // The only route initially heads away from the destination to a distant
         // turn, then returns on a parallel lane. A blocked turn is not a useful partial path.
         net.conczin.mca.gametest.GameTestTerrain.prepareFlatPath(helper, farTurn, start);
@@ -874,7 +1031,8 @@ public final class NavigationRecoveryGameTests {
             }
             Path freshRoute = new NavigationProbe(villager).createPath(destination, 0);
             helper.assertTrue(freshRoute != null && freshRoute.canReach(),
-                    "fixture repair did not actually create a reachable route: " + freshRoute);
+                    "fixture repair did not actually create a reachable route: " + freshRoute
+                            + "; end=" + (freshRoute == null ? null : freshRoute.getEndNode()));
             navigation.shouldRecomputePath(gate);
             helper.assertTrue(navigation.consumeRetryInvalidation(destination),
                     "opening the remote turn failed to notify the stalled destination producer");
@@ -896,6 +1054,154 @@ public final class NavigationRecoveryGameTests {
     @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 20)
     public static void fallKeepsNearbySafeLowWaypoint(GameTestHelper helper) {
         checkFallRecovery(helper, true);
+    }
+
+    @GameTest(batch = "mca_fall_blocks_rejoin", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 60)
+    public static void fallReplansInsteadOfRejoiningThroughWall(GameTestHelper helper) {
+        BlockPos landing = helper.absolutePos(new BlockPos(10, 1, 10));
+        BlockPos target = landing.east(2);
+        prepareFlatArea(helper, landing, 8, 4);
+        for (int y = 0; y < 3; y++) {
+            helper.getLevel().setBlockAndUpdate(landing.east().above(y), Blocks.STONE.defaultBlockState());
+        }
+        helper.runAfterDelay(22, () -> {
+            VillagerEntityMCA villager = spawnStationary(helper, landing);
+            try {
+                var navigation = villager.getNavigation();
+                Path aroundWall = navigation.createPath(target, 0);
+                helper.assertTrue(aroundWall != null && aroundWall.canReach(), "The destination must be reachable around the wall");
+                Path stale = new Path(List.of(node(landing.above(3)), node(target)), target, true);
+                helper.assertTrue(navigation.moveTo(stale, 0.5D), "The route planned before displacement must start");
+                navigation.tick();
+                Path recovered = navigation.getPath();
+                helper.assertTrue(recovered != null && recovered != stale && recovered.canReach()
+                                && recovered.getTarget().equals(target),
+                        "Fall recovery must replan around the wall rather than rejoin through it");
+            } finally {
+                villager.discard();
+            }
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "mca_fallen_path_start", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 60)
+    public static void landingBelowFirstWaypointReplansFromTheGround(GameTestHelper helper) {
+        BlockPos landing = helper.absolutePos(new BlockPos(10, 1, 10));
+        BlockPos target = landing.east(5);
+        prepareFlatArea(helper, landing, 7, 4);
+        for (int x = -1; x <= 5; x++) {
+            helper.getLevel().setBlockAndUpdate(landing.east(x).north(), Blocks.COBBLESTONE.defaultBlockState());
+            helper.getLevel().setBlockAndUpdate(landing.east(x).south(), Blocks.GRASS_BLOCK.defaultBlockState());
+        }
+
+        helper.runAfterDelay(22, () -> {
+            VillagerEntityMCA villager = spawnStationary(helper, landing);
+            try {
+                var navigation = villager.getNavigation();
+                Path groundedRoute = navigation.createPath(target, 0);
+                helper.assertTrue(groundedRoute != null && groundedRoute.canReach(), "The trench must have a route to the target");
+
+                // Match the live route: its first waypoint is over the trench and the
+                // next is on the north bank. Movement has already fallen into the trench.
+                BlockPos northBank = landing.north().above();
+                Path stale = new Path(List.of(node(landing.above()), node(northBank),
+                        node(northBank.east()), node(landing.east()), node(target)), target, true);
+                villager.setPos(landing.getX() + 0.64D, landing.getY() + 0.9D, landing.getZ() + 0.33D);
+                villager.setOnGround(false);
+                helper.assertTrue(navigation.moveTo(stale, 0.65D), "The falling villager must receive the old route");
+                villager.setPos(Vec3.atBottomCenterOf(landing));
+                villager.setOnGround(true);
+                navigation.tick();
+
+                Path recovered = navigation.getPath();
+                helper.assertTrue(recovered != null && recovered != stale && recovered.canReach()
+                                && recovered.getTarget().equals(target),
+                        "Landing under the first waypoint must replan to the same destination");
+                helper.assertTrue(villager.getMoveControl().getWantedX() > villager.getX()
+                                && villager.getMoveControl().getWantedY() == villager.getY(),
+                        "The next movement command must lead out of the trench at the landed height");
+
+                helper.getLevel().setBlockAndUpdate(landing, Blocks.SHORT_GRASS.defaultBlockState());
+                helper.assertTrue(navigation.moveTo(stale, 0.65D), "A queued stale route must be accepted for this test");
+                navigation.tick();
+                helper.assertTrue(navigation.isDone(), "Grass must not keep a stale route active during recompute cooldown");
+
+                Path uphill = navigation.createPath(northBank, 0);
+                helper.assertTrue(uphill != null && uphill.canReach() && navigation.moveTo(uphill, 0.65D),
+                        "The one-block step onto the north bank must remain reachable");
+                navigation.tick();
+                helper.assertTrue(villager.getMoveControl().getWantedZ() < villager.getZ()
+                                && villager.getMoveControl().getWantedY() > villager.getY(),
+                        "A route onto the supported bank must still steer uphill");
+            } finally {
+                villager.discard();
+            }
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "mca_replaced_downhill_path", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 40)
+    public static void replacingDownhillPathKeepsSteeringAcrossTheLedge(GameTestHelper helper) {
+        BlockPos ledge = helper.absolutePos(new BlockPos(10, 6, 10));
+        BlockPos landing = ledge.north().west().below(3);
+        prepareFlatArea(helper, ledge.below(3), 6, 7);
+        for (int x = -2; x <= 2; x++) {
+            helper.getLevel().setBlockAndUpdate(ledge.east(x).below(), Blocks.GRASS_BLOCK.defaultBlockState());
+            helper.getLevel().setBlockAndUpdate(ledge.east(x).below(2), Blocks.DIRT.defaultBlockState());
+        }
+        VillagerEntityMCA villager = spawnStationary(helper, ledge);
+        try {
+            // Same pose as the live trace: feet still supported by the ledge while
+            // the centre has already crossed the edge, heading for the lower node.
+            villager.setPos(ledge.getX() + 0.03D, ledge.getY(), ledge.getZ() - 0.12D);
+            Vec3 position = villager.position();
+            helper.assertTrue(helper.getLevel().noBlockCollision(villager, villager.getBoundingBox())
+                            && !helper.getLevel().noBlockCollision(villager,
+                            villager.getBoundingBox().move(0.0D, -0.01D, 0.0D)),
+                    "The recorded ledge pose must be clear and supported");
+            var navigation = villager.getNavigation();
+            BlockPos oldTarget = landing.west(2);
+            Path active = new Path(List.of(node(ledge.east()), node(ledge), node(landing),
+                    node(landing.west()), node(oldTarget)), oldTarget, true);
+            active.setNextNodeIndex(2);
+            helper.assertTrue(navigation.moveTo(active, 0.65D), "The downhill leg must be active");
+
+            // The new route starts from the previously visited high node and
+            // joins the same descent before continuing to the updated target.
+            BlockPos newTarget = oldTarget.north();
+            Path replacement = new Path(List.of(node(ledge), node(landing), node(landing.west()),
+                    node(oldTarget), node(newTarget)), newTarget, true);
+            helper.assertTrue(navigation.moveTo(replacement, 0.65D), "The replacement must be admitted");
+            navigation.tick();
+            var move = villager.getMoveControl();
+            helper.assertTrue(move.getWantedZ() < position.z && move.getWantedY() < position.y,
+                    "Replacing the descent reversed steering toward the ledge: wanted="
+                            + new Vec3(move.getWantedX(), move.getWantedY(), move.getWantedZ()));
+
+            BlockPos uphillTarget = ledge.east(2);
+            Path turnBack = new Path(List.of(node(ledge), node(ledge.east()), node(uphillTarget)), uphillTarget, true);
+            helper.assertTrue(navigation.moveTo(turnBack, 0.65D), "The route back up must be admitted");
+            navigation.tick();
+            helper.assertTrue(move.getWantedZ() > position.z && move.getWantedY() == position.y,
+                    "A destination back on the ledge must still reverse steering");
+
+            // Both paths were built before the block appeared below the rim.
+            // Their shared step is clear at the current height but blocked on descent.
+            navigation.stop();
+            helper.getLevel().setBlockAndUpdate(landing.above(), Blocks.COBBLESTONE.defaultBlockState());
+            helper.assertTrue(navigation.moveTo(active, 0.65D), "The old route must still have the descent queued");
+            replacement.setNextNodeIndex(0);
+            helper.assertTrue(navigation.moveTo(replacement, 0.65D), "The precomputed route must be admitted");
+            navigation.tick();
+            helper.assertTrue(move.getWantedZ() > position.z && move.getWantedY() == position.y,
+                    "An obstruction below the ledge must prevent skipping the first waypoint");
+        } finally {
+            villager.discard();
+        }
+        helper.succeed();
     }
 
     private static void checkFallRecovery(GameTestHelper helper, boolean nearbyLanding) {
@@ -968,6 +1274,141 @@ public final class NavigationRecoveryGameTests {
             villager.discard();
         }
         helper.succeed();
+    }
+
+    @GameTest(batch = "mca_navigation_stopped_world_wake", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 50)
+    public static void stoppedFailedSearchWakesFromWorldBlockChangeWithoutManualRecompute(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(35, 1, 35));
+        BlockPos target = start.east(2);
+        prepareFlatArea(helper, start, 30, 3);
+        for (int z = -23; z <= 23; z++) {
+            for (int y = 0; y < 3; y++) {
+                helper.getLevel().setBlock(start.offset(1, y, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                if (dx == 0 && dz == 0) continue;
+                for (int y = 0; y < 3; y++) {
+                    helper.getLevel().setBlock(target.offset(dx, y, dz), Blocks.STONE.defaultBlockState(), 3);
+                }
+            }
+        }
+        VillagerEntityMCA villager = spawnStationary(helper, start);
+        Config config = Config.getInstance();
+        int previousHorizon = config.villagerPathfindingDistance;
+        try {
+            config.villagerPathfindingDistance = 160;
+            villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
+                    new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
+            MCAGroundPathNavigation navigation = (MCAGroundPathNavigation) villager.getNavigation();
+            Path blocked = navigation.createPath(target, 0);
+            helper.assertTrue(blocked != null && !blocked.canReach(), "sealed detour fixture was reachable");
+            navigation.stop();
+            helper.assertTrue(navigation.getPath() == null, "fixture must exercise a stopped navigator");
+            WalkTargetFailureMemory.record(villager, target, helper.getLevel().getGameTime());
+
+            // A non-colliding block update must not wake a stopped failed search.
+            helper.getLevel().setBlock(start.north(2), Blocks.TRIPWIRE.defaultBlockState(), 3);
+            helper.assertTrue(!navigation.consumeRetryInvalidation(target),
+                    "non-colliding block change invalidated stopped-navigator backoff");
+
+            long searchesBefore = PathRequestDiagnostics.snapshot(villager).extendedSearches();
+            BlockPos gap = target.east();
+            for (int y = 0; y < 3; y++) {
+                helper.getLevel().setBlock(gap.above(y), Blocks.AIR.defaultBlockState(), 3);
+            }
+            helper.assertTrue(navigation.consumeRetryInvalidation(target),
+                    "world block update did not wake stopped navigator without manual shouldRecomputePath");
+            helper.assertTrue(!navigation.consumeRetryInvalidation(target),
+                    "stopped-navigator retry invalidation was delivered more than once");
+            Path reopened = navigation.createPath(target, 0);
+            helper.assertTrue(PathRequestDiagnostics.snapshot(villager).extendedSearches() > searchesBefore
+                            && reopened != null && reopened.canReach(),
+                    "stopped navigator retained failed extended-search suppression after world block update");
+        } finally {
+            config.villagerPathfindingDistance = previousHorizon;
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_detour_approach_variants", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void openDoorWaterBorderAndStepApproachesAllowDetourWhileFireStaysSealed(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(65, 1, 65));
+        BlockPos endpoint = start.east();
+        BlockPos target = start.east(3);
+        prepareFlatArea(helper, start, 61, 4);
+        for (int z = -55; z <= 55; z++) {
+            for (int y = 0; y < 4; y++) {
+                helper.getLevel().setBlock(start.offset(2, y, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        for (BlockPos blocked : List.of(target.east(), target.north())) {
+            for (int y = 0; y < 4; y++) {
+                helper.getLevel().setBlock(blocked.above(y), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        Config config = Config.getInstance();
+        int previousDistance = config.villagerPathfindingDistance;
+        try {
+            config.villagerPathfindingDistance = 160;
+
+            // 1. Open wooden door at the sole cardinal approach (PathType.DOOR_OPEN)
+            var openDoor = Blocks.OAK_DOOR.defaultBlockState()
+                    .setValue(net.minecraft.world.level.block.DoorBlock.FACING, Direction.NORTH)
+                    .setValue(net.minecraft.world.level.block.DoorBlock.OPEN, true);
+            helper.getLevel().setBlock(target.south(), openDoor, 3);
+            helper.getLevel().setBlock(target.south().above(), openDoor.setValue(
+                    net.minecraft.world.level.block.DoorBlock.HALF,
+                    net.minecraft.world.level.block.state.properties.DoubleBlockHalf.UPPER), 3);
+            helper.assertTrue(startsDetourFromCompletedPartial(helper, start, endpoint, target),
+                    "target whose sole approach is an already-open door was denied detour recovery");
+            helper.getLevel().setBlock(target.south().above(), Blocks.AIR.defaultBlockState(), 3);
+            helper.getLevel().setBlock(target.south(), Blocks.AIR.defaultBlockState(), 3);
+
+            // 2. Water-bordered walkable approach (PathType.WATER_BORDER)
+            BlockPos waterTrough = target.south().east();
+            helper.getLevel().setBlock(waterTrough, Blocks.WATER.defaultBlockState(), 3);
+            helper.assertTrue(startsDetourFromCompletedPartial(helper, start, endpoint, target),
+                    "target whose sole approach borders water was denied detour recovery");
+            helper.getLevel().setBlock(waterTrough, Blocks.STONE.defaultBlockState(), 3);
+
+            // 3. Fire blocking the sole approach (PathType.DAMAGE_FIRE) stays sealed
+            helper.getLevel().setBlock(target.south(), Blocks.FIRE.defaultBlockState(), 3);
+            helper.assertTrue(!startsDetourFromCompletedPartial(helper, start, endpoint, target),
+                    "target sealed by fire still started a speculative detour");
+            helper.getLevel().setBlock(target.south(), Blocks.AIR.defaultBlockState(), 3);
+
+            // 4. 1-block step-up onto a raised target (approach at target Y is PathType.OPEN above walkable floor)
+            helper.getLevel().setBlock(target, Blocks.STONE.defaultBlockState(), 3);
+            BlockPos raisedTarget = target.above();
+            helper.assertTrue(startsDetourFromCompletedPartial(helper, start, endpoint, raisedTarget),
+                    "raised target with a 1-block step-up approach was denied detour recovery");
+        } finally {
+            config.villagerPathfindingDistance = previousDistance;
+        }
+        helper.succeed();
+    }
+
+    private static boolean startsDetourFromCompletedPartial(GameTestHelper helper, BlockPos start,
+                                                             BlockPos endpoint, BlockPos target) {
+        VillagerEntityMCA villager = spawnStationary(helper, start);
+        try {
+            villager.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
+            villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
+                    new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
+            Path completed = new Path(List.of(node(start), node(endpoint)), target, false);
+            villager.getNavigation().moveTo(completed, 0.5D);
+            villager.setPos(Vec3.atBottomCenterOf(endpoint));
+            while (!completed.isDone()) completed.advance();
+            villager.getNavigation().tick();
+            return ((MCAGroundPathNavigation) villager.getNavigation()).isTakingDetourTo(target);
+        } finally {
+            villager.discard();
+        }
     }
 
     @GameTest(batch = "mca_navigation_review_reopen", templateNamespace = "minecraft",

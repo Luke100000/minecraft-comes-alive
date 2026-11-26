@@ -96,7 +96,9 @@ public class ClientHandlerImpl implements ClientHandler {
                 }
                 break;
             case FAMILY_TREE:
-                client.setScreen(new FamilyTreeSearchScreen());
+                if (client.player != null) {
+                    client.setScreen(new FamilyTreeScreen(client.player.getUUID()));
+                }
                 break;
             case VILLAGER_TRACKER:
                 client.setScreen(new VillagerTrackerSearchScreen());

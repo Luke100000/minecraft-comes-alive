@@ -28,6 +28,7 @@ import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.ComponentSerialization;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.ARGB;
@@ -569,6 +570,38 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         setHairStyleId("");
     }
 
+    default void restoreGenderAfterLoad() {
+        if (getGenetics().getGender() == Gender.UNASSIGNED) {
+            EntityType<?> type = asEntity().getType();
+            getGenetics().setGender(type == EntitiesMCA.FEMALE_VILLAGER || type == EntitiesMCA.FEMALE_ZOMBIE_VILLAGER
+                    ? Gender.FEMALE : Gender.MALE);
+        }
+    }
+
+    default boolean affectsDimensions(EntityDataAccessor<?> accessor) {
+        CDataManager<?> data = getTypeDataManager();
+        return Genetics.affectsDimensions(data, accessor) || Traits.affectsDimensions(data, accessor);
+    }
+
+    default void restoreMissingAppearance(CompoundTag data) {
+        if (asEntity().level().isClientSide()) {
+            return;
+        }
+
+        if (data.getString("Skin").isEmpty()) {
+            randomizeSkin();
+        }
+        if (data.getString("Hair").isEmpty()
+                && data.getString("HairStyle").isEmpty()
+                && data.getString("HairBase").isEmpty()
+                && data.getString("HairBangs").isEmpty()
+                && data.getString("HairBack").isEmpty()
+                && data.getString("HairFront").isEmpty()
+                && data.getString("HairExtra").isEmpty()) {
+            randomizeHair();
+        }
+    }
+
     default void validateClothes() {
         if (!asEntity().level().isClientSide()) {
             migrateLegacyHairStyle();
@@ -640,6 +673,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         this.getTypeDataManager().load((E) asEntity(), input);
         readAdditionalConversionData(input);
         onTraitsLoaded();
+        asEntity().refreshDimensions();
     }
 
     default void writeAdditionalConversionData(CompoundTag output) {

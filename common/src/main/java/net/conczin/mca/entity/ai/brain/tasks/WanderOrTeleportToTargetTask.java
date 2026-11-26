@@ -68,11 +68,7 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
                 && entity.getNavigation().isDone()
                 && !MultiTargetPositionTracker.isReached(entity, walkTarget.getTarget(), walkTarget.getCloseEnoughDist())
                 && !entity.getBrain().hasMemoryValue(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)) {
-            if (entity instanceof VillagerEntityMCA villager) {
-                WalkTargetFailureMemory.record(villager, walkTarget.getTarget().currentBlockPosition(), gameTime);
-            } else {
-                entity.getBrain().setMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE, gameTime);
-            }
+            WalkTargetFailureMemory.record(entity, walkTarget.getTarget().currentBlockPosition(), gameTime);
         }
 
         return false;
@@ -91,19 +87,12 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
                 && MCAGroundPathNavigation.isUsefulPartialPath(
                         path, entity, walkTarget
                 )) {
-            if (entity instanceof VillagerEntityMCA villager) {
-                // A fresh useful segment is optimistic progress and must be able
-                // to chain immediately. A previous failure episode for this same
-                // destination must survive another no-movement partial attempt.
-                BlockPos destination = walkTarget.getTarget().currentBlockPosition();
-                boolean priorFailure = WalkTargetFailureMemory.hasFailureFor(villager, destination)
-                        && villager.getBrain().getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
-                        .filter(since -> since < gameTime).isPresent();
-                if (!priorFailure) {
-                    WalkTargetFailureMemory.clear(villager);
-                }
-            } else {
-                entity.getBrain().eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
+            boolean priorFailure = entity instanceof VillagerEntityMCA villager
+                    && WalkTargetFailureMemory.hasFailureFor(villager, walkTarget.getTarget().currentBlockPosition())
+                    && villager.getBrain().getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
+                    .filter(since -> since < gameTime).isPresent();
+            if (!priorFailure) {
+                WalkTargetFailureMemory.clear(entity);
             }
         }
         // The CORE sink also consumes PLAY targets, which get vanilla's shorter timeout.

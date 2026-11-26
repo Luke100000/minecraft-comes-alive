@@ -4,6 +4,7 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
 import net.conczin.mca.entity.ai.Genetics;
+import net.conczin.mca.entity.ai.PathingBlockInteraction;
 import net.conczin.mca.entity.ai.Traits;
 import net.conczin.mca.entity.ai.brain.tasks.WanderOrTeleportToTargetTask;
 import net.conczin.mca.entity.ai.relationship.Gender;
@@ -873,9 +874,19 @@ public final class NavigationPhysicalSafetyGameTests {
             // A hand-operated panel at the next path node can be folded down before crossing.
             helper.assertTrue(neighbors(level, villager, origin).contains(west),
                     "MCA rejected a cardinal doorway whose upright trapdoor can be folded");
-            level.setBlock(west, level.getBlockState(west).setValue(TrapDoorBlock.POWERED, true), 3);
+            level.setBlock(west.below(), Blocks.REDSTONE_BLOCK.defaultBlockState(), 3);
+            helper.assertTrue(level.getBlockState(west).getValue(TrapDoorBlock.POWERED),
+                    "The wooden trapdoor must be powered by a real neighboring redstone source");
+            helper.assertTrue(neighbors(level, villager, origin).contains(west),
+                    "A powered wooden trapdoor can still be manually folded for passage");
+            helper.assertTrue(PathingBlockInteraction.setOpen(villager, level, level.getBlockState(west), west, false)
+                            && !level.getBlockState(west).getValue(TrapDoorBlock.OPEN),
+                    "The villager must be able to fold a redstone-powered wooden trapdoor");
+            level.setBlock(west, Blocks.IRON_TRAPDOOR.defaultBlockState()
+                    .setValue(TrapDoorBlock.OPEN, true)
+                    .setValue(TrapDoorBlock.FACING, Direction.WEST), 3);
             helper.assertTrue(!neighbors(level, villager, origin).contains(west),
-                    "MCA offered a cardinal step through a powered, un-foldable upright trapdoor");
+                    "An iron upright trapdoor cannot be folded by hand and must block passage");
         } finally {
             villager.discard();
         }

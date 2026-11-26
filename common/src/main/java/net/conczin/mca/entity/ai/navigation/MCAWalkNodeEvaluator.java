@@ -15,6 +15,7 @@ import net.minecraft.world.level.CollisionGetter;
 import net.minecraft.world.level.PathNavigationRegion;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DoorBlock;
+import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
@@ -121,6 +122,11 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         }
 
         BlockPos mobPos = this.mob.blockPosition();
+        if (this.mob.isInWater() && selectedStart.y < mobPos.getY()
+                && this.currentContext.getBlockState(mobPos).getFluidState().isEmpty()) {
+            // Water brushing the body must not put a grounded start inside its solid support.
+            return this.getStartNode(mobPos);
+        }
         AABB startBox = this.mob.getBoundingBox();
         if (selectedStart.asBlockPos().equals(mobPos)
                 && startBox.minY > mobPos.getY() + RAISED_START_EPSILON
@@ -250,7 +256,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
                         origin.getZ() + direction.getStepZ());
                 long key = candidate.asLong();
                 if (this.climbableCache.get(key)) {
-                    nodeCount = addClimbableNode(nodes, nodeCount, candidate);
+                    nodeCount = addDescendingClimbableNode(nodes, nodeCount, origin, candidate);
                     break;
                 }
 
@@ -262,7 +268,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
                     boolean climbable = state.is(BlockTags.CLIMBABLE);
                     this.climbableCache.put(key, climbable);
                     if (climbable) {
-                        nodeCount = addClimbableNode(nodes, nodeCount, candidate);
+                        nodeCount = addDescendingClimbableNode(nodes, nodeCount, origin, candidate);
                         break;
                     }
                     probe = PathingBlockInteraction.isHandOpenableTrapDoor(state)
@@ -276,6 +282,22 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
             }
         }
         return nodeCount;
+    }
+
+    private int addDescendingClimbableNode(Node[] nodes, int nodeCount, BlockPos origin, BlockPos target) {
+        Node departure = this.getNode(origin);
+        Node destination = getClimbableNode(target);
+        AABB from = getDepartureBox(departure);
+        AABB to = PathNodeGeometry.bodyAt(this.mob, PathNodeGeometry.climbingPosition(target))
+                .move(0.0D, FLOOR_EPSILON, 0.0D);
+        CollisionGetter collisions = new PathingCollisionView(
+                this.currentContext.level(), departure, destination, this.mob);
+        if (!canSweepTo(from, to, collisions)
+                || !hasScaffoldingClimbClearance(destination,
+                        to.expandTowards(0.0D, Math.max(0.0D, from.minY - to.minY), 0.0D), collisions)) {
+            return nodeCount;
+        }
+        return addClimbableNode(nodes, nodeCount, target);
     }
 
     private boolean requiresRaisedSurfaceSweep(Node origin) {
@@ -303,6 +325,9 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         for (int readIndex = 0; readIndex < nodeCount; readIndex++) {
             Node candidate = nodes[readIndex];
             if (candidate == null) {
+                continue;
+            }
+            if (requiresGroundJumpFromFlowingWater(origin, candidate)) {
                 continue;
             }
 
@@ -361,6 +386,32 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
             nodes[index] = null;
         }
         return writeIndex;
+    }
+
+    private boolean requiresGroundJumpFromFlowingWater(Node origin, Node candidate) {
+        if (candidate.y <= origin.y) {
+            return false;
+        }
+        BlockPos departurePos = this.collisionPos.set(origin.x, origin.y, origin.z);
+        BlockState departure = this.currentContext.getBlockState(departurePos);
+        if (!(departure.getBlock() instanceof LiquidBlock)
+                || !departure.getFluidState().is(FluidTags.WATER)
+                || departure.getFluidState().isSource()
+                || this.currentContext.getBlockState(this.collisionPos.set(candidate.x, candidate.y, candidate.z))
+                        .is(BlockTags.CLIMBABLE)) {
+            return false;
+        }
+        // The floating evaluator's extra water floor height is not solid support for a jump.
+        double departureFloor = WalkNodeEvaluator.getFloorLevel(this.currentContext.level(),
+                this.collisionPos.set(origin.x, origin.y, origin.z));
+        double immersion = origin.y + departure.getFluidState().getHeight(this.currentContext.level(),
+                this.collisionPos) - departureFloor;
+        if (departureFloor > origin.y - 1.0D
+                && immersion <= this.mob.getFluidJumpThreshold()) {
+            // Shallow water over real support still uses LivingEntity's grounded jump.
+            return false;
+        }
+        return getMobBoxAt(candidate).minY - departureFloor > this.mob.maxUpStep();
     }
 
     private boolean canApproachDiagonalJump(Node origin, Node candidate, AABB originBox) {
@@ -562,25 +613,25 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
                 .move(0.0D, FLOOR_EPSILON, 0.0D);
         if (this.currentContext.getBlockState(this.collisionPos.set(node.x, node.y, node.z))
                 .is(Blocks.SCAFFOLDING)) {
-            return hasScaffoldingClimbClearance(node, box);
+            return hasScaffoldingClimbClearance(node, box, this.currentContext.level());
         }
         return hasExactBlockClearance(box);
     }
 
-    private boolean hasScaffoldingClimbClearance(Node node, AABB box) {
+    private boolean hasScaffoldingClimbClearance(Node node, AABB box, CollisionGetter collisions) {
         // Scaffold platforms and frames may be passed while climbing/descending.
         // Ignore only this column's scaffolding, not a roof or another obstacle.
         for (int x = floorMin(box.minX); x <= floorMax(box.maxX); x++) {
             for (int y = floorMin(box.minY); y <= floorMax(box.maxY); y++) {
                 for (int z = floorMin(box.minZ); z <= floorMax(box.maxZ); z++) {
                     BlockPos pos = this.collisionPos.set(x, y, z);
-                    BlockState state = this.currentContext.getBlockState(pos);
+                    BlockState state = collisions.getBlockState(pos);
                     if (state.isAir() || state.is(Blocks.SCAFFOLDING)
                             && x == node.x && z == node.z) {
                         continue;
                     }
                     VoxelShape shape = state.getCollisionShape(
-                            this.currentContext.level(), pos, CollisionContext.of(this.mob));
+                            collisions, pos, CollisionContext.of(this.mob));
                     if (!shape.isEmpty() && Shapes.joinIsNotEmpty(
                             Shapes.create(box.move(-x, -y, -z)), shape, BooleanOp.AND)) {
                         return false;

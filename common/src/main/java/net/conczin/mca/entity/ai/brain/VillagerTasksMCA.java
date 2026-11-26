@@ -115,6 +115,7 @@ public class VillagerTasksMCA {
     );
 
     public static final ImmutableList<SensorType<? extends Sensor<? super Villager>>> SENSOR_TYPES = ImmutableList.of(
+            SensorsMCA.GUARD_ENEMIES,
             SensorType.NEAREST_PLAYERS,
             SensorsMCA.SLEEP_AWARE_ITEMS,
             SensorsMCA.SLEEP_AWARE_BED,
@@ -123,8 +124,7 @@ public class VillagerTasksMCA {
             SensorsMCA.SLEEP_AWARE_SECONDARY_POIS,
             SensorsMCA.SLEEP_AWARE_GOLEM,
             SensorsMCA.VILLAGER_BABIES,
-            SensorsMCA.EXPLODING_CREEPER,
-            SensorsMCA.GUARD_ENEMIES
+            SensorsMCA.EXPLODING_CREEPER
     );
 
     @SuppressWarnings("deprecation")
@@ -273,7 +273,7 @@ public class VillagerTasksMCA {
                         return manager.findNearestVillage(entity).filter(v -> !v.isPositionValidBed(pos)).isEmpty();
                     } else {
                         //villagers without the need of a home may only settle in inns
-                        return manager.findNearestVillage(entity).filter(v -> v.getBuildingAt(pos).filter(b -> b.getBuildingType().name().equals("inn")).isPresent()).isPresent();
+                        return manager.findNearestVillage(entity).filter(v -> v.getBuildingAt(pos).filter(b -> v.getEffectiveBuildingType(b).name().equals("inn")).isPresent()).isPresent();
                     }
                 }))
         );
@@ -467,7 +467,7 @@ public class VillagerTasksMCA {
                         && shouldRespondToGuardEnemy(villager, primary.get())
                         && villager.distanceToSqr(primary.get()) <= rangeSquared
                         && villager.getSensing().hasLineOfSight(primary.get())
-                        && RangedWeaponHelper.canShootBowFrom(villager, villager.position(), primary.get())) {
+                        && RangedWeaponHelper.canShootFrom(villager, villager.position(), primary.get())) {
                     return primary;
                 }
                 return current;
@@ -491,8 +491,7 @@ public class VillagerTasksMCA {
         double rangeSquared = RangedWeaponHelper.getAttackRangeSquared(guard,
                 RangedWeaponHelper.GUARD_ATTACK_RANGE * RangedWeaponHelper.GUARD_ATTACK_RANGE);
         return guard.distanceToSqr(target) <= rangeSquared
-                && (RangedWeaponHelper.getBowHoldingHand(guard) == null
-                    || RangedWeaponHelper.canShootBowFrom(guard, guard.position(), target));
+                && RangedWeaponHelper.canShootFrom(guard, guard.position(), target);
     }
 
     public static void respondToGuardAlarm(VillagerEntityMCA guard, LivingEntity victim, LivingEntity attacker) {
@@ -506,13 +505,6 @@ public class VillagerTasksMCA {
         }
         if (selected != current) {
             guard.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, selected);
-        }
-        if (MCA.platformHelper.isDevelopmentEnvironment() && guard.getProfession() == ProfessionsMCA.ARCHER) {
-            MCA.LOGGER.info("[MCA Archer Target] entity={} action=alarm reason={} previous={} victim={} attacker={} selected={}",
-                    guard.getStringUUID(), selected == current ? "keep_current_fight"
-                            : guard == victim ? "self_defence" : "guard_alarm",
-                    current == null ? "none" : current.getStringUUID(), victim.getStringUUID(),
-                    attacker.getStringUUID(), selected.getStringUUID());
         }
     }
 
@@ -558,19 +550,6 @@ public class VillagerTasksMCA {
     }
 
     private static void onGuardTargetErased(ServerLevel level, VillagerEntityMCA villager, LivingEntity target) {
-        if (MCA.platformHelper.isDevelopmentEnvironment() && villager.getProfession() == ProfessionsMCA.ARCHER) {
-            var preferred = getPreferredTarget(villager);
-            String reason = !target.isAlive() ? "target_dead"
-                    : target.isRemoved() ? "target_removed"
-                    : target.level() != villager.level() ? "different_level"
-                    : !villager.canAttack(target) ? "cannot_attack"
-                    : guardTooHurt(villager) ? "critical_health"
-                    : UnreachableCombatTargets.contains(villager, target) ? "unreachable"
-                    : preferred.isPresent() ? "preferred_target_changed" : "off_duty_or_no_preferred_target";
-            MCA.LOGGER.info("[MCA Archer Target] entity={} action=erase reason={} previous={} preferred={} health={} activity={}",
-                    villager.getStringUUID(), reason, target.getStringUUID(),
-                    preferred.map(LivingEntity::getStringUUID).orElse("none"), villager.getHealth(), getActivity(villager));
-        }
         if (target instanceof Player && !target.isAlive()) {
             villager.pardonPlayers(Integer.MAX_VALUE);
         }
@@ -669,10 +648,11 @@ public class VillagerTasksMCA {
                 }, (world, villager, home) -> villager.isSleeping()
                         ? Optional.empty()
                         : BedApproachTarget.create(world, home.pos())),
-                        v -> !(v.level() instanceof ServerLevel world)
+                        v -> !InteractTask.shouldRun(v)
+                                && (!(v.level() instanceof ServerLevel world)
                                 || v.getBrain().getMemory(MemoryModuleType.HOME)
                                 .map(home -> !isForcedHomeOccupiedByOtherSleeper(world, v, home))
-                                .orElse(true))),
+                                .orElse(true)))),
                 //verify the bed, occupancies state and similar
                 Pair.of(3, new ConditionalTask<>(ValidateNearbyPoi.create(
                         registryEntry -> registryEntry.is(PoiTypes.HOME), MemoryModuleType.HOME),
@@ -681,7 +661,8 @@ public class VillagerTasksMCA {
                 // An already-active REST activity may linger for a tick after an
                 // archer acquires ATTACK_TARGET. Do not let its random stroll or
                 // village-seeking behavior fight the combat movement controller.
-                Pair.of(5, new RunOne<>(ImmutableMap.of(
+                // A live player interaction owns movement while the villager faces the player.
+                Pair.of(5, new ConditionalTask<>(new RunOne<>(ImmutableMap.of(
                         MemoryModuleType.HOME, MemoryStatus.VALUE_ABSENT,
                         MemoryModuleType.ATTACK_TARGET, MemoryStatus.VALUE_ABSENT
                 ), ImmutableList.of(
@@ -691,7 +672,8 @@ public class VillagerTasksMCA {
                         // Outside a village these waypoints form a home-seeking journey. Do not insert a
                         // 1-2 second idle between legs; keep normal homeless idling once the villager arrives.
                         Pair.of(new ConditionalTask<>(new DoNothing(20, 40),
-                                v -> v.level() instanceof ServerLevel level && level.isVillage(v.blockPosition())), 2)))),
+                                v -> v.level() instanceof ServerLevel level && level.isVillage(v.blockPosition())), 2))),
+                        v -> !InteractTask.shouldRun(v))),
                 Pair.of(99, UpdateActivityFromSchedule.create()));
     }
 

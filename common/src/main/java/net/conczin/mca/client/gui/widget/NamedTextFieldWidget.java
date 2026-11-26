@@ -19,6 +19,6 @@ public class NamedTextFieldWidget extends EditBox {
         super.extractWidgetRenderState(context, mouseX, mouseY, delta);
 
         FormattedCharSequence orderedText = getMessage().getVisualOrderText();
-        context.text(textRenderer, orderedText, (getX() - textRenderer.width(orderedText) - 4), getY() + (height - 8) / 2, 0xffffff);
+        context.text(textRenderer, orderedText, (getX() - textRenderer.width(orderedText) - 4), getY() + (height - 8) / 2, 0xFFFFFFFF);
     }
 }

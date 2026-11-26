@@ -63,6 +63,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
     public ZombieVillagerEntityMCA(EntityType<? extends ZombieVillager> type, Level world, Gender gender) {
         super(type, world);
         genetics.setGender(gender);
+        refreshDimensions();
     }
 
     @Override
@@ -300,6 +301,10 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         CompoundTag nbt = VillagerEntityMCA.readMcaSaveData(input);
         super.readAdditionalSaveData(input);
         getTypeDataManager().load(this, nbt);
+        restoreGenderAfterLoad();
+        if (getAgeState() == AgeState.UNASSIGNED) {
+            setTrackedValue(AGE_STATE, isBaby() ? AgeState.BABY : AgeState.ADULT);
+        }
         relations.readFromNbt(nbt);
         chatAIPrompt = nbt.getString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY).orElse("");
         nicknameData = nbt.getCompound(VillagerEntityMCA.NICKNAMES_KEY).orElseGet(CompoundTag::new).copy();
@@ -310,7 +315,9 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         inventory.clearContent();
         InventoryUtils.readFromNBT(this.registryAccess(), inventory, nbt);
 
+        restoreMissingAppearance(nbt);
         validateClothes();
+        refreshDimensions();
     }
 
     @Override
@@ -347,7 +354,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
 
     @Override
     public void onSyncedDataUpdated(EntityDataAccessor<?> par) {
-        if (getTypeDataManager().isParam(AGE_STATE, par) || getTypeDataManager().isParam(Genetics.SIZE.getParam(), par)) {
+        if (getTypeDataManager().isParam(AGE_STATE, par) || affectsDimensions(par)) {
             refreshDimensions();
         }
 

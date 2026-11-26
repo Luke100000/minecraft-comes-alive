@@ -1,5 +1,6 @@
 package net.conczin.mca.entity.ai.brain.tasks.chore;
 
+import net.conczin.mca.gametest.GameTestBrain;
 import com.mojang.authlib.GameProfile;
 import net.minecraft.advancements.criterion.FishingHookPredicate;
 import net.conczin.mca.entity.MCAFishingBobberEntity;
@@ -15,20 +16,17 @@ import net.conczin.mca.neoforge.gametest.GameTest;
 import net.conczin.mca.neoforge.gametest.AfterBatch;
 import net.conczin.mca.neoforge.gametest.GameTestHolder;
 import net.conczin.mca.neoforge.gametest.PrefixGameTestTemplate;
-import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.ai.behavior.LookAtTargetSink;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.schedule.Activity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.FishingRodItem;
@@ -37,15 +35,11 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.storage.TagValueInput;
-import net.minecraft.world.level.storage.TagValueOutput;
-import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.block.entity.HopperBlockEntity;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.BiomeResolver;
 import net.minecraft.world.level.biome.Biomes;
 import net.minecraft.world.level.chunk.LevelChunk;
-import net.minecraft.world.level.storage.ServerLevelData;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.common.util.FakePlayer;
 
@@ -215,18 +209,15 @@ public final class FishingTaskGameTests {
             template = "gametest/isolated_ai_arena",
             timeoutTicks = 900
     )
-    public static void biteReelsOneProtectedItemIntoInventory(GameTestHelper helper) {
+    public static void biteSpawnsVisibleReelBeforeDeliveringCatch(GameTestHelper helper) {
         BlockPos villagerPos = biteCycleVillagerPos(helper);
         prepareBiteWater(helper, villagerPos.east(2));
         VillagerEntityMCA villager = spawnFisher(helper, villagerPos);
-        TestFishingTask task = new TestFishingTask(helper.makeMockPlayer(GameType.SURVIVAL), true);
-        Player thief = helper.makeMockPlayer(GameType.SURVIVAL);
-        Player reloadPicker = helper.makeMockPlayer(GameType.SURVIVAL);
-        AtomicBoolean sawProtectedReel = new AtomicBoolean();
-        AtomicBoolean sawReloadRelease = new AtomicBoolean();
+        TestFishingTask task = new TestFishingTask(helper.makeMockPlayer(GameType.SURVIVAL), true)
+                .withFishingLoot(List.of(new ItemStack(Items.COD)));
         AtomicBoolean delivered = new AtomicBoolean();
         AtomicReference<ItemEntity> reelItem = new AtomicReference<>();
-        int startingLoot = countCaughtItems(villager);
+        int startingFish = villager.getInventory().countItem(Items.COD);
         int startingRodDamage = villager.getItemInHand(villager.getDominantHand()).getDamageValue();
 
         task.start(helper.getLevel(), villager, helper.getLevel().getGameTime());
@@ -235,71 +226,205 @@ public final class FishingTaskGameTests {
                 return;
             }
 
-            MCAFishingBobberEntity bobberBeforeTick = villager.getFishingBobber();
             int rollsBeforeTick = task.getBiteRollCount();
-            List<Integer> nearbyItemIds = bobberBeforeTick == null
-                    ? List.of()
-                    : helper.getLevel().getEntitiesOfClass(ItemEntity.class, bobberBeforeTick.getBoundingBox().inflate(1.5D))
-                    .stream()
-                    .map(ItemEntity::getId)
-                    .toList();
-
             task.tick(helper.getLevel(), villager, helper.getLevel().getGameTime());
 
-            if (task.getBiteRollCount() > rollsBeforeTick && bobberBeforeTick != null) {
-                helper.getLevel().getEntitiesOfClass(ItemEntity.class, bobberBeforeTick.getBoundingBox().inflate(1.5D))
-                        .stream()
-                        .filter(item -> !nearbyItemIds.contains(item.getId()))
-                        .findFirst()
-                        .ifPresent(item -> reelItem.compareAndSet(null, item));
+            if (task.getBiteRollCount() > rollsBeforeTick) {
+                ItemEntity spawned = singleCodReelItem(helper, villager);
+                helper.assertTrue(spawned != null, "successful bite did not spawn a visible caught item");
+                helper.assertTrue(villager.getInventory().countItem(Items.COD) == startingFish,
+                        "fisher was credited before the world catch arrived");
+                helper.assertTrue(spawned.getDeltaMovement().lengthSqr() > 0.0,
+                        "caught item was not launched toward the fisher");
+                reelItem.set(spawned);
             }
-
-            ItemEntity item = reelItem.get();
-            if (item != null && !item.isRemoved()) {
-                sawProtectedReel.set(true);
-                helper.assertTrue(item.hasPickUpDelay(), "reel item became naturally pickup-eligible in flight");
-                item.playerTouch(thief);
-                helper.assertTrue(!item.isRemoved(), "another player stole the protected reel item");
-
-                if (sawReloadRelease.compareAndSet(false, true)) {
-                    TagValueOutput output = TagValueOutput.createWithContext(ProblemReporter.DISCARDING, helper.getLevel().registryAccess());
-                    item.saveWithoutId(output);
-                    CompoundTag saved = output.buildResult();
-                    ValueInput savedInput = TagValueInput.create(ProblemReporter.DISCARDING, helper.getLevel().registryAccess(), saved);
-                    helper.assertTrue(
-                            savedInput.read("Thrower", UUIDUtil.CODEC).filter(villager.getUUID()::equals).isPresent(),
-                            "protected reel item did not retain the villager as its vanilla thrower"
-                    );
-                    helper.assertTrue(
-                            savedInput.read("Owner", UUIDUtil.CODEC).filter(villager.getUUID()::equals).isPresent(),
-                            "protected reel item did not carry the villager reel target marker"
-                    );
-
-                    ItemEntity reloaded = new ItemEntity(EntityType.ITEM, helper.getLevel());
-                    reloaded.load(TagValueInput.create(ProblemReporter.DISCARDING, helper.getLevel().registryAccess(), saved));
-                    helper.assertTrue(!reloaded.hasPickUpDelay(), "reloaded orphan reel stayed pickup-protected");
-                    reloaded.playerTouch(reloadPicker);
-                    helper.assertTrue(reloaded.isRemoved(), "reloaded orphan reel stayed target-locked to the villager");
-                }
-            }
-
-            if (item != null && item.isRemoved() && countCaughtItems(villager) > startingLoot) {
+            if (reelItem.get() != null && villager.getInventory().countItem(Items.COD) > startingFish) {
                 delivered.set(true);
             }
         });
 
         helper.succeedWhen(() -> {
-            helper.assertTrue(sawProtectedReel.get(), "no real reel ItemEntity was observed");
-            helper.assertTrue(sawReloadRelease.get(), "protected reel reload behavior was not exercised");
-            helper.assertTrue(delivered.get(), "protected reel item was not delivered into MCA inventory");
-            helper.assertTrue(thief.getInventory().isEmpty(), "protected reel item entered another player's inventory");
-            helper.assertTrue(countCaughtItems(villager) > startingLoot, "a real bite did not deliver a catch");
+            helper.assertTrue(delivered.get(), "visible reel never delivered its catch");
+            helper.assertTrue(reelItem.get() != null && reelItem.get().isRemoved(),
+                    "delivered reel item remained collectible and could duplicate");
+            helper.assertTrue(villager.getInventory().countItem(Items.COD) == startingFish + 1,
+                    "real bite did not deliver exactly one COD");
             helper.assertTrue(task.getBiteRollCount() == 1, "successful bite rolled catch chance more than once");
             helper.assertTrue(
                     villager.getItemInHand(villager.getDominantHand()).getDamageValue() == startingRodDamage + 1,
                     "one delivered bite did not damage the fishing rod exactly once"
             );
         });
+    }
+
+    @GameTest(batch = "mca_fishing_reel_homing", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void reelItemUsesXpOrbAttractionUntilHalfBlockDelivery(GameTestHelper helper) {
+        BlockPos feet = biteCycleVillagerPos(helper);
+        prepareBiteWater(helper, feet.east(2));
+        VillagerEntityMCA villager = spawnFisher(helper, feet);
+        TestFishingTask task = new TestFishingTask(helper.makeMockPlayer(GameType.SURVIVAL), true)
+                .withFishingLoot(List.of(new ItemStack(Items.COD)));
+        task.start(helper.getLevel(), villager, helper.getLevel().getGameTime());
+        helper.assertTrue(villager.getFishingBobber() != null, "reel fixture failed to cast");
+        invokeBeginReel(task, helper, villager);
+
+        ItemEntity item = singleCodReelItem(helper, villager);
+        helper.assertTrue(item != null, "reel did not spawn an ordinary world ItemEntity");
+        Vec3 target = new Vec3(villager.getX(), villager.getY() + villager.getEyeHeight() / 2.0, villager.getZ());
+        item.setPos(target.add(1.0, 0.0, 0.0));
+        item.setDeltaMovement(Vec3.ZERO);
+        item.needsSync = false;
+        task.tick(helper.getLevel(), villager, helper.getLevel().getGameTime());
+
+        helper.assertTrue(!item.isRemoved(), "reel item arrived outside the half-block radius");
+        helper.assertTrue(item.needsSync, "homing velocity was not marked for synchronization");
+        helper.assertTrue(Math.abs(item.getDeltaMovement().x + 0.0765625) < 1.0E-7
+                        && Math.abs(item.getDeltaMovement().y) < 1.0E-7
+                        && Math.abs(item.getDeltaMovement().z) < 1.0E-7,
+                "reel did not use XP-orb acceleration: " + item.getDeltaMovement());
+
+        item.setPos(target.add(0.25, 0.0, 0.0));
+        task.tick(helper.getLevel(), villager, helper.getLevel().getGameTime() + 1);
+        helper.assertTrue(item.isRemoved(), "reel was not delivered inside half a block");
+        helper.assertTrue(villager.getInventory().countItem(Items.COD) == 1, "arrival did not credit exactly one COD");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_fishing_reel_pickup", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void playerCollectsReelWithoutDuplicatingFisherCatch(GameTestHelper helper) {
+        BlockPos feet = biteCycleVillagerPos(helper);
+        prepareBiteWater(helper, feet.east(2));
+        VillagerEntityMCA villager = spawnFisher(helper, feet);
+        TestFishingTask task = new TestFishingTask(helper.makeMockPlayer(GameType.SURVIVAL), true)
+                .withFishingLoot(List.of(new ItemStack(Items.COD, 3)));
+        task.start(helper.getLevel(), villager, helper.getLevel().getGameTime());
+        invokeBeginReel(task, helper, villager);
+        ItemEntity item = singleCodReelItem(helper, villager);
+        helper.assertTrue(item != null, "player pickup fixture lacks world reel");
+
+        Player collector = helper.makeMockPlayer(GameType.SURVIVAL);
+        item.playerTouch(collector);
+        helper.assertTrue(item.isRemoved() && collector.getInventory().countItem(Items.COD) == 3,
+                "ordinary reel was not collectible by another player");
+        for (int tick = 0; tick < 41; tick++) {
+            task.tick(helper.getLevel(), villager, helper.getLevel().getGameTime() + tick);
+        }
+        task.stop(helper.getLevel(), villager, helper.getLevel().getGameTime() + 41);
+        helper.assertTrue(villager.getInventory().countItem(Items.COD) == 0,
+                "fisher duplicated a catch already picked up by another player");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_fishing_reel_hopper", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void hopperCollectsReelWithoutCreditingFisher(GameTestHelper helper) {
+        BlockPos feet = biteCycleVillagerPos(helper);
+        prepareBiteWater(helper, feet.east(2));
+        VillagerEntityMCA villager = spawnFisher(helper, feet);
+        TestFishingTask task = new TestFishingTask(helper.makeMockPlayer(GameType.SURVIVAL), true)
+                .withFishingLoot(List.of(new ItemStack(Items.COD, 3)));
+        task.start(helper.getLevel(), villager, helper.getLevel().getGameTime());
+        invokeBeginReel(task, helper, villager);
+        ItemEntity item = singleCodReelItem(helper, villager);
+        helper.assertTrue(item != null, "hopper fixture lacks world reel");
+
+        BlockPos hopperPos = feet.west(3).below();
+        helper.getLevel().setBlock(hopperPos, Blocks.HOPPER.defaultBlockState(), 3);
+        HopperBlockEntity hopper = (HopperBlockEntity) helper.getLevel().getBlockEntity(hopperPos);
+        helper.assertTrue(hopper != null, "hopper fixture could not place hopper");
+        item.setPos(hopperPos.getX() + 0.5, hopperPos.getY() + 1.1, hopperPos.getZ() + 0.5);
+        helper.assertTrue(HopperBlockEntity.suckInItems(helper.getLevel(), hopper),
+                "vanilla hopper could not absorb ordinary reel item");
+        helper.assertTrue(item.isRemoved() && hopper.getItem(0).getCount() == 3,
+                "hopper did not absorb exactly the original catch");
+
+        task.stop(helper.getLevel(), villager, helper.getLevel().getGameTime());
+        helper.assertTrue(villager.getInventory().countItem(Items.COD) == 0,
+                "fisher duplicated a catch already collected by a hopper");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_fishing_reel_partial_pickup", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void partiallyCollectedReelCreditsOnlyRemainingStack(GameTestHelper helper) {
+        BlockPos feet = biteCycleVillagerPos(helper);
+        prepareBiteWater(helper, feet.east(2));
+        VillagerEntityMCA villager = spawnFisher(helper, feet);
+        TestFishingTask task = new TestFishingTask(helper.makeMockPlayer(GameType.SURVIVAL), true)
+                .withFishingLoot(List.of(new ItemStack(Items.COD, 3)));
+        task.start(helper.getLevel(), villager, helper.getLevel().getGameTime());
+        invokeBeginReel(task, helper, villager);
+        ItemEntity item = singleCodReelItem(helper, villager);
+        helper.assertTrue(item != null, "partial-pickup fixture lacks world reel");
+
+        BlockPos hopperPos = feet.west(3).below();
+        helper.getLevel().setBlock(hopperPos, Blocks.HOPPER.defaultBlockState(), 3);
+        HopperBlockEntity hopper = (HopperBlockEntity) helper.getLevel().getBlockEntity(hopperPos);
+        helper.assertTrue(hopper != null, "partial-pickup fixture lacks hopper");
+        for (int slot = 0; slot < hopper.getContainerSize() - 1; slot++) {
+            hopper.setItem(slot, new ItemStack(Blocks.STONE, 64));
+        }
+        hopper.setItem(hopper.getContainerSize() - 1, new ItemStack(Items.COD, 63));
+        item.setPos(hopperPos.getX() + 0.5, hopperPos.getY() + 1.1, hopperPos.getZ() + 0.5);
+        HopperBlockEntity.suckInItems(helper.getLevel(), hopper);
+        helper.assertTrue(hopper.countItem(Items.COD) == 64
+                        && !item.isRemoved() && item.getItem().getCount() == 2,
+                "hopper did not take only its one fitting COD from the reel");
+
+        item.setPos(villager.getX(), villager.getY() + villager.getEyeHeight() / 2.0, villager.getZ());
+        task.tick(helper.getLevel(), villager, helper.getLevel().getGameTime());
+        helper.assertTrue(item.isRemoved() && villager.getInventory().countItem(Items.COD) == 2,
+                "fisher did not receive exactly the two COD remaining after third-party pickup");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_fishing_reel_bound", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void distantReelDeliversOnFortiethTaskTick(GameTestHelper helper) {
+        BlockPos feet = biteCycleVillagerPos(helper);
+        prepareBiteWater(helper, feet.east(2));
+        VillagerEntityMCA villager = spawnFisher(helper, feet);
+        TestFishingTask task = new TestFishingTask(helper.makeMockPlayer(GameType.SURVIVAL), true)
+                .withFishingLoot(List.of(new ItemStack(Items.COD)));
+        task.start(helper.getLevel(), villager, helper.getLevel().getGameTime());
+        invokeBeginReel(task, helper, villager);
+        ItemEntity item = singleCodReelItem(helper, villager);
+        helper.assertTrue(item != null, "timeout fixture lacks world reel");
+        item.setPos(villager.position().add(10.0, 3.0, 0.0));
+        item.setDeltaMovement(Vec3.ZERO);
+
+        for (int tick = 1; tick < 40; tick++) {
+            task.tick(helper.getLevel(), villager, helper.getLevel().getGameTime() + tick);
+        }
+        helper.assertTrue(!item.isRemoved() && villager.getInventory().countItem(Items.COD) == 0,
+                "distant reel was credited before the 40-tick bound");
+        task.tick(helper.getLevel(), villager, helper.getLevel().getGameTime() + 40);
+        helper.assertTrue(item.isRemoved() && villager.getInventory().countItem(Items.COD) == 1,
+                "reel was not delivered by the 40-tick bound");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_fishing_reel_stop", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void interruptedReelSettlesLiveFisherButLeavesDeadFisherItem(GameTestHelper helper) {
+        BlockPos feet = biteCycleVillagerPos(helper);
+        prepareBiteWater(helper, feet.east(2));
+        VillagerEntityMCA villager = spawnFisher(helper, feet);
+        TestFishingTask task = new TestFishingTask(helper.makeMockPlayer(GameType.SURVIVAL), true)
+                .withFishingLoot(List.of(new ItemStack(Items.COD)));
+        task.start(helper.getLevel(), villager, helper.getLevel().getGameTime());
+        invokeBeginReel(task, helper, villager);
+        ItemEntity first = singleCodReelItem(helper, villager);
+        helper.assertTrue(first != null, "live-stop fixture lacks world reel");
+        task.stop(helper.getLevel(), villager, helper.getLevel().getGameTime());
+        helper.assertTrue(first.isRemoved() && villager.getInventory().countItem(Items.COD) == 1,
+                "interrupted live fisher lost or duplicated its pending catch");
+
+        task.start(helper.getLevel(), villager, helper.getLevel().getGameTime());
+        invokeBeginReel(task, helper, villager);
+        ItemEntity second = singleCodReelItem(helper, villager);
+        helper.assertTrue(second != null, "dead-stop fixture lacks world reel");
+        villager.discard();
+        task.stop(helper.getLevel(), villager, helper.getLevel().getGameTime());
+        helper.assertTrue(!second.isRemoved() && second.getItem().getCount() == 1,
+                "dead fisher's world reel was deleted instead of being left collectible");
+        helper.succeed();
     }
 
     @GameTest(
@@ -399,6 +524,10 @@ public final class FishingTaskGameTests {
         assigner.snapTo(feet.getX() + 1.5, feet.getY(), feet.getZ() + 6.5);
         helper.getLevel().addNewPlayer(assigner);
         villager.getVillagerBrain().assignJob(Chore.FISH, assigner);
+        // The natural-fishing scenario is about fishing across multiple bites,
+        // so control the villager's own schedule independently of suite world time.
+        villager.getBrain().setSchedule(GameTestBrain.fixedSchedule(Activity.IDLE));
+        villager.getVillagerBrain().think();
         helper.assertTrue(villager.getVillagerBrain().getJobAssigner().isPresent(),
                 "natural AI fishing fixture has no online job assigner");
         helper.assertTrue(villager.getBrain().isActive(ActivitiesMCA.CHORE),
@@ -449,112 +578,6 @@ public final class FishingTaskGameTests {
                     + ", running=" + villager.getBrain().getRunningBehaviors().stream()
                         .map(b -> b.getClass().getSimpleName()).toList());
         });
-    }
-
-    @GameTest(
-            batch = "mca_fishing_reel_homing",
-            templateNamespace = "mca",
-            template = "gametest/isolated_ai_arena",
-            timeoutTicks = 900
-    )
-    public static void reelItemUsesXpStyleHomingInsideOldDeliveryRadius(GameTestHelper helper) {
-        BlockPos villagerPos = biteCycleVillagerPos(helper);
-        prepareBiteWater(helper, villagerPos.east(2));
-        VillagerEntityMCA villager = spawnFisher(helper, villagerPos);
-        TestFishingTask task = new TestFishingTask(helper.makeMockPlayer(GameType.SURVIVAL), true);
-        AtomicReference<ItemEntity> reelItem = new AtomicReference<>();
-        AtomicBoolean checkedHoming = new AtomicBoolean();
-
-        task.start(helper.getLevel(), villager, helper.getLevel().getGameTime());
-        helper.onEachTick(() -> {
-            if (checkedHoming.get()) {
-                return;
-            }
-
-            MCAFishingBobberEntity bobberBeforeTick = villager.getFishingBobber();
-            int rollsBeforeTick = task.getBiteRollCount();
-            List<Integer> nearbyItemIds = bobberBeforeTick == null
-                    ? List.of()
-                    : helper.getLevel().getEntitiesOfClass(ItemEntity.class, bobberBeforeTick.getBoundingBox().inflate(1.5D))
-                    .stream()
-                    .map(ItemEntity::getId)
-                    .toList();
-
-            task.tick(helper.getLevel(), villager, helper.getLevel().getGameTime());
-
-            if (task.getBiteRollCount() > rollsBeforeTick && bobberBeforeTick != null) {
-                helper.getLevel().getEntitiesOfClass(ItemEntity.class, bobberBeforeTick.getBoundingBox().inflate(1.5D))
-                        .stream()
-                        .filter(item -> !nearbyItemIds.contains(item.getId()))
-                        .findFirst()
-                        .ifPresent(item -> reelItem.compareAndSet(null, item));
-            }
-
-            ItemEntity item = reelItem.get();
-            if (item == null || item.isRemoved()) {
-                return;
-            }
-
-            Vec3 reelTarget = new Vec3(
-                    villager.getX(),
-                    villager.getY() + villager.getEyeHeight() / 2.0,
-                    villager.getZ()
-            );
-            item.setPos(reelTarget.add(1.0, 0.0, 0.0));
-            item.setDeltaMovement(Vec3.ZERO);
-            item.needsSync = false;
-
-            task.tick(helper.getLevel(), villager, helper.getLevel().getGameTime());
-
-            helper.assertTrue(!item.isRemoved(), "reel item disappeared at the old 1.5-block delivery cutoff");
-            helper.assertTrue(item.needsSync, "reel homing velocity was not marked for client synchronization");
-            Vec3 motion = item.getDeltaMovement();
-            helper.assertTrue(
-                    Math.abs(motion.x + 0.0765625) < 1.0E-7 && Math.abs(motion.y) < 1.0E-7 && Math.abs(motion.z) < 1.0E-7,
-                    "reel item did not receive vanilla XP-style homing acceleration; motion=" + motion
-            );
-            checkedHoming.set(true);
-        });
-
-        helper.succeedWhen(() -> helper.assertTrue(checkedHoming.get(), "no reel item reached the homing assertion"));
-    }
-
-    @GameTest(batch = "mca_fishing_reel_hopper_protection", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
-    public static void protectedReelItemCannotBeCollectedByHoppers(GameTestHelper helper) {
-        BlockPos hopperPos = new BlockPos(40, 3, 40);
-        helper.setBlock(hopperPos, Blocks.HOPPER);
-        helper.setBlock(hopperPos.above(), Blocks.AIR);
-        BlockPos absoluteHopperPos = helper.absolutePos(hopperPos);
-        HopperBlockEntity hopper = (HopperBlockEntity) helper.getLevel().getBlockEntity(absoluteHopperPos);
-        helper.assertTrue(hopper != null, "test hopper block entity was not created");
-
-        VillagerEntityMCA villager = spawnFisher(helper, absoluteHopperPos.north(2));
-        ItemEntity protectedReel = new ItemEntity(
-                helper.getLevel(),
-                absoluteHopperPos.getX() + 0.5,
-                absoluteHopperPos.getY() + 1.0,
-                absoluteHopperPos.getZ() + 0.5,
-                new ItemStack(Items.COD)
-        );
-        protectedReel.setThrower(villager);
-        protectedReel.setTarget(villager.getUUID());
-        protectedReel.setNeverPickUp();
-        helper.getLevel().addFreshEntity(protectedReel);
-
-        boolean collected = HopperBlockEntity.suckInItems(helper.getLevel(), hopper);
-
-        helper.assertTrue(!collected, "hopper accepted a protected fishing reel item");
-        helper.assertTrue(!protectedReel.isRemoved(), "hopper removed a protected fishing reel item");
-        helper.assertTrue(hopper.isEmpty(), "hopper inventory received a protected fishing reel item");
-
-        protectedReel.setTarget(null);
-        protectedReel.setNoPickUpDelay();
-        helper.assertTrue(
-                HopperBlockEntity.suckInItems(helper.getLevel(), hopper),
-                "hopper could not collect the reel item after MCA protection was released"
-        );
-        helper.assertTrue(protectedReel.isRemoved(), "released reel item was not consumed by the hopper");
-        helper.succeed();
     }
 
     @GameTest(
@@ -916,48 +939,31 @@ public final class FishingTaskGameTests {
         for (int slot = 0; slot < villager.getInventory().getContainerSize(); slot++) {
             villager.getInventory().setItem(slot, new ItemStack(Blocks.STONE, 64));
         }
+        villager.getInventory().setItem(villager.getInventory().getContainerSize() - 1, new ItemStack(Items.COD, 63));
 
-        TestFishingTask task = new TestFishingTask(helper.makeMockPlayer(GameType.SURVIVAL), true);
-        AtomicBoolean reelFinished = new AtomicBoolean();
-        AtomicReference<ItemEntity> reelItem = new AtomicReference<>();
+        TestFishingTask task = new TestFishingTask(helper.makeMockPlayer(GameType.SURVIVAL), true)
+                .withFishingLoot(List.of(new ItemStack(Items.COD, 3)));
         task.start(helper.getLevel(), villager, helper.getLevel().getGameTime());
-        helper.onEachTick(() -> {
-            if (reelFinished.get()) {
-                return;
-            }
+        invokeBeginReel(task, helper, villager);
+        ItemEntity remainder = singleCodReelItem(helper, villager);
+        helper.assertTrue(remainder != null && remainder.getItem().getCount() == 3,
+                "near-full catch did not first exist as three physical COD");
+        helper.assertTrue(villager.getInventory().countItem(Items.COD) == 63,
+                "near-full fisher was credited before item arrived");
 
-            MCAFishingBobberEntity bobberBeforeTick = villager.getFishingBobber();
-            int rollsBeforeTick = task.getBiteRollCount();
-            List<Integer> nearbyItemIds = bobberBeforeTick == null
-                    ? List.of()
-                    : helper.getLevel().getEntitiesOfClass(ItemEntity.class, bobberBeforeTick.getBoundingBox().inflate(1.5D))
-                    .stream()
-                    .map(ItemEntity::getId)
-                    .toList();
+        Vec3 reelTarget = new Vec3(villager.getX(), villager.getY() + villager.getEyeHeight() / 2.0, villager.getZ());
+        remainder.setPos(reelTarget);
+        task.tick(helper.getLevel(), villager, helper.getLevel().getGameTime());
+        helper.assertTrue(villager.getInventory().countItem(Items.COD) == 64,
+                "fisher did not take the single fitting COD");
+        helper.assertTrue(!remainder.isRemoved() && remainder.getItem().getCount() == 2,
+                "overflow must remain in the original collectible ItemEntity, with count two");
 
-            task.tick(helper.getLevel(), villager, helper.getLevel().getGameTime());
-
-            if (task.getBiteRollCount() > rollsBeforeTick && bobberBeforeTick != null) {
-                helper.getLevel().getEntitiesOfClass(ItemEntity.class, bobberBeforeTick.getBoundingBox().inflate(1.5D))
-                        .stream()
-                        .filter(item -> !nearbyItemIds.contains(item.getId()))
-                        .findFirst()
-                        .ifPresent(item -> reelItem.compareAndSet(null, item));
-            }
-
-            ItemEntity item = reelItem.get();
-            if (item != null && !item.isRemoved() && !item.hasPickUpDelay()) {
-                reelFinished.set(true);
-            }
-        });
-
-        helper.succeedWhen(() -> {
-            ItemEntity remainder = reelItem.get();
-            helper.assertTrue(task.getBiteRollCount() == 1, "full-inventory bite rolled catch chance more than once");
-            helper.assertTrue(reelFinished.get(), "full inventory did not finish the reel as a world remainder");
-            helper.assertTrue(remainder != null && !remainder.isRemoved(), "full inventory did not preserve the real reel entity");
-            helper.assertTrue(!remainder.hasPickUpDelay(), "finished reel remainder stayed permanently protected");
-        });
+        Player collector = helper.makeMockPlayer(GameType.SURVIVAL);
+        remainder.playerTouch(collector);
+        helper.assertTrue(remainder.isRemoved() && collector.getInventory().countItem(Items.COD) == 2,
+                "ordinary overflow item was not collectible by a player");
+        helper.succeed();
     }
 
     @GameTest(batch = "mca_fishing_timeout", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
@@ -1266,10 +1272,17 @@ public final class FishingTaskGameTests {
                 .count();
     }
 
+    private static ItemEntity singleCodReelItem(GameTestHelper helper, VillagerEntityMCA villager) {
+        return helper.getLevel().getEntitiesOfClass(ItemEntity.class, villager.getBoundingBox().inflate(16.0D))
+                .stream()
+                .filter(item -> !item.isRemoved() && item.getItem().is(Items.COD))
+                .findFirst()
+                .orElse(null);
+    }
+
     private static int countCaughtItems(VillagerEntityMCA villager) {
         return villager.getInventory().getItems().stream()
                 .filter(stack -> !stack.isEmpty())
-                .filter(stack -> !(stack.getItem() instanceof FishingRodItem))
                 .mapToInt(ItemStack::getCount)
                 .sum();
     }

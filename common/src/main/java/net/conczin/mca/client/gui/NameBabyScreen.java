@@ -74,7 +74,7 @@ public class NameBabyScreen extends Screen {
 
         setFocused(babyNameTextField);
 
-        context.centeredText(this.font, this.title, this.width / 2, 70, 16777215);
+        context.centeredText(this.font, this.title, this.width / 2, 70, 0xFFFFFFFF);
     }
 
     public void setBabyName(String name) {

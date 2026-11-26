@@ -184,6 +184,9 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     public void removed() {
         Minecraft minecraft = Minecraft.getInstance();
         minecraft.options.hideGui = restoreHideGui;
+        if (villager != null) {
+            SpeechManager.INSTANCE.stopPreview(villager);
+        }
         super.removed();
     }
 

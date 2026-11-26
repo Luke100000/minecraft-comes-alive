@@ -2,6 +2,7 @@ package net.conczin.mca.entity.ai.brain.tasks;
 
 import com.google.common.collect.ImmutableList;
 import com.mojang.datafixers.util.Pair;
+import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
 import net.conczin.mca.entity.ai.Genetics;
@@ -27,6 +28,7 @@ import net.minecraft.world.entity.ai.behavior.Behavior;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.monster.skeleton.Skeleton;
 import net.minecraft.world.entity.npc.villager.Villager;
+import net.minecraft.world.entity.projectile.arrow.AbstractArrow;
 import net.minecraft.world.entity.projectile.arrow.Arrow;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.entity.schedule.Activity;
@@ -238,13 +240,30 @@ public final class ArcherRetreatSafetyGameTests {
     @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 110)
     public static void activeRangedDriverOnEightBlockShelfKeepsClearShot(GameTestHelper helper) {
         Arena arena = fixture(helper, 8, true, false, 10);
+        boolean[] fired = {false};
+        boolean[] landedHit = {false};
         arena.tick(() -> {
             helper.assertTrue(RangedCombatState.current(arena.archer).orElse(null) != RangedCombatState.KITE,
                     "distant elevated attacker forced unnecessary retreat" + arena.describe());
-            if (helper.getTick() == 60) {
-                helper.assertTrue(arena.skeleton.getHealth() < arena.skeleton.getMaxHealth(),
-                        "guard could not shoot the exposed elevated attacker" + arena.describe());
+            if (!fired[0]) {
+                fired[0] = !helper.getLevel().getEntitiesOfClass(AbstractArrow.class, arena.footprint,
+                        arrow -> arrow.getOwner() == arena.archer).isEmpty();
+            }
+            DamageSource damage = arena.skeleton.getLastDamageSource();
+            landedHit[0] |= damage != null && damage.getEntity() == arena.archer
+                    && damage.getDirectEntity() instanceof AbstractArrow;
+            long tick = helper.getTick();
+            if (tick == 60) {
+                helper.assertTrue(fired[0], "guard never fired at the exposed elevated attacker" + arena.describe());
+            }
+            // Keep the launch deadline and allow a second draw and flight when arrow spread makes the first shot miss.
+            if (tick >= 60 && landedHit[0]) {
+                if (tick > 60) {
+                    MCA.LOGGER.info("Elevated archer fired by tick 60 and landed its first hit at tick {}", tick);
+                }
                 arena.succeed();
+            } else if (tick == 100) {
+                helper.fail("guard fired but never hit the exposed elevated attacker" + arena.describe());
             }
         });
     }

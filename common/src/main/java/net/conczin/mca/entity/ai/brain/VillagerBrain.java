@@ -5,10 +5,14 @@ import net.conczin.mca.entity.Status;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.*;
+import net.conczin.mca.entity.ai.brain.tasks.ExtendedWalkTowardsTask;
+import net.conczin.mca.entity.ai.brain.tasks.InteractTask;
+import net.conczin.mca.entity.ai.brain.tasks.WalkTargetRetryGate;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.entity.ai.relationship.Personality;
 import net.conczin.mca.registry.CriterionMCA;
 import net.conczin.mca.util.network.datasync.*;
+import net.minecraft.core.GlobalPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
@@ -28,6 +32,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.WeakHashMap;
+import java.util.function.Supplier;
 
 /**
  * Handles memory and complex bodily functions. Such as walking, and not being a nitwit.
@@ -48,9 +54,21 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
     private int panicAnimationHoldTicks;
     private float panicAnimationProgress;
     private float panicAnimationProgressO;
+    private WalkTarget choreCooldownWalkTarget;
+    private int activeChoreTicks;
+    private int lastChoreClockTick = Integer.MIN_VALUE;
+    @Nullable
+    private Map<Object, WalkTargetRetryGate> walkTargetRetryGates;
 
     public VillagerBrain(E entity) {
         this.entity = entity;
+    }
+
+    public WalkTargetRetryGate getOrCreateRetryGate(Object key, Supplier<WalkTargetRetryGate> factory) {
+        if (walkTargetRetryGates == null) {
+            walkTargetRetryGates = new WeakHashMap<>();
+        }
+        return walkTargetRetryGates.computeIfAbsent(key, ignored -> factory.get());
     }
 
     public static <E2 extends Entity> CDataManager.Builder<E2> createTrackedData(CDataManager.Builder<E2> builder) {
@@ -69,15 +87,17 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
     public void think() {
         // When you relog, it should continue doing the chores.
         // Chore saves but Activity doesn't, so this checks if the activity is not on there and puts it on there.
+        selectAssignedChoreActivity();
 
-        if (entity.getTrackedValue(ACTIVE_CHORE) != Chore.NONE && !entity.getBrain().isActive(Activity.PANIC)) {
-            // find something to do
-            //todo here switch between rest and chore
-            entity.getBrain().getActiveNonCoreActivity().ifPresent(activity -> {
-                if (!activity.equals(ActivitiesMCA.CHORE)) {
-                    entity.getBrain().setActiveActivityIfPossible(ActivitiesMCA.CHORE);
-                }
-            });
+        // Cooldown time belongs to CHORE, not the wall-clock ticks spent sleeping or fighting.
+        if (entity.tickCount != lastChoreClockTick) {
+            lastChoreClockTick = entity.tickCount;
+            if (entity.getBrain().isActive(ActivitiesMCA.CHORE)
+                    && !entity.getBrain().hasMemoryValue(MemoryModuleType.ATTACK_TARGET)
+                    && !isPanicking()) {
+                activeChoreTicks++;
+            }
+            updateRetryGatePreemption();
         }
 
         boolean panicking = entity.getBrain().isActive(Activity.PANIC);
@@ -92,13 +112,28 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
         // decrease interaction fatigue
         if (entity.tickCount % Math.max(1, Config.getInstance().interactionFatigueCooldown) == 0) {
             CompoundTag nbt = entity.getTrackedValue(MEMORIES);
-            if (nbt != null) {
+            if (nbt != null && !nbt.isEmpty()) {
+                CompoundTag updated = null;
                 for (String uuid : nbt.keySet()) {
-                    Memories memories = Memories.fromCNBT(entity, nbt.getCompound(uuid).orElseGet(CompoundTag::new));
+                    Memories memories = Memories.<E>fromCNBT(null, nbt.getCompound(uuid).orElse(null));
+                    if (memories == null) {
+                        continue;
+                    }
                     int fatigue = memories.getInteractionFatigue();
                     if (fatigue > 0) {
                         memories.setInteractionFatigue(fatigue - 1);
+                        if (updated == null) {
+                            updated = nbt.copy();
+                        }
+                        String playerKey = memories.getPlayerUUID().toString();
+                        if (!playerKey.equals(uuid)) {
+                            updated.remove(uuid);
+                        }
+                        updated.put(playerKey, memories.toCNBT());
                     }
+                }
+                if (updated != null) {
+                    entity.setTrackedValue(MEMORIES, updated);
                 }
             }
         }
@@ -106,6 +141,76 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
 
     public Chore getCurrentJob() {
         return entity.getTrackedValue(ACTIVE_CHORE);
+    }
+
+    public int getActiveChoreTicks() {
+        return activeChoreTicks;
+    }
+
+    private void updateRetryGatePreemption() {
+        if (!(entity instanceof VillagerEntityMCA villager) || walkTargetRetryGates == null) {
+            return;
+        }
+        long gameTime = villager.level().getGameTime();
+        for (WalkTargetRetryGate gate : walkTargetRetryGates.values()) {
+            MemoryModuleType<GlobalPos> memory = gate.destinationMemory();
+            if (memory == null || gate.activeDestination() == null) {
+                continue;
+            }
+            GlobalPos remembered = villager.getBrain().getMemoryInternal(memory).orElse(null);
+            if (remembered == null
+                    || remembered.dimension() != villager.level().dimension()
+                    || !remembered.pos().equals(gate.activeDestination())) {
+                gate.resetActive();
+                continue;
+            }
+            gate.observePreemption(gameTime, isJourneyPreempted(villager, memory));
+        }
+    }
+
+    void syncFailureToRetryGates(GlobalPos target, long since) {
+        if (!(entity instanceof VillagerEntityMCA villager) || walkTargetRetryGates == null) {
+            return;
+        }
+        for (WalkTargetRetryGate gate : walkTargetRetryGates.values()) {
+            MemoryModuleType<GlobalPos> memory = gate.destinationMemory();
+            if (memory != null && target.equals(villager.getBrain().getMemoryInternal(memory).orElse(null))) {
+                gate.noteFailure(target.pos(), since);
+            }
+        }
+    }
+
+    void clearFailureOnUnpreemptedRetryGates(@Nullable GlobalPos matchingTarget) {
+        if (!(entity instanceof VillagerEntityMCA villager) || walkTargetRetryGates == null) {
+            return;
+        }
+        for (WalkTargetRetryGate gate : walkTargetRetryGates.values()) {
+            MemoryModuleType<GlobalPos> memory = gate.destinationMemory();
+            if (memory == null) {
+                continue;
+            }
+            if (matchingTarget != null) {
+                if (matchingTarget.equals(villager.getBrain().getMemoryInternal(memory).orElse(null))) {
+                    gate.clearFailure();
+                }
+            } else if (!isJourneyPreempted(villager, memory)) {
+                gate.clearFailure();
+            }
+        }
+    }
+
+    private boolean isJourneyPreempted(VillagerEntityMCA villager, MemoryModuleType<GlobalPos> destinationMemory) {
+        var brain = villager.getBrain();
+        if (brain.hasMemoryValue(MemoryModuleType.ATTACK_TARGET)
+                || brain.isActive(Activity.PANIC)
+                || villager.hasIgnitedCreeperThreat()
+                || InteractTask.shouldRun(villager)
+                || brain.hasMemoryValue(MemoryModuleTypeMCA.STAYING)
+                || brain.hasMemoryValue(MemoryModuleTypeMCA.PLAYER_FOLLOWING)) {
+            return true;
+        }
+        return brain.hasMemoryValue(MemoryModuleType.WALK_TARGET)
+                && !ExtendedWalkTowardsTask.ownsWalkTarget(villager, destinationMemory);
     }
 
     public Optional<Player> getJobAssigner() {
@@ -116,6 +221,7 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
      * Tells the villager to stop doing whatever it's doing.
      */
     public void abandonJob() {
+        releaseChoreCooldownMovement();
         entity.getBrain().setActiveActivityIfPossible(Activity.IDLE);
         entity.setTrackedValue(ACTIVE_CHORE, Chore.NONE);
         entity.setTrackedValue(CHORE_ASSIGNING_PLAYER, Optional.empty());
@@ -133,7 +239,47 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
         entity.getBrain().eraseMemory(MemoryModuleTypeMCA.STAYING);
 
         resetsBrain();
-        entity.getBrain().setActiveActivityIfPossible(ActivitiesMCA.CHORE);
+        selectAssignedChoreActivity();
+    }
+
+    public void selectAssignedChoreActivity() {
+        if (getCurrentJob() == Chore.NONE || entity.getBrain().isActive(Activity.PANIC)
+                || entity.getBrain().hasMemoryValue(MemoryModuleType.ATTACK_TARGET)) {
+            return;
+        }
+        if (entity instanceof VillagerEntityMCA villager && villager.hasIgnitedCreeperThreat()) {
+            if (entity.getBrain().isActive(ActivitiesMCA.CHORE)) {
+                releaseChoreCooldownMovement();
+                entity.getBrain().setActiveActivityIfPossible(Activity.IDLE);
+            }
+            return;
+        }
+
+        var schedule = entity.getBrain().schedule;
+        Activity scheduled = schedule == null ? Activity.IDLE
+                : entity.level().environmentAttributes().getValue(schedule, entity.position());
+        Activity desired = scheduled == Activity.REST ? Activity.REST : ActivitiesMCA.CHORE;
+        if (desired == Activity.REST) {
+            releaseChoreCooldownMovement();
+        }
+        entity.getBrain().getActiveNonCoreActivity().ifPresent(activity -> {
+            if (activity != desired) {
+                entity.getBrain().setActiveActivityIfPossible(desired);
+            }
+        });
+    }
+
+    public void rememberChoreCooldownMovement(WalkTarget issued) {
+        choreCooldownWalkTarget = issued;
+    }
+
+    private void releaseChoreCooldownMovement() {
+        if (choreCooldownWalkTarget != null
+                && entity.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null)
+                == choreCooldownWalkTarget) {
+            entity.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+        }
+        choreCooldownWalkTarget = null;
     }
 
     public void randomize() {
@@ -155,10 +301,15 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
 
     public Map<UUID, Memories> getMemories() {
         CompoundTag nbt = entity.getTrackedValue(MEMORIES);
-        nbt = nbt == null ? new CompoundTag() : nbt;
+        if (nbt == null || nbt.isEmpty()) {
+            return new HashMap<>();
+        }
         Map<UUID, Memories> memories = new HashMap<>();
         for (String uuid : nbt.keySet()) {
-            memories.put(UUID.fromString(uuid), Memories.fromCNBT(entity, nbt.getCompound(uuid).orElseGet(CompoundTag::new)));
+            Memories entry = Memories.fromCNBT(entity, nbt.getCompound(uuid).orElse(null));
+            if (entry != null) {
+                memories.put(entry.getPlayerUUID(), entry);
+            }
         }
         return memories;
     }
@@ -275,7 +426,9 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
 
     private void restoreCombatWalkTarget(LivingEntity target) {
         entity.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, new EntityTracker(target, true));
-        entity.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(new EntityTracker(target, false), 0.75F, 0));
+        if (!RangedWeaponHelper.isHoldingSupportedWeapon(entity)) {
+            entity.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(new EntityTracker(target, false), 0.75F, 0));
+        }
     }
 
     private void resetsBrain() {

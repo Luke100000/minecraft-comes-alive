@@ -25,6 +25,7 @@ import net.minecraft.network.protocol.game.ClientboundSetPassengersPacket;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.ai.util.RandomPos;
 import net.minecraft.world.entity.animal.camel.Camel;
@@ -38,6 +39,7 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.Comparator;
+import java.util.List;
 import java.util.Optional;
 
 public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityMCA> {
@@ -64,6 +66,23 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
 
     private static boolean canRideMount(Entity mount) {
         return mount.getPassengers().size() < (mount instanceof Camel || mount instanceof AbstractBoat ? 2 : 1);
+    }
+
+    static String[] splitCommand(String command) {
+        return command.split("\\.", 2);
+    }
+
+    static Optional<Identifier> resolveAllowedRumorStructure(String arg, List<String> allowedPool, RandomSource random) {
+        if (allowedPool.isEmpty()) {
+            return Optional.empty();
+        }
+        String selected = arg;
+        if (selected.isEmpty()) {
+            selected = allowedPool.get(random.nextInt(allowedPool.size()));
+        } else if (!allowedPool.contains(selected)) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(Identifier.tryParse(selected));
     }
 
     /**
@@ -98,7 +117,7 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
 
         //an optional argument is stored separated using a dot
         String arg = "";
-        String[] split = command.split("\\.");
+        String[] split = splitCommand(command);
         if (split.length > 1) {
             command = split[0];
             arg = split[1];
@@ -273,38 +292,34 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
                 });
             }
             case "location" -> {
-                if (!Config.getInstance().structuresInRumors.isEmpty()) {
-                    //choose a random arg from the default pool
-                    if (arg.isEmpty()) {
-                        arg = Config.getInstance().structuresInRumors.get(entity.getRandom().nextInt(Config.getInstance().structuresInRumors.size()));
-                    }
-
-                    // Capture entity/registry state here; the locator returns on this server thread.
-                    ServerLevel world = (ServerLevel) entity.level();
-                    Identifier identifier = Identifier.tryParse(arg);
-                    BlockPos pos = RandomPos.generateRandomDirection(entity.getRandom(), 1024, 0).offset(entity.blockPosition());
-                    if (identifier == null) {
-                        entity.sendChatMessage(player, "dialogue.location.forgot");
-                        break;
-                    }
-                    var structure = world.registryAccess().lookupOrThrow(Registries.STRUCTURE).get(identifier);
-                    if (structure.isEmpty()) {
-                        entity.sendChatMessage(player, "dialogue.location.forgot");
-                        break;
-                    }
-                    MCA.getStructureLocator().locate(entity.getUUID(), world, pos,
-                            HolderSet.direct(structure.orElseThrow()), 64).thenAccept(position -> {
-                        if (!entity.isAlive() || player.isRemoved() || entity.level() != world || player.level() != world) {
-                            return;
-                        }
-                        position.ifPresentOrElse(found -> {
-                            String posString = found.getX() + "," + found.getY() + "," + found.getZ();
-                            entity.sendChatMessage(player, "dialogue.location." + identifier.getPath(), posString);
-                        }, () -> entity.sendChatMessage(player, "dialogue.location.forgot"));
-                    });
-                } else {
+                Optional<Identifier> resolvedIdentifier = resolveAllowedRumorStructure(
+                        arg,
+                        Config.getInstance().structuresInRumors,
+                        entity.getRandom()
+                );
+                if (resolvedIdentifier.isEmpty()) {
                     entity.sendChatMessage(player, "dialogue.location.forgot");
+                    break;
                 }
+                Identifier identifier = resolvedIdentifier.get();
+                // Capture entity/registry state here; the locator returns on this server thread.
+                ServerLevel world = (ServerLevel) entity.level();
+                var structure = world.registryAccess().lookupOrThrow(Registries.STRUCTURE).get(identifier);
+                if (structure.isEmpty()) {
+                    entity.sendChatMessage(player, "dialogue.location.forgot");
+                    break;
+                }
+                BlockPos pos = RandomPos.generateRandomDirection(entity.getRandom(), 1024, 0).offset(entity.blockPosition());
+                MCA.getStructureLocator().locate(entity.getUUID(), world, pos,
+                        HolderSet.direct(structure.orElseThrow()), 64).thenAccept(position -> {
+                    if (!entity.isAlive() || player.isRemoved() || entity.level() != world || player.level() != world) {
+                        return;
+                    }
+                    position.ifPresentOrElse(found -> {
+                        String posString = found.getX() + "," + found.getY() + "," + found.getZ();
+                        entity.sendChatMessage(player, "dialogue.location." + identifier.getPath(), posString);
+                    }, () -> entity.sendChatMessage(player, "dialogue.location.forgot"));
+                });
             }
             case "slap" -> player.hurt(player.level().damageSources().cramming(), 1.0f);
         }

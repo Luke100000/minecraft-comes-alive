@@ -146,7 +146,7 @@ class VillageFloorSystemTest {
         assertEquals(0, original.getFloor(0).orElseThrow().floorNumber());
         assertEquals(1, inserted.getFloor(0).orElseThrow().floorNumber());
         assertEquals(1, original.getFloor(1).orElseThrow().floorNumber());
-        var preview = FloorGrouping.prospectiveNumber(List.of(original.getFloor(0).orElseThrow(),
+        var preview = RoomWorkflow.prospectiveFloorNumber(List.of(original.getFloor(0).orElseThrow(),
                 original.getFloor(1).orElseThrow()), original.getFloor(0).orElseThrow(),
                 inserted.getFloor(0).orElseThrow());
         assertEquals(Building.validationResult.SUCCESS, preview.result());
@@ -166,6 +166,7 @@ class VillageFloorSystemTest {
                     manager.commitRoomAddition(pendingInsertion(village, direction), null));
 
             assertEquals(0, village.getStructure(10).orElseThrow().getFloor(0).orElseThrow().floorNumber());
+            assertEquals(direction, village.getStructure(10).orElseThrow().getFloor(1).orElseThrow().floorNumber());
             for (int id : new int[]{20, 21}) {
                 assertEquals(2 * direction,
                         village.getStructure(id).orElseThrow().getFloor(0).orElseThrow().floorNumber());
@@ -180,8 +181,10 @@ class VillageFloorSystemTest {
                 assertTrue(original.getFloor(0).orElseThrow().geometry().sameExactGeometry(current.geometry()));
             }
             Village reloaded = new Village(village.save(), null);
+            Building reloadedRoom120 = reloaded.getBuilding(120).orElseThrow();
+            assertEquals(10, reloadedRoom120.getStructureId());
             assertEquals(2 * direction,
-                    reloaded.getStructure(20).orElseThrow().getFloor(0).orElseThrow().floorNumber());
+                    reloaded.getStructure(10).orElseThrow().getFloor(reloadedRoom120.getFloorId()).orElseThrow().floorNumber());
             assertEquals(100, reloaded.getLogicalBuilding(10).orElseThrow().mainRoomId());
         }
     }
@@ -190,7 +193,7 @@ class VillageFloorSystemTest {
     void staleInsertionLabelIsRejectedWithoutChangingRegisteredState() {
         Village village = new Village(1, null);
         registerInsertionFloors(village, 1);
-        BuildingScanResult captured = pendingInsertion(village, 1);
+        RoomWorkflow.Addition captured = pendingInsertion(village, 1);
         for (int id : new int[]{20, 21, 30}) {
             Structure member = village.getStructure(id).orElseThrow();
             member.setFloorNumber(0, member.getFloor(0).orElseThrow().floorNumber() + 1);
@@ -207,7 +210,7 @@ class VillageFloorSystemTest {
     void failedInsertionRollsBackShiftedLabelsAndCanBeRetried() {
         ThrowOnceMarkDirtyVillage village = new ThrowOnceMarkDirtyVillage();
         registerInsertionFloors(village, 1);
-        BuildingScanResult addition = pendingInsertion(village, 1);
+        RoomWorkflow.Addition addition = pendingInsertion(village, 1);
         VillageManager manager = new VillageManager(null);
         CompoundTag before = village.save();
         village.failNextMarkDirty();
@@ -229,12 +232,12 @@ class VillageFloorSystemTest {
 
         Village reloaded = new Village(village.save(), null);
 
-        assertEquals(-1, reloaded.getStructure(10).orElseThrow()
-                .getFloor(0).orElseThrow().floorNumber());
-        assertEquals(0, reloaded.getStructure(10).orElseThrow()
-                .getFloor(1).orElseThrow().floorNumber());
-        assertEquals(1, reloaded.getStructure(11).orElseThrow()
-                .getFloor(0).orElseThrow().floorNumber());
+        Structure consolidated = reloaded.getStructure(10).orElseThrow();
+        assertEquals(-1, consolidated.getFloor(0).orElseThrow().floorNumber());
+        assertEquals(0, consolidated.getFloor(1).orElseThrow().floorNumber());
+        Building upperRoom = reloaded.getBuilding(101).orElseThrow();
+        assertEquals(10, upperRoom.getStructureId());
+        assertEquals(1, consolidated.getFloor(upperRoom.getFloorId()).orElseThrow().floorNumber());
     }
 
     @Test
@@ -295,12 +298,14 @@ class VillageFloorSystemTest {
             Building room = village.getBuildings().get(2);
             room.addBlock(Blocks.CRAFTING_TABLE, BlockPos.ZERO);
 
-            RoomInheritanceUpdate update = RoomInheritanceUpdate.analyze(village, room, false);
+            List<String> matchingTypes = village.getMatchingRoomTypes(room).stream()
+                    .map(BuildingType::name)
+                    .toList();
 
-            assertEquals(List.of("workshop"), update.matchingTypes());
-            assertFalse(update.requiresTypeSelection());
+            assertEquals(List.of("workshop"), matchingTypes);
+            assertFalse(RoomTypeResolver.requiresTypeChoice(matchingTypes));
             assertEquals(Building.validationResult.SUCCESS,
-                    village.commitRoomInheritanceUpdate(update, null));
+                    village.updateRoomInheritance(room, false, null));
             assertFalse(room.contributesToMain());
             assertEquals("workshop", room.getType());
             assertFalse(room.isTypeForced());
@@ -316,12 +321,11 @@ class VillageFloorSystemTest {
             Village village = populatedVillage();
             Building room = village.getBuildings().get(2);
             room.addBlock(Blocks.CRAFTING_TABLE, BlockPos.ZERO);
-            RoomInheritanceUpdate update = RoomInheritanceUpdate.analyze(village, room, false);
             String typeBefore = room.getType();
             boolean forcedBefore = room.isTypeForced();
 
             assertEquals(Building.validationResult.INVALID_TYPE,
-                    village.commitRoomInheritanceUpdate(update, "not_eligible"));
+                    village.updateRoomInheritance(room, false, "not_eligible"));
             assertTrue(room.contributesToMain());
             assertEquals(typeBefore, room.getType());
             assertEquals(forcedBefore, room.isTypeForced());
@@ -337,11 +341,15 @@ class VillageFloorSystemTest {
             Village village = populatedVillage();
             Building room = village.getBuildings().get(2);
             room.addBlock(Blocks.CRAFTING_TABLE, BlockPos.ZERO);
-            RoomInheritanceUpdate update = RoomInheritanceUpdate.analyze(village, room, false);
+            List<String> matchingTypes = village.getMatchingRoomTypes(room).stream()
+                    .map(BuildingType::name)
+                    .toList();
 
-            assertTrue(update.requiresTypeSelection());
+            assertTrue(RoomTypeResolver.requiresTypeChoice(matchingTypes));
+            assertEquals(Building.validationResult.INVALID_TYPE,
+                    village.updateRoomInheritance(room, false, null));
             assertEquals(Building.validationResult.SUCCESS,
-                    village.commitRoomInheritanceUpdate(update, "workshop"));
+                    village.updateRoomInheritance(room, false, "workshop"));
             assertFalse(room.contributesToMain());
             assertEquals("workshop", room.getType());
             assertTrue(room.isTypeForced());
@@ -1157,12 +1165,12 @@ class VillageFloorSystemTest {
                 region(76, 20, 0))), room(140, 40, 0, true));
     }
 
-    private static BuildingScanResult pendingInsertion(Village village, int direction) {
+    private static RoomWorkflow.Addition pendingInsertion(Village village, int direction) {
         Structure pending = structure(-1, 10, floor(0, 64 + 6 * direction).withFloorNumber(direction));
         Building room = room(-1, -1, 0, true);
         ensureRoomOwnership(pending, room);
-        return new BuildingScanResult(Building.validationResult.SUCCESS, room.getSourceBlock(), room,
-                List.of(), village, pending, RoomScanPlan.attachment(10, direction, room.getSourceBlock(), room.getSourceBlock()));
+        return new RoomWorkflow.Addition(Building.validationResult.SUCCESS, room.getSourceBlock(), room,
+                List.of(), village, pending, RoomWorkflow.Plan.attachment(10, direction, room.getSourceBlock(), room.getSourceBlock()));
     }
 
     private static Structure structure(int id, int logicalId, StructureFloor... floors) {

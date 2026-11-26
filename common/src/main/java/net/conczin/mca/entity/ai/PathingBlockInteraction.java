@@ -61,7 +61,6 @@ public final class PathingBlockInteraction {
     /** An upright panel is a doorway only while crossing its own path node, along its blocking axis. */
     public static boolean canFoldUprightTrapdoor(BlockState state, BlockPos node, @Nullable BlockPos adjacent) {
         if (!isHandOpenableTrapDoor(state) || !state.getValue(TrapDoorBlock.OPEN)
-                || state.getValue(TrapDoorBlock.POWERED)
                 || adjacent == null || adjacent.getY() != node.getY()) return false;
         int dx = Math.abs(node.getX() - adjacent.getX());
         int dz = Math.abs(node.getZ() - adjacent.getZ());

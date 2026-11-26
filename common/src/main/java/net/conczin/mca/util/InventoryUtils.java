@@ -1,6 +1,7 @@
 package net.conczin.mca.util;
 
 import net.conczin.mca.registry.DataComponentsMCA;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
@@ -17,6 +18,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.ProjectileWeaponItem;
 import net.minecraft.world.item.component.ItemAttributeModifiers;
 import net.minecraft.world.item.equipment.Equippable;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.level.storage.TagValueOutput;
 import org.jetbrains.annotations.Nullable;
@@ -28,6 +30,13 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 public interface InventoryUtils {
+    static void insertOrDropAt(SimpleContainer inventory, ItemStack stack, ServerLevel world, BlockPos sourcePos) {
+        ItemStack remainder = inventory.addItem(stack);
+        if (!remainder.isEmpty()) {
+            Block.popResource(world, sourcePos, remainder);
+        }
+    }
+
     static ItemStack temporary(ItemStack stack) {
         if (!stack.isEmpty()) {
             stack.set(DataComponentsMCA.TEMPORARY, true);

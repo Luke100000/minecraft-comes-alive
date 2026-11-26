@@ -7,6 +7,7 @@ import com.mojang.authlib.GameProfile;
 import net.conczin.mca.entity.MCAFishingBobberEntity;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
+import net.conczin.mca.entity.ai.ActivitiesMCA;
 import net.conczin.mca.entity.ai.Chore;
 import net.conczin.mca.entity.ai.navigation.PathRequestDiagnostics;
 import net.conczin.mca.entity.ai.navigation.PersistentPathTarget;
@@ -25,6 +26,7 @@ import net.minecraft.world.entity.ai.behavior.Behavior;
 import net.minecraft.world.entity.ai.behavior.LookAtTargetSink;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.schedule.Activity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
@@ -819,11 +821,19 @@ public final class FishingSiteGameTests {
     public static void noWaterNeverEquipsRodAcrossRetries(GameTestHelper helper) {
         BlockPos start = prepare(helper);
         VillagerEntityMCA villager = spawn(helper, start);
+        // The fixture manually ticks the task with AI off; its scheduled REST
+        // activity must not prevent this tool-ownership scenario from starting.
+        villager.getBrain().setActiveActivityIfPossible(ActivitiesMCA.CHORE);
         Session task = new Session(helper.makeMockPlayer(GameType.SURVIVAL));
         int starts = 0;
         try {
             for (int tick = 0; tick < 900; tick++) {
                 villager.tickCount++;
+                // A waterless search can remain RUNNING indefinitely; simulate an
+                // interruption to exercise another real task start and cleanup.
+                if (tick == 450 && task.getStatus() == Behavior.Status.RUNNING) {
+                    task.doStop(helper.getLevel(), villager, tick);
+                }
                 if (task.getStatus() == Behavior.Status.STOPPED && task.tryStart(helper.getLevel(), villager, tick)) starts++;
                 if (task.getStatus() == Behavior.Status.RUNNING) task.tickOrStop(helper.getLevel(), villager, tick);
                 helper.assertTrue(villager.getItemInHand(villager.getDominantHand()).isEmpty(), "no-water attempt flashed a rod at tick " + tick);
@@ -955,6 +965,77 @@ public final class FishingSiteGameTests {
             helper.assertTrue(villager.getItemInHand(villager.getDominantHand()).isEmpty(), "stopped task retained rod");
             helper.assertTrue(villager.getInventory().countItem(Items.FISHING_ROD) == 1, "cleanup changed inventory rod count");
         } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void reelAtDiscoveredSiteLaunchesAndDeliversCatch(GameTestHelper helper) throws ReflectiveOperationException {
+        BlockPos start = prepare(helper);
+        pond(helper.getLevel(), start.east(5), 2, true);
+        VillagerEntityMCA villager = spawn(helper, start);
+        Player assigner = helper.makeMockPlayer(GameType.SURVIVAL);
+        FishingTask task = new FishingTask() {
+            @Override Optional<Player> getAssigningPlayer() { return Optional.of(assigner); }
+            @Override List<ItemStack> getFishingLoot(ServerLevel world, VillagerEntityMCA fisher) {
+                return List.of(new ItemStack(Items.COD));
+            }
+        };
+        ItemEntity reelItem = null;
+        try {
+            task.start(helper.getLevel(), villager, 0);
+            for (int tick = 0; tick < 600 && villager.getFishingBobber() == null; tick++) {
+                task.tick(helper.getLevel(), villager, tick);
+            }
+            var bobber = villager.getFishingBobber();
+            helper.assertTrue(bobber != null, "stationary safe-site fixture never cast");
+            for (int tick = 0; tick < 40 && !bobber.isBobbing() && !bobber.isRemoved(); tick++) {
+                bobber.tick();
+            }
+            helper.assertTrue(bobber.isBobbing(), "cast never reached the discovered pond");
+            assertSafeStanding(helper, villager);
+
+            Vec3 reelOrigin = bobber.position();
+            var reelArea = bobber.getBoundingBox().inflate(1.0);
+            var itemsBefore = helper.getLevel().getEntitiesOfClass(ItemEntity.class, reelArea);
+            int startingFish = villager.getInventory().countItem(Items.COD);
+            var beginReel = FishingTask.class.getDeclaredMethod("beginReel", ServerLevel.class, VillagerEntityMCA.class);
+            beginReel.setAccessible(true);
+            beginReel.invoke(task, helper.getLevel(), villager);
+
+            var launched = helper.getLevel().getEntitiesOfClass(ItemEntity.class, reelArea,
+                    item -> item.getItem().is(Items.COD) && !itemsBefore.contains(item) && item.position().equals(reelOrigin));
+            helper.assertTrue(launched.size() == 1, "reel did not launch one cod from the landed bobber");
+            reelItem = launched.getFirst();
+            helper.assertTrue(reelItem.getClass() == ItemEntity.class, "reel did not spawn an ordinary item");
+            helper.assertTrue(villager.getFishingBobber() == null, "reel did not clear the cast bobber");
+            Vec3 towardFisher = villager.position().subtract(reelOrigin);
+            Vec3 launchVelocity = reelItem.getDeltaMovement();
+            helper.assertTrue(launchVelocity.x * towardFisher.x + launchVelocity.z * towardFisher.z > 0.0
+                            && launchVelocity.y > 0.0,
+                    "reel did not launch the catch up and toward the fisher");
+
+            helper.assertTrue(villager.getInventory().countItem(Items.COD) == startingFish,
+                    "fisher was credited at launch");
+
+            long time = helper.getLevel().getGameTime();
+            task.tick(helper.getLevel(), villager, time);
+            helper.assertTrue(!reelItem.isRemoved() && reelItem.needsSync
+                            && reelItem.getDeltaMovement().subtract(launchVelocity).dot(towardFisher) > 0.0,
+                    "airborne reel did not accelerate toward the fisher");
+            for (int tick = 1; tick < 40 && !reelItem.isRemoved(); tick++) {
+                reelItem.tick();
+                task.tick(helper.getLevel(), villager, time + tick);
+            }
+            helper.assertTrue(reelItem.isRemoved(), "delivered reel remained in the world");
+            helper.assertTrue(villager.getInventory().countItem(Items.COD) == startingFish + 1,
+                    "fisher inventory did not receive exactly one cod");
+        } finally {
+            task.stop(helper.getLevel(), villager, helper.getLevel().getGameTime());
+            villager.discard();
+            if (reelItem != null && !reelItem.isRemoved()) {
+                reelItem.discard();
+            }
+        }
         helper.succeed();
     }
 

@@ -25,14 +25,21 @@ public class Memories {
         lastSeen = time / 24000L;
     }
 
-    public static <E extends Mob & VillagerLike<E>> Memories fromCNBT(E villager, @Nullable CompoundTag tag) {
+    @Nullable
+    public static <E extends Mob & VillagerLike<E>> Memories fromCNBT(@Nullable E villager, @Nullable CompoundTag tag) {
         if (tag == null || tag.isEmpty()) {
             return null;
         }
 
         // Saved memories can contain either a UUID int array or a UUID string.
-        UUID playerUuid = tag.read("playerUUID", UUIDUtil.LENIENT_CODEC).orElse(new UUID(0L, 0L));
-        Memories memories = new Memories(villager.getVillagerBrain(), villager.level().getOverworldClockTime(), playerUuid);
+        UUID playerUUID = tag.read("playerUUID", UUIDUtil.LENIENT_CODEC).orElse(null);
+        if (playerUUID == null) {
+            return null;
+        }
+
+        VillagerBrain<?> brain = villager != null ? villager.getVillagerBrain() : null;
+        long dayTime = villager != null && villager.level() != null ? villager.level().getOverworldClockTime() : 0L;
+        Memories memories = new Memories(brain, dayTime, playerUUID);
 
         memories.hearts = tag.getInt("hearts").orElse(0);
         memories.interactionFatigue = tag.getInt("interactionFatigue").orElse(0);
@@ -52,7 +59,9 @@ public class Memories {
 
     public void setHearts(int value) {
         this.hearts = value;
-        brain.updateMemories(this);
+        if (brain != null) {
+            brain.updateMemories(this);
+        }
     }
 
     public void modHearts(int value) {
@@ -65,12 +74,16 @@ public class Memories {
 
     public void setInteractionFatigue(int value) {
         this.interactionFatigue = value;
-        brain.updateMemories(this);
+        if (brain != null) {
+            brain.updateMemories(this);
+        }
     }
 
     public void modInteractionFatigue(int value) {
         this.interactionFatigue += value;
-        brain.updateMemories(this);
+        if (brain != null) {
+            brain.updateMemories(this);
+        }
     }
 
     public DialogueType getDialogueType() {
@@ -79,7 +92,9 @@ public class Memories {
 
     public void setDialogueType(DialogueType dialogueType) {
         this.dialogueType = dialogueType;
-        brain.updateMemories(this);
+        if (brain != null) {
+            brain.updateMemories(this);
+        }
     }
 
     public long getLastSeen() {
@@ -88,7 +103,9 @@ public class Memories {
 
     public void setLastSeen(int lastSeen) {
         this.lastSeen = lastSeen;
-        brain.updateMemories(this);
+        if (brain != null) {
+            brain.updateMemories(this);
+        }
     }
 
     public CompoundTag toCNBT() {

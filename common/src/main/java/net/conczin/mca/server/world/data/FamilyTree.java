@@ -21,7 +21,6 @@ public class FamilyTree extends SavedData {
     private static final String DATA_ID = "family_tree";
     private static final String LEGACY_DATA_ID = "MCA-FamilyTree";
 
-
     private final Map<UUID, FamilyTreeNode> entries;
 
     FamilyTree(ServerLevel world) {
@@ -57,13 +56,13 @@ public class FamilyTree extends SavedData {
     }
 
     public Stream<FamilyTreeNode> getAllWithNameContaining(String name) {
-        String query = normalizeNameSearch(name.trim());
+        String query = FamilyTreeNode.normalizeSearchName(name.trim());
         if (query.isEmpty()) {
             return Stream.empty();
         }
 
         return entries.values().stream()
-                .map(n -> new NameSearchResult(n, normalizeNameSearch(n.getName())))
+                .map(n -> new NameSearchResult(n, n.normalizedSearchName()))
                 .filter(result -> result.normalizedName().contains(query))
                 .sorted(nameSearchOrder(query))
                 .map(NameSearchResult::node);
@@ -74,7 +73,7 @@ public class FamilyTree extends SavedData {
             return List.of();
         }
 
-        String query = normalizeNameSearch(name.trim());
+        String query = FamilyTreeNode.normalizeSearchName(name.trim());
         if (query.isEmpty()) {
             return List.of();
         }
@@ -82,7 +81,7 @@ public class FamilyTree extends SavedData {
         Comparator<NameSearchResult> order = nameSearchOrder(query);
         PriorityQueue<NameSearchResult> bestMatches = new PriorityQueue<>(limit, order.reversed());
         for (FamilyTreeNode node : entries.values()) {
-            String normalizedName = normalizeNameSearch(node.getName());
+            String normalizedName = node.normalizedSearchName();
             if (!normalizedName.contains(query)) {
                 continue;
             }
@@ -106,10 +105,6 @@ public class FamilyTree extends SavedData {
                 .comparingInt((NameSearchResult result) -> result.normalizedName().startsWith(query) ? 0 : 1)
                 .thenComparing(NameSearchResult::normalizedName)
                 .thenComparing(result -> result.node().id());
-    }
-
-    private static String normalizeNameSearch(String name) {
-        return net.conczin.mca.MCA.normalizeString(name);
     }
 
     private record NameSearchResult(FamilyTreeNode node, String normalizedName) {

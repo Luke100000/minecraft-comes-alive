@@ -18,13 +18,19 @@ import net.minecraft.world.item.equipment.Equippable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(HumanoidArmorLayer.class)
 @SuppressWarnings({"rawtypes", "unchecked"})
 public abstract class MixinHumanoidArmorLayer {
     @Unique
-    private final ArmorModelSet<HumanoidModel<?>> mca$armorModels = VillagerEntityModelMCA.armorData()
-            .map(MixinHumanoidArmorLayer::mca$createModel);
+    private ArmorModelSet<HumanoidModel<?>> mca$armorModels;
+
+    @Inject(method = "<init>(Lnet/minecraft/client/renderer/entity/RenderLayerParent;Lnet/minecraft/client/renderer/entity/ArmorModelSet;Lnet/minecraft/client/renderer/entity/ArmorModelSet;Lnet/minecraft/client/renderer/entity/layers/EquipmentLayerRenderer;)V", at = @At("RETURN"))
+    private void mca$initArmorModels(CallbackInfo ci) {
+        mca$armorModels = VillagerEntityModelMCA.armorData().map(MixinHumanoidArmorLayer::mca$createModel);
+    }
 
     @Unique
     private static HumanoidModel<?> mca$createModel(MeshDefinition mesh) {
@@ -36,7 +42,7 @@ public abstract class MixinHumanoidArmorLayer {
             at = @At("RETURN")
     )
     private HumanoidModel<?> mca$selectArmorModel(HumanoidModel<?> original, HumanoidRenderState state, EquipmentSlot slot) {
-        if (!(state instanceof AvatarRenderState) || !(state instanceof VillagerStateHolder holder) || !holder.mca$isGeneticsRendererActive()) {
+        if (mca$armorModels == null || !(state instanceof AvatarRenderState) || !(state instanceof VillagerStateHolder holder) || !holder.mca$isGeneticsRendererActive()) {
             return original;
         }
 

@@ -80,7 +80,7 @@ public class FamilyTreeSearchScreen extends Screen {
 
         renderVillagers(context, mouseX, mouseY);
 
-        context.centeredText(font, Component.translatable("gui.title.family_tree"), width / 2, height / 2 - 100, 16777215);
+        context.centeredText(font, Component.translatable("gui.title.family_tree"), width / 2, height / 2 - 100, 0xFFFFFFFF);
     }
 
     private void renderVillagers(GuiGraphicsExtractor context, int mouseX, int mouseY) {

@@ -8,6 +8,7 @@ import net.conczin.mca.client.render.layer.SkinLayer;
 import net.conczin.mca.client.render.layer.VillagerFishingLineLayer;
 import net.conczin.mca.entity.MCAFishingBobberEntity;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.VillagerLike;
 import net.minecraft.client.model.geom.builders.CubeDeformation;
 import net.minecraft.client.model.geom.builders.LayerDefinition;
 import net.minecraft.client.model.geom.builders.MeshDefinition;
@@ -32,6 +33,10 @@ public class VillagerEntityMCARenderer extends VillagerLikeEntityMCARenderer<Vil
     @Override
     public void extractRenderState(VillagerEntityMCA entity, VillagerRenderState state, float partialTicks) {
         super.extractRenderState(entity, state, partialTicks);
+        if (state.bedOrientation != null && entity.hasPose(net.minecraft.world.entity.Pose.SLEEPING)) {
+            state.eyeHeight += VillagerLike.PLAYER_MODEL_EYE_HEIGHT
+                    * (entity.getVisualVerticalScaleFactor() - entity.getPhysicalVerticalScaleFactor());
+        }
         MCAFishingBobberEntity bobber = findOwnedBobber(entity);
         state.fishingHookPosition = bobber == null
                 ? null

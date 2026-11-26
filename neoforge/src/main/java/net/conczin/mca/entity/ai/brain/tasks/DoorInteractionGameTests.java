@@ -14,6 +14,7 @@ import net.minecraft.core.GlobalPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DoorBlock;
@@ -291,6 +292,122 @@ public final class DoorInteractionGameTests {
                     "raised gate stayed open after the path cleared it");
             helper.succeed();
         } finally {
+            villager.discard();
+        }
+    }
+
+    @GameTest(batch = "mca_head_gate_replanned_passage", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 40)
+    public static void replannedPathKeepsHeadHeightGateOpenWhileApproachingThroughIt(GameTestHelper helper) {
+        var level = helper.getLevel();
+        BlockPos beforeGate = helper.absolutePos(new BlockPos(4, 3, 4));
+        BlockPos beneathGate = beforeGate.east();
+        BlockPos afterGate = beneathGate.east();
+        BlockPos destination = afterGate.east();
+        BlockPos gate = beneathGate.above();
+        for (BlockPos step : List.of(beforeGate, beneathGate, afterGate, destination)) {
+            level.setBlock(step.below(), Blocks.STONE.defaultBlockState(), 3);
+        }
+        level.setBlock(gate, Blocks.OAK_FENCE_GATE.defaultBlockState(), 3);
+
+        boolean originalGateConfig = Config.getInstance().villagersInteractWithFenceGates;
+        VillagerEntityMCA villager = VillagerFactory.newVillager(level)
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(beforeGate))
+                .withName("Replanned Head Gate Probe").spawn(EntitySpawnReason.STRUCTURE);
+        villager.setNoAi(true);
+        villager.refreshBrain(level);
+        try {
+            Config.getInstance().villagersInteractWithFenceGates = true;
+            Path initial = new Path(List.of(
+                    node(beforeGate), node(beneathGate), node(afterGate), node(destination)), destination, true);
+            initial.setNextNodeIndex(1);
+            villager.getBrain().setMemory(MemoryModuleType.PATH, initial);
+            long now = level.getGameTime();
+            SmarterOpenDoorsTask opening = new SmarterOpenDoorsTask();
+            helper.assertTrue(opening.tryStart(level, villager, now)
+                            && level.getBlockState(gate).getValue(BlockStateProperties.OPEN),
+                    "head-height fence gate was not opened for the original path");
+            opening.doStop(level, villager, now);
+
+            // A navigation replan can start with the next waypoint beyond the gate,
+            // although the villager still has to pass physically beneath it.
+            Path replanned = new Path(List.of(node(afterGate), node(destination)), destination, true);
+            villager.getBrain().setMemory(MemoryModuleType.PATH, replanned);
+            helper.assertTrue(!villager.getBoundingBox().intersects(
+                            gate.getX(), gate.getY(), gate.getZ(),
+                            gate.getX() + 1.0D, gate.getY() + 1.0D, gate.getZ() + 1.0D),
+                    "fixture villager already overlaps the head-height gate");
+            SmarterOpenDoorsTask replannedTask = new SmarterOpenDoorsTask();
+            helper.assertTrue(replannedTask.tryStart(level, villager, now + 1),
+                    "door task did not run after the replacement path");
+            helper.assertTrue(level.getBlockState(gate).getValue(BlockStateProperties.OPEN),
+                    "head-height gate closed while the new path still crosses it");
+            helper.assertTrue(villager.getBrain().getMemory(MemoryModuleType.DOORS_TO_CLOSE)
+                            .orElse(Set.of()).contains(GlobalPos.of(level.dimension(), gate)),
+                    "head-height gate ownership was dropped before passage");
+
+            replannedTask.doStop(level, villager, now + 1);
+            villager.setPos(Vec3.atBottomCenterOf(destination));
+            SmarterOpenDoorsTask afterPassage = new SmarterOpenDoorsTask();
+            helper.assertTrue(afterPassage.tryStart(level, villager, now + 2),
+                    "door task did not run after the villager cleared the gate");
+            helper.assertTrue(!level.getBlockState(gate).getValue(BlockStateProperties.OPEN),
+                    "head-height gate remained open after the villager cleared its passage");
+            helper.succeed();
+        } finally {
+            Config.getInstance().villagersInteractWithFenceGates = originalGateConfig;
+            villager.discard();
+        }
+    }
+
+    @GameTest(batch = "mca_head_gate_path_loss", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 40)
+    public static void lostPathKeepsGateOpenBrieflyButEventuallyClosesWithPersistentWalkTarget(GameTestHelper helper) {
+        var level = helper.getLevel();
+        BlockPos beforeGate = helper.absolutePos(new BlockPos(4, 3, 4));
+        BlockPos beneathGate = beforeGate.east();
+        BlockPos destination = beneathGate.east(2);
+        BlockPos gate = beneathGate.above();
+        for (BlockPos step : List.of(beforeGate, beneathGate, beneathGate.east(), destination)) {
+            level.setBlock(step.below(), Blocks.STONE.defaultBlockState(), 3);
+        }
+        level.setBlock(gate, Blocks.OAK_FENCE_GATE.defaultBlockState(), 3);
+
+        boolean originalGateConfig = Config.getInstance().villagersInteractWithFenceGates;
+        VillagerEntityMCA villager = VillagerFactory.newVillager(level)
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(beforeGate))
+                .withName("Lost Path Head Gate Probe").spawn(EntitySpawnReason.STRUCTURE);
+        villager.setNoAi(true);
+        villager.refreshBrain(level);
+        try {
+            Config.getInstance().villagersInteractWithFenceGates = true;
+            Path initial = new Path(List.of(node(beforeGate), node(beneathGate), node(destination)), destination, true);
+            initial.setNextNodeIndex(1);
+            villager.getBrain().setMemory(MemoryModuleType.PATH, initial);
+            long now = level.getGameTime();
+            SmarterOpenDoorsTask task = new SmarterOpenDoorsTask();
+            helper.assertTrue(task.tryStart(level, villager, now)
+                            && level.getBlockState(gate).getValue(BlockStateProperties.OPEN),
+                    "head-height gate was not opened on the original path");
+            task.doStop(level, villager, now);
+
+            villager.getBrain().eraseMemory(MemoryModuleType.PATH);
+            villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(destination, 0.5F, 1));
+            helper.assertTrue(task.tryStart(level, villager, now + 1),
+                    "door task did not run after the active path disappeared");
+            helper.assertTrue(level.getBlockState(gate).getValue(BlockStateProperties.OPEN),
+                    "head-height gate closed immediately during a path-loss transition");
+
+            task.doStop(level, villager, now + 1);
+            helper.assertTrue(task.tryStart(level, villager, now + 60),
+                    "door task did not revisit the open gate after the lost-path grace expired");
+            helper.assertTrue(villager.getBrain().hasMemoryValue(MemoryModuleType.WALK_TARGET),
+                    "fixture lost its persistent destination before testing gate cleanup");
+            helper.assertTrue(!level.getBlockState(gate).getValue(BlockStateProperties.OPEN),
+                    "head-height gate stayed open indefinitely because an unreachable destination remained");
+            helper.succeed();
+        } finally {
+            Config.getInstance().villagersInteractWithFenceGates = originalGateConfig;
             villager.discard();
         }
     }

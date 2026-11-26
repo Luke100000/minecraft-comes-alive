@@ -1,6 +1,7 @@
 package net.conczin.mca.server.world.data;
 
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.tags.BlockTags;
@@ -21,6 +22,7 @@ final class SelectedFloorScanner {
     private static final int FLOOR_BAND_RADIUS = 2;
     // Per door-separated region; canonical Floor cells still share the global maxSize.
     private static final int MAX_EXPOSED_SURFACE_CELLS = 64;
+    static final int MAX_EXTERIOR_PROBE_COLUMNS = 16_384;
     private static final int MAX_FRAME_HEIGHT = 4;
     private static final Comparator<BlockPos> CELL_ORDER = Comparator
             .comparingInt((BlockPos pos) -> pos.getX())
@@ -1065,6 +1067,10 @@ final class SelectedFloorScanner {
         visitedFloor.add(start.feet());
 
         while (!floorQueue.isEmpty() || !openQueue.isEmpty()) {
+            if (visitedFloor.size() + visitedOpen.size() > MAX_EXTERIOR_PROBE_COLUMNS) {
+                exterior.put(start.feet(), true);
+                return true;
+            }
             if (!openQueue.isEmpty()) {
                 BlockPos open = openQueue.removeFirst();
                 if (horizontalDistance(open, scanAnchor) >= maxRadius - 1) {
@@ -1202,18 +1208,18 @@ final class SelectedFloorScanner {
             BlockGetter world, FloorGeometry floor, Set<BlockPos> connectors) {
         int baseY = floor.minFeetY();
         var heightsByColumn = new Long2ObjectOpenHashMap<BitSet>();
+        var inspectedSupports = new LongOpenHashSet();
         BlockPos.MutableBlockPos probe = new BlockPos.MutableBlockPos();
         for (FloorGeometry.Cell cell : floor.cells()) {
             probe.set(cell.feet().getX(), cell.feet().getY() - 1, cell.feet().getZ());
-            collectVerticalConnectorAt(world, probe, true, connectors);
+            if (inspectedSupports.add(probe.asLong())) collectVerticalConnectorAt(world, probe, true, connectors);
             heightsByColumn.computeIfAbsent(FloorGeometry.columnKey(probe.getX(), probe.getZ()),
                     ignored -> new BitSet()).set(cell.feet().getY() - baseY, cell.ceilingY() - baseY);
             for (Direction direction : HORIZONTAL) {
                 probe.set(cell.feet().getX() + direction.getStepX(), cell.feet().getY() - 1,
                         cell.feet().getZ() + direction.getStepZ());
-                // Each exact floor bottom retains its own short-gap check, including
-                // uneven floors. Only direct upper probes can be safely unioned.
-                collectVerticalConnectorAt(world, probe, true, connectors);
+                // Different support heights can expose different short-gap exits.
+                if (inspectedSupports.add(probe.asLong())) collectVerticalConnectorAt(world, probe, true, connectors);
                 heightsByColumn.computeIfAbsent(FloorGeometry.columnKey(probe.getX(), probe.getZ()),
                         ignored -> new BitSet()).set(cell.feet().getY() - baseY, cell.ceilingY() - baseY);
             }
@@ -1230,6 +1236,7 @@ final class SelectedFloorScanner {
 
     private static void collectVerticalConnectorAt(
             BlockGetter world, BlockPos candidate, boolean includeTopExit, Set<BlockPos> connectors) {
+        if (!isLoadedColumn(world, candidate)) return;
         BlockPos connector;
         if (includeTopExit) {
             connector = StructureConnector.verticalInteractionConnector(world, candidate);
@@ -1237,7 +1244,9 @@ final class SelectedFloorScanner {
             FloorConnector.Type type = FloorConnector.Type.fromBlockState(world.getBlockState(candidate));
             connector = type != null && type.vertical() ? candidate : null;
         }
-        if (connector != null && !connectors.contains(connector) && StructureConnector.isVertical(world, connector)) {
+        if (connector != null && !connectors.contains(connector)
+                && isLoadedColumn(world, connector)
+                && StructureConnector.isVertical(world, connector)) {
             connectors.add(connector.immutable());
         }
     }

@@ -9,6 +9,8 @@ import net.conczin.mca.server.world.data.*;
 import net.minecraft.SharedConstants;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.input.MouseButtonInfo;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.player.LocalPlayer;
@@ -29,7 +31,9 @@ import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -43,6 +47,24 @@ class BlueprintScreenMapInteractionTest {
     @BeforeEach
     void resetBlueprintSessionState() {
         BlueprintScreen.onClientLevelChanged(new Object());
+    }
+
+    @Test
+    void blankOrRightClickDoesNotOpenResidentTree() throws Exception {
+        Village village = new Village(1, null);
+        UUID resident = UUID.randomUUID();
+        village.getResidentNames().put(resident, "Alice");
+
+        BlueprintScreen screen = new BlueprintScreen();
+        screen.width = 640;
+        screen.height = 480;
+        setField(screen, "village", village);
+        setField(screen, "page", "villagers");
+
+        assertDoesNotThrow(() -> assertFalse(screen.mouseClicked(new MouseButtonEvent(10, 10, new MouseButtonInfo(0, 0)), false),
+                "Blank space must not open stale resident"));
+        assertDoesNotThrow(() -> assertFalse(screen.mouseClicked(new MouseButtonEvent(320, 240, new MouseButtonInfo(1, 0)), false),
+                "Right click must not open any resident"));
     }
 
     @Test
@@ -69,7 +91,7 @@ class BlueprintScreenMapInteractionTest {
         setField(first, "mapCenterX", 123.25D);
         setField(first, "mapCenterZ", -45.75D);
         setField(first, "lastRoomScanPosition", BlockPos.ZERO);
-        setField(first, "cachedRoomScanPlan", RoomScanPlan.addBuilding(BlockPos.ZERO));
+        setField(first, "cachedClientTarget", Village.ClientPositionTarget.NONE);
         first.removed();
 
         BlueprintScreen reopened = new BlueprintScreen();
@@ -86,7 +108,7 @@ class BlueprintScreenMapInteractionTest {
         assertEquals(123.25D, getDoubleField(reopened, "mapCenterX"), 0.0000001D);
         assertEquals(-45.75D, getDoubleField(reopened, "mapCenterZ"), 0.0000001D);
         assertEquals(null, getField(reopened, "lastRoomScanPosition"));
-        assertEquals(null, getField(reopened, "cachedRoomScanPlan"));
+        assertEquals(null, getField(reopened, "cachedClientTarget"));
     }
 
     @Test
@@ -215,29 +237,30 @@ class BlueprintScreenMapInteractionTest {
 
     @Test
     void scanMessagesProjectOnlyThePlansActionAndTarget() {
-        RoomScanPlan[] plans = {
-                RoomScanPlan.addBuilding(BlockPos.ZERO),
-                RoomScanPlan.addRoom(7, 3, BlockPos.ZERO),
-                RoomScanPlan.updateRoom(room(42), BlockPos.ZERO),
-                RoomScanPlan.attachment(91, -1, BlockPos.ZERO, BlockPos.ZERO)
+        Village.ClientPositionTarget[] targets = {
+                Village.ClientPositionTarget.NONE,
+                new Village.ClientPositionTarget(Optional.empty(), 7, 3),
+                new Village.ClientPositionTarget(Optional.of(room(42)), 10, 0)
         };
-        var actions = new ReportBuildingMessage.Action[]{ReportBuildingMessage.Action.ADD_BUILDING,
-                ReportBuildingMessage.Action.SCAN_ROOM, ReportBuildingMessage.Action.SCAN_ROOM,
-                ReportBuildingMessage.Action.ADD_ATTACHMENT};
-        int[] targets = {-1, -1, 42, 91};
-        for (int i = 0; i < plans.length; i++) {
-            var message = BlueprintScreen.structureScanMessage(plans[i]);
+        var actions = new ReportBuildingMessage.Action[]{
+                ReportBuildingMessage.Action.ADD_BUILDING,
+                ReportBuildingMessage.Action.SCAN_ROOM,
+                ReportBuildingMessage.Action.SCAN_ROOM
+        };
+        int[] expectedIds = {-1, -1, 42};
+        for (int i = 0; i < targets.length; i++) {
+            var message = BlueprintScreen.structureScanMessage(targets[i]);
             assertEquals(actions[i], message.action());
-            assertEquals(targets[i], message.expectedTargetId());
+            assertEquals(expectedIds[i], message.expectedTargetId());
         }
     }
 
     @Test
     void registeredRoomScanCarriesExpectedRoomId() {
         Building room = room(42);
-        RoomScanPlan plan = RoomScanPlan.updateRoom(room, BlockPos.ZERO);
+        Village.ClientPositionTarget target = new Village.ClientPositionTarget(Optional.of(room), 10, 0);
 
-        ReportBuildingMessage message = BlueprintScreen.structureScanMessage(plan);
+        ReportBuildingMessage message = BlueprintScreen.structureScanMessage(target);
 
         assertEquals(ReportBuildingMessage.Action.SCAN_ROOM, message.action());
         assertEquals(42, message.expectedTargetId());
@@ -251,14 +274,14 @@ class BlueprintScreenMapInteractionTest {
         Field minecraftField = Screen.class.getDeclaredField("minecraft");
         minecraftField.setAccessible(true);
         minecraftField.set(screen, client);
-        setField(screen, "village", new Village(1, null));
         BlockPos position = new BlockPos(4, 64, 8);
+        setField(screen, "village", villageWithStructures(1, List.of(position)));
         Field playerPosition = Entity.class.getDeclaredField("blockPosition");
         playerPosition.setAccessible(true);
         playerPosition.set(client.player, position);
-        Method preview = BlueprintScreen.class.getDeclaredMethod("getPlayerRoomScanPlan");
+        Method preview = BlueprintScreen.class.getDeclaredMethod("getPlayerClientTarget");
         preview.setAccessible(true);
-        RoomScanPlan initial = (RoomScanPlan) preview.invoke(screen);
+        Village.ClientPositionTarget initial = (Village.ClientPositionTarget) preview.invoke(screen);
 
         client.player.tickCount = 20;
         assertSame(initial, preview.invoke(screen));
@@ -267,24 +290,24 @@ class BlueprintScreenMapInteractionTest {
 
         BlockPos movedPosition = position.offset(1, 0, 0);
         playerPosition.set(client.player, movedPosition);
-        RoomScanPlan moved = (RoomScanPlan) preview.invoke(screen);
+        Village.ClientPositionTarget moved = (Village.ClientPositionTarget) preview.invoke(screen);
         assertNotSame(initial, moved);
-        assertEquals(Village.RoomScanMode.ADD_BUILDING, moved.mode());
-        assertEquals(new BlockPos(5, 64, 8), moved.interactionSource());
+        assertEquals(Village.ClientPositionTarget.NONE, moved);
     }
 
     @Test
     void movingWithMapOrAdvancedOpenRefreshesRoomControlsOnTick() throws Exception {
         for (String page : List.of("map", "advanced")) {
-            BlueprintScreen screen = blueprintAt(new BlockPos(4, 64, 8));
+            BlockPos start = new BlockPos(4, 64, 8);
+            BlueprintScreen screen = blueprintAt(start);
             setField(screen, "page", page);
-            setField(screen, "village", new Village(1, null));
-            Method preview = BlueprintScreen.class.getDeclaredMethod("getPlayerRoomScanPlan");
+            setField(screen, "village", villageWithStructures(1, List.of(start)));
+            Method preview = BlueprintScreen.class.getDeclaredMethod("getPlayerClientTarget");
             preview.setAccessible(true);
-            RoomScanPlan initial = (RoomScanPlan) preview.invoke(screen);
+            Village.ClientPositionTarget initial = (Village.ClientPositionTarget) preview.invoke(screen);
 
             screen.tick();
-            assertSame(initial, getField(screen, "cachedRoomScanPlan"), page + " stationary preview");
+            assertSame(initial, getField(screen, "cachedClientTarget"), page + " stationary preview");
 
             Field minecraftField = Screen.class.getDeclaredField("minecraft");
             minecraftField.setAccessible(true);
@@ -296,7 +319,7 @@ class BlueprintScreenMapInteractionTest {
 
             screen.tick();
             assertEquals(moved, getField(screen, "lastRoomScanPosition"), page + " movement position");
-            assertNotSame(initial, getField(screen, "cachedRoomScanPlan"), page + " movement preview");
+            assertNotSame(initial, getField(screen, "cachedClientTarget"), page + " movement preview");
         }
     }
 
@@ -333,7 +356,7 @@ class BlueprintScreenMapInteractionTest {
         assertTrue(remove.active, "Standing on an empty upper floor enables that floor's removal");
         assertEquals(Component.translatable("gui.blueprint.removeFloor"), remove.getMessage());
         assertEquals("1:10:1", BlueprintScreen.targetedEditMessage(
-                ReportBuildingMessage.Action.REMOVE_FLOOR, village, village.getRoomScanPlan(null, new BlockPos(0, 72, 0)))
+                ReportBuildingMessage.Action.REMOVE_FLOOR, village, village.resolveClientTarget(new BlockPos(0, 72, 0)))
                 .orElseThrow().data(), "Displayed ground-floor selection must not alter the player's removal target");
     }
 
@@ -342,30 +365,39 @@ class BlueprintScreenMapInteractionTest {
         BlueprintScreen screen = new BlueprintScreen();
         setField(screen, "page", "map");
         setField(screen, "lastRoomScanPosition", BlockPos.ZERO);
-        setField(screen, "cachedRoomScanPlan", RoomScanPlan.addBuilding(BlockPos.ZERO));
+        setField(screen, "cachedClientTarget", Village.ClientPositionTarget.NONE);
 
         screen.setVillage(new Village(1, null));
 
         assertEquals(null, getField(screen, "lastRoomScanPosition"));
-        assertEquals(null, getField(screen, "cachedRoomScanPlan"));
+        assertEquals(null, getField(screen, "cachedClientTarget"));
     }
 
     @Test
-    void attachmentButtonDistinguishesBasementsFromUpperFloors() throws Exception {
+    void structureScanButtonUsesO1PersistedTargetLabels() throws Exception {
         BlueprintScreen screen = new BlueprintScreen();
         TooltipButtonWidget button = new TooltipButtonWidget(0, 0, 100, 20, "", ignored -> {});
         setField(screen, "structureScanButton", button);
-        Method update = BlueprintScreen.class.getDeclaredMethod("updateStructureScanControl", RoomScanPlan.class);
+        Method update = BlueprintScreen.class.getDeclaredMethod(
+                "updateStructureScanControl", Village.ClientPositionTarget.class);
         update.setAccessible(true);
 
-        for (int floorNumber : List.of(-1, -2, 1, 2, Integer.MIN_VALUE)) {
-            RoomScanPlan plan = RoomScanPlan.attachment(10, floorNumber, BlockPos.ZERO, BlockPos.ZERO);
-            update.invoke(screen, plan);
-            assertEquals(Component.translatable(plan.hasProspectiveFloor() && floorNumber < 0
-                    ? "gui.blueprint.addBasement" : "gui.blueprint.addFloor"), button.getMessage());
-            assertEquals(ReportBuildingMessage.Action.ADD_ATTACHMENT,
-                    BlueprintScreen.structureScanMessage(plan).action());
-        }
+        update.invoke(screen, Village.ClientPositionTarget.NONE);
+        assertEquals(Component.translatable("gui.blueprint.addStructure"), button.getMessage());
+        assertEquals(ReportBuildingMessage.Action.ADD_BUILDING,
+                BlueprintScreen.structureScanMessage(Village.ClientPositionTarget.NONE).action());
+
+        Village.ClientPositionTarget emptyFloor = new Village.ClientPositionTarget(Optional.empty(), 10, 1);
+        update.invoke(screen, emptyFloor);
+        assertEquals(Component.translatable("gui.blueprint.addRoom"), button.getMessage());
+        assertEquals(ReportBuildingMessage.Action.SCAN_ROOM,
+                BlueprintScreen.structureScanMessage(emptyFloor).action());
+
+        Village.ClientPositionTarget registeredRoom = new Village.ClientPositionTarget(Optional.of(room(42)), 10, 0);
+        update.invoke(screen, registeredRoom);
+        assertEquals(Component.translatable("gui.blueprint.updateRoom"), button.getMessage());
+        assertEquals(ReportBuildingMessage.Action.SCAN_ROOM,
+                BlueprintScreen.structureScanMessage(registeredRoom).action());
     }
 
     @Test
@@ -386,8 +418,8 @@ class BlueprintScreenMapInteractionTest {
                 floor(1, 72, 76, 1)));
         Building currentRoom = room(43);
         registerStructure(village, structure, currentRoom);
-        RoomScanPlan roomPlan = RoomScanPlan.updateRoom(currentRoom, BlockPos.ZERO);
-        RoomScanPlan upperFloorPlan = RoomScanPlan.addRoom(10, 1, new BlockPos(0, 72, 0));
+        Village.ClientPositionTarget roomPlan = new Village.ClientPositionTarget(Optional.of(currentRoom), 10, 0);
+        Village.ClientPositionTarget upperFloorPlan = new Village.ClientPositionTarget(Optional.empty(), 10, 1);
 
         ReportBuildingMessage forceType = BlueprintScreen.targetedEditMessage(
                 ReportBuildingMessage.Action.FORCE_TYPE, village, roomPlan).orElseThrow();
@@ -415,7 +447,7 @@ class BlueprintScreenMapInteractionTest {
         Structure structure = new Structure(10, BlockPos.ZERO, List.of(floor(0, 64, 68, 0)));
         Building main = room(43);
         registerStructure(village, structure, main);
-        RoomScanPlan plan = RoomScanPlan.addRoom(10, 0, BlockPos.ZERO);
+        Village.ClientPositionTarget plan = new Village.ClientPositionTarget(Optional.empty(), 10, 0);
 
         ReportBuildingMessage message = BlueprintScreen.targetedEditMessage(
                 ReportBuildingMessage.Action.REMOVE, village, plan).orElseThrow();
@@ -445,9 +477,10 @@ class BlueprintScreenMapInteractionTest {
         assertFalse(button.active);
 
         Method updateInheritanceControl = BlueprintScreen.class.getDeclaredMethod(
-                "updateInheritanceControl", RoomScanPlan.class);
+                "updateInheritanceControl", Village.ClientPositionTarget.class);
         updateInheritanceControl.setAccessible(true);
-        updateInheritanceControl.invoke(screen, RoomScanPlan.updateRoom(room(44), BlockPos.ZERO));
+        updateInheritanceControl.invoke(screen,
+                new Village.ClientPositionTarget(Optional.of(room(44)), 10, 0));
 
         assertTrue(button.visible);
         assertTrue(button.active);
@@ -593,10 +626,12 @@ class BlueprintScreenMapInteractionTest {
             setField(screen, "page", page);
             screen.init();
 
-            Method updateControls = BlueprintScreen.class.getDeclaredMethod("updateMapControls", RoomScanPlan.class);
+            Method updateControls = BlueprintScreen.class.getDeclaredMethod(
+                    "updateMapControls", Village.ClientPositionTarget.class);
             updateControls.setAccessible(true);
-            for (RoomScanPlan scanPlan : List.of(RoomScanPlan.addBuilding(BlockPos.ZERO),
-                    RoomScanPlan.updateRoom(room(44), BlockPos.ZERO))) {
+            for (Village.ClientPositionTarget scanPlan : List.of(
+                    Village.ClientPositionTarget.NONE,
+                    new Village.ClientPositionTarget(Optional.of(room(44)), 10, 0))) {
                 for (var child : screen.children()) {
                     AbstractWidget widget = (AbstractWidget) child;
                     assertTrue(widget.getY() >= 0, page + " control above screen");
@@ -925,7 +960,7 @@ class BlueprintScreenMapInteractionTest {
         otherRoom.setStructureId(20);
         registerStructure(village, other, otherRoom);
 
-        RoomScanPlan plan = RoomScanPlan.addRoom(10, 1, new BlockPos(0, 72, 0));
+        Village.ClientPositionTarget plan = new Village.ClientPositionTarget(Optional.empty(), 10, 1);
         BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan);
 
         assertTrue(state.visible());
@@ -944,8 +979,7 @@ class BlueprintScreenMapInteractionTest {
         main.setFloorId(1);
         registerStructure(village, structure, main);
 
-        RoomScanPlan plan = RoomScanPlan.attachment(
-                10, -1, BlockPos.ZERO, BlockPos.ZERO);
+        Village.ClientPositionTarget plan = Village.ClientPositionTarget.NONE;
         BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan);
 
         assertFalse(state.visible());
@@ -961,7 +995,7 @@ class BlueprintScreenMapInteractionTest {
                     List.of(floor(0, 64, 68, 0),
                             floor(1, 64 + 8 * floorNumber, 68 + 8 * floorNumber, floorNumber)));
             registerStructure(village, structure, room(1));
-            RoomScanPlan plan = RoomScanPlan.addRoom(10, 1, new BlockPos(0, 64 + 8 * floorNumber, 0));
+            Village.ClientPositionTarget plan = new Village.ClientPositionTarget(Optional.empty(), 10, 1);
 
             BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(
                     village, plan);
@@ -985,7 +1019,7 @@ class BlueprintScreenMapInteractionTest {
         Building upperRoom = room(2);
         upperRoom.setFloorId(1);
         registerRoom(village, upperRoom);
-        RoomScanPlan plan = RoomScanPlan.addRoom(10, 1, new BlockPos(1, 72, 0));
+        Village.ClientPositionTarget plan = new Village.ClientPositionTarget(Optional.empty(), 10, 1);
 
         assertFalse(BlueprintScreen.removalControlState(village, plan).visible());
         assertTrue(BlueprintScreen.targetedEditMessage(
@@ -1002,7 +1036,7 @@ class BlueprintScreenMapInteractionTest {
         Building main = room(1);
         registerStructure(village, structure, main);
 
-        RoomScanPlan plan = RoomScanPlan.addRoom(10, 1, new BlockPos(0, 72, 0));
+        Village.ClientPositionTarget plan = new Village.ClientPositionTarget(Optional.empty(), 10, 1);
         BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan);
 
         assertTrue(state.visible());
@@ -1018,7 +1052,7 @@ class BlueprintScreenMapInteractionTest {
         Building main = room(1);
         registerStructure(village, structure, main);
 
-        RoomScanPlan plan = RoomScanPlan.updateRoom(main, BlockPos.ZERO);
+        Village.ClientPositionTarget plan = new Village.ClientPositionTarget(Optional.of(main), 10, 0);
         BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan);
 
         assertTrue(state.visible());
@@ -1037,7 +1071,7 @@ class BlueprintScreenMapInteractionTest {
         Building main = room(1);
         registerStructure(village, structure, main);
 
-        RoomScanPlan plan = RoomScanPlan.updateRoom(main, BlockPos.ZERO);
+        Village.ClientPositionTarget plan = new Village.ClientPositionTarget(Optional.of(main), 10, 0);
         BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan);
 
         assertTrue(state.visible());
@@ -1057,7 +1091,7 @@ class BlueprintScreenMapInteractionTest {
         main.setFloorId(2);
         registerStructure(village, structure, main);
 
-        RoomScanPlan plan = RoomScanPlan.updateRoom(main, BlockPos.ZERO);
+        Village.ClientPositionTarget plan = new Village.ClientPositionTarget(Optional.of(main), 10, 2);
         BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan);
 
         assertTrue(state.visible());
@@ -1077,7 +1111,7 @@ class BlueprintScreenMapInteractionTest {
         main.setFloorId(2);
         registerStructure(village, structure, main);
 
-        RoomScanPlan plan = RoomScanPlan.addRoom(10, 0, new BlockPos(0, 56, 0));
+        Village.ClientPositionTarget plan = new Village.ClientPositionTarget(Optional.empty(), 10, 0);
         BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan);
 
         assertTrue(state.visible());

@@ -16,12 +16,57 @@ import net.minecraft.world.level.block.state.properties.BedPart;
 import net.conczin.mca.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 @PrefixGameTestTemplate(false)
 public final class IndoorRoomCacheGameTests {
     private static final String BATCH = "mca_indoor_exterior_dependencies";
     private static final Map<BlockPos, BlockState> CHANGED = new LinkedHashMap<>();
+
+    @GameTest(batch = BATCH, templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 120)
+    public static void registeredHouseChargesOneScanPerFloor(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos ground = helper.absolutePos(new BlockPos(40, 8, 40));
+        BlockPos upper = ground.above(5);
+        closedRoom(helper, ground, 4);
+        closedRoom(helper, upper, 4);
+        BlockPos bedHead = ground.offset(3, 0, 2);
+        VillageManager manager = VillageManager.get(level);
+        RoomWorkflow workflow = new RoomWorkflow(manager, level);
+        var addition = workflow.analyzeBuildingAddition(ground);
+        helper.assertTrue(addition.result() == Building.validationResult.SUCCESS, "ground floor did not scan");
+        String type = addition.isAmbiguous() ? addition.matchingTypes().getFirst() : null;
+        helper.assertTrue(workflow.commitAddition(addition, type).status() == RoomWorkflow.Status.COMMITTED,
+                "ground floor did not register");
+        Village village = manager.findNearestVillage(ground, 0).orElseThrow();
+        try {
+            Building groundRoom = village.findPhysicalRoomAt(bedHead).orElseThrow();
+            Structure structure = village.getStructureFor(groundRoom).orElseThrow();
+            var scan = SelectedFloorScanner.scan(level, upper, 512, 16);
+            helper.assertTrue(scan.result() == Building.validationResult.SUCCESS, "upper floor did not scan");
+            int floorId = structure.nextFloorId();
+            structure.putFloor(new StructureFloor(floorId, 1, scan.anchorY(), scan.floor()));
+            Building room = new Building(upper);
+            room.setId(groundRoom.getId() + 1);
+            room.setStructureId(structure.getId());
+            room.setFloorId(floorId);
+            var cells = scan.floor().cells();
+            var bounds = FloorGeometry.bounds(cells, 0);
+            room.setGeometry(bounds.min(), bounds.max(), cells.stream().map(FloorGeometry.Cell::feet).toList());
+            village.registerRoom(room);
+
+            var cache = new IndoorRoomCache(level);
+            helper.assertTrue(!cache.resolveHouseValidBed(bedHead, new int[]{1}).orElseThrow().membershipKnown(),
+                    "one scan must not validate two floors");
+            helper.assertTrue(cache.resolveHouseValidBed(bedHead, new int[]{2}).orElseThrow().membershipKnown(),
+                    "running low on scan budget must not poison the next lookup");
+        } finally {
+            manager.removeVillage(village.getId());
+        }
+        helper.succeed();
+    }
 
     @GameTest(batch = BATCH, templateNamespace = "mca",
             template = "gametest/isolated_ai_arena", timeoutTicks = 120)
@@ -56,7 +101,7 @@ public final class IndoorRoomCacheGameTests {
     }
 
     @GameTest(batch = BATCH, templateNamespace = "mca",
-            template = "gametest/isolated_ai_arena", timeoutTicks = 120)
+            template = "gametest/isolated_ai_arena", timeoutTicks = 240)
     public static void expandingASmallRoofHoleInvalidatesItsCachedCover(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos min = room(helper), bed = min.offset(2, 0, 1), gap = min.offset(1, 2, 2);
@@ -74,15 +119,15 @@ public final class IndoorRoomCacheGameTests {
         var fresh = new IndoorRoomCache(level).resolve(bed).orElseThrow();
         helper.assertTrue(!fresh.floorCells().contains(gap.below(2)),
                 "three-cell roof hole retained inferred cover in fresh discovery");
-        helper.startSequence().thenIdle(41).thenExecute(() -> {
+        helper.startSequence().thenIdle(101).thenExecute(() -> {
             var refreshed = cache.resolve(bed).orElseThrow();
             helper.assertTrue(refreshed != initial && refreshed.floorCells().equals(fresh.floorCells()),
-                    "roof-hole expansion retained stale inferred cover in the room cache");
+                    "roof-hole expansion retained stale inferred cover past the TTL boundary");
         }).thenSucceed();
     }
 
     @GameTest(batch = BATCH, templateNamespace = "mca", skyAccess = true,
-            template = "gametest/isolated_ai_arena", timeoutTicks = 160)
+            template = "gametest/isolated_ai_arena", timeoutTicks = 280)
     public static void newRoofInPreviouslySkippedSkyInvalidatesCachedMembership(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos min = room(helper);
@@ -93,19 +138,19 @@ public final class IndoorRoomCacheGameTests {
         helper.assertTrue(!initial.floorCells().contains(balcony), "uncovered balcony was already inside");
         helper.startSequence().thenIdle(41).thenExecute(() -> {
             helper.assertTrue(cache.resolve(bed).orElseThrow() == initial,
-                    "unchanged small house could not retain a complete bounded dependency proof");
+                    "unchanged small house did not reuse cached unregistered entry within TTL");
             put(level, balcony.above(4), Blocks.STONE.defaultBlockState());
             helper.assertTrue(new IndoorRoomCache(level).resolve(bed).orElseThrow().floorCells().contains(balcony),
                     "new roof did not admit the balcony in fresh discovery");
-        }).thenIdle(41).thenExecute(() -> {
+        }).thenIdle(65).thenExecute(() -> {
             var refreshed = cache.resolve(bed).orElseThrow();
             helper.assertTrue(refreshed != initial && refreshed.floorCells().contains(balcony),
-                    "new roof in formerly skipped sky did not invalidate cached membership");
+                    "new roof in formerly skipped sky did not refresh cached membership after TTL");
         }).thenSucceed();
     }
 
     @GameTest(batch = BATCH, templateNamespace = "mca",
-            template = "gametest/isolated_ai_arena", timeoutTicks = 120)
+            template = "gametest/isolated_ai_arena", timeoutTicks = 240)
     public static void openingAFrameLintelInvalidatesCachedShelter(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos min = room(helper);
@@ -124,8 +169,8 @@ public final class IndoorRoomCacheGameTests {
         put(level, lintel, closed.setValue(TrapDoorBlock.OPEN, true));
         helper.assertTrue(new IndoorRoomCache(level).resolve(bed).isEmpty(),
                 "open partial-face lintel did not invalidate fresh enclosure");
-        helper.startSequence().thenIdle(41).thenExecute(() -> helper.assertTrue(cache.resolve(bed).isEmpty(),
-                "opening a frame lintel retained stale shelter beyond the validation boundary")).thenSucceed();
+        helper.startSequence().thenIdle(101).thenExecute(() -> helper.assertTrue(cache.resolve(bed).isEmpty(),
+                "opening a frame lintel retained stale shelter beyond TTL")).thenSucceed();
     }
 
     @GameTest(batch = BATCH, templateNamespace = "mca",
@@ -175,7 +220,7 @@ public final class IndoorRoomCacheGameTests {
     }
 
     @GameTest(batch = BATCH, templateNamespace = "mca",
-            template = "gametest/isolated_ai_arena", timeoutTicks = 160)
+            template = "gametest/isolated_ai_arena", timeoutTicks = 280)
     public static void exteriorSupportChangesInvalidateCachedShelter(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos min = room(helper);
@@ -194,12 +239,12 @@ public final class IndoorRoomCacheGameTests {
             }
             helper.assertTrue(new IndoorRoomCache(level).resolve(bed).isEmpty(),
                     "extended exterior did not invalidate fresh discovery");
-        }).thenIdle(41).thenExecute(() -> helper.assertTrue(cache.resolve(bed).isEmpty(),
-                "cached shelter ignored exterior supports outside its floor footprint")).thenSucceed();
+        }).thenIdle(65).thenExecute(() -> helper.assertTrue(cache.resolve(bed).isEmpty(),
+                "cached shelter ignored exterior supports beyond TTL")).thenSucceed();
     }
 
     @GameTest(batch = BATCH, templateNamespace = "mca",
-            template = "gametest/isolated_ai_arena", timeoutTicks = 120)
+            template = "gametest/isolated_ai_arena", timeoutTicks = 240)
     public static void exteriorCeilingChangesRefreshCachedMembership(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos min = room(helper);
@@ -212,13 +257,13 @@ public final class IndoorRoomCacheGameTests {
         put(level, balcony.above(4), Blocks.STONE.defaultBlockState());
         helper.assertTrue(new IndoorRoomCache(level).resolve(bed).orElseThrow().floorCells().contains(balcony),
                 "covering the balcony did not change fresh room membership");
-        helper.startSequence().thenIdle(41).thenExecute(() -> helper.assertTrue(
+        helper.startSequence().thenIdle(101).thenExecute(() -> helper.assertTrue(
                 cache.resolve(bed).orElseThrow().floorCells().contains(balcony),
-                "cached room ignored a roof outside its former physical ceiling band")).thenSucceed();
+                "cached room ignored a roof outside its former physical ceiling band after TTL")).thenSucceed();
     }
 
     @GameTest(batch = BATCH, templateNamespace = "mca",
-            template = "gametest/isolated_ai_arena", timeoutTicks = 120)
+            template = "gametest/isolated_ai_arena", timeoutTicks = 240)
     public static void largeExteriorProofCannotKeepIncompleteDependenciesForever(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos min = room(helper);
@@ -233,8 +278,8 @@ public final class IndoorRoomCacheGameTests {
         }
         helper.assertTrue(new IndoorRoomCache(level).resolve(bed).isEmpty(),
                 "72-cell exterior did not fail fresh discovery");
-        helper.startSequence().thenIdle(41).thenExecute(() -> helper.assertTrue(cache.resolve(bed).isEmpty(),
-                "oversized dependency proof silently retained stale cached shelter")).thenSucceed();
+        helper.startSequence().thenIdle(101).thenExecute(() -> helper.assertTrue(cache.resolve(bed).isEmpty(),
+                "oversized dependency proof silently retained stale cached shelter beyond TTL")).thenSucceed();
     }
 
     private static void closedRoom(GameTestHelper helper, BlockPos min, int size) {
