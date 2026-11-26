@@ -544,10 +544,10 @@ public final class HomelessShelterGameTests {
         helper.getLevel().setBlock(origin.south().below(), Blocks.STONE.defaultBlockState(), 3);
         VillagerEntityMCA villager = spawn(helper, origin);
         STROLL_VILLAGERS.add(villager);
-        helper.runAfterDelay(10, () -> {
+        helper.runAfterDelay(10, () -> whenSkyLightBlocked(helper, villager.blockPosition(), 50, () -> {
             verifyStandingDestinations(helper, villager);
             helper.succeed();
-        });
+        }));
     }
 
     @GameTest(batch = "mca_indoor_stroll_movement", templateNamespace = "minecraft",
