@@ -38,6 +38,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtOps;
+import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -159,6 +160,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         this.setPathfindingMalus(PathType.TRAPDOOR, 8.0F);
         this.setPathfindingMalus(PathType.DANGER_TRAPDOOR, 8.0F);
         this.setPathfindingMalus(PathType.WATER, 16.0F);
+        refreshDimensions();
     }
 
     public static <E extends Entity> CDataManager.Builder<E> createTrackedData(Class<E> type) {
@@ -1649,11 +1651,20 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public void onSyncedDataUpdated(EntityDataAccessor<?> par) {
-        if (getTypeDataManager().isParam(AGE_STATE, par) || getTypeDataManager().isParam(Genetics.SIZE.getParam(), par) || getTypeDataManager().isParam(Genetics.WIDTH.getParam(), par)) {
+        if (affectsDimensions(par)) {
             refreshDimensions();
         }
 
         super.onSyncedDataUpdated(par);
+    }
+
+    @Override
+    public void onSyncedDataUpdated(List<SynchedEntityData.DataValue<?>> values) {
+        super.onSyncedDataUpdated(values);
+        // Age is synchronized before growth; refresh from the completed snapshot.
+        if (values.stream().anyMatch(value -> getTypeDataManager().isParam(AGE_STATE, value))) {
+            refreshDimensions();
+        }
     }
 
     @Override
@@ -1808,6 +1819,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
         getTypeDataManager().load(this, data);
         restoreGenderAfterLoad();
+        restoreAgeAfterLoad(data);
         relations.cancelInterruptedProcreationAfterLoad();
         relations.readFromNbt(data);
         longTermMemory.readFromNbt(data);
@@ -1829,6 +1841,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             this.interactedWith = data.getBoolean("InteractedWith");
         }
 
+        restoreMissingAppearance(data);
         validateClothes();
 
         if (getVillagerBrain().getPersonality() == Personality.UNASSIGNED) {
@@ -1874,6 +1887,21 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             ItemStack flower = InventoryUtils.temporary(mourningFlower.copy());
             getBrain().setMemory(MemoryModuleTypeMCA.MOURNING_FLOWER, flower.copy());
             setItemInHand(InteractionHand.MAIN_HAND, flower);
+        }
+        refreshDimensions();
+    }
+
+    private void restoreAgeAfterLoad(CompoundTag data) {
+        int age = Mth.clamp(data.getInt("Age"), -AgeState.getMaxAge(), 0);
+        if (data.getInt("Age") < age) {
+            super.setAge(age);
+        }
+        AgeState vanillaStage = AgeState.byCurrentAge(age);
+        if (getAgeState() == AgeState.UNASSIGNED) {
+            setTrackedValue(AGE_STATE, vanillaStage);
+        }
+        if (!data.contains("GrowthAmount", Tag.TAG_ANY_NUMERIC)) {
+            setTrackedValue(GROWTH_AMOUNT, getAgeState() == vanillaStage ? age : getAgeState().toAge());
         }
     }
 
