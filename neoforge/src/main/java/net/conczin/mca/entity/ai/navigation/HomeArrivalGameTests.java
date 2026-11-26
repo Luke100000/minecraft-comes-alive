@@ -32,6 +32,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.level.pathfinder.Node;
@@ -219,6 +220,12 @@ public final class HomeArrivalGameTests {
             template = "bastion/blocks/air", timeoutTicks = 600)
     public static void restWalksThroughClosedDoorAndSleeps(GameTestHelper helper) {
         verifyArrival(helper, 0, false);
+    }
+
+    @GameTest(batch = "mca_home_flat_fence_gate", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 600)
+    public static void restWalksThroughClosedFenceGateAndSleeps(GameTestHelper helper) {
+        verifyArrival(helper, 0, false, false, new BlockPos(3, 4, 5), true);
     }
 
     @GameTest(batch = "mca_home_raised_steps", templateNamespace = "minecraft",
@@ -418,6 +425,11 @@ public final class HomeArrivalGameTests {
 
     private static void verifyArrival(GameTestHelper helper, int heightDifference, boolean repairSteps,
                                       boolean offsetApproach, BlockPos relativeStart) {
+        verifyArrival(helper, heightDifference, repairSteps, offsetApproach, relativeStart, false);
+    }
+
+    private static void verifyArrival(GameTestHelper helper, int heightDifference, boolean repairSteps,
+                                      boolean offsetApproach, BlockPos relativeStart, boolean fenceGateEntrance) {
         BlockPos start = helper.absolutePos(relativeStart);
         if (repairSteps) {
             var bounds = helper.getBounds();
@@ -431,6 +443,16 @@ public final class HomeArrivalGameTests {
         BlockPos foot = door.east(4);
         BlockPos head = foot.east();
         prepareHouse(helper, start, door, foot);
+        if (fenceGateEntrance) {
+            ServerLevel level = helper.getLevel();
+            originalFenceGates = Config.getInstance().villagersInteractWithFenceGates;
+            Config.getInstance().villagersInteractWithFenceGates = true;
+            level.setBlock(door, Blocks.OAK_FENCE_GATE.defaultBlockState()
+                    .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.EAST), 3);
+            level.setBlock(door.above(), Blocks.AIR.defaultBlockState(), 3);
+            helper.assertTrue(!level.getBlockState(door).getValue(BlockStateProperties.OPEN),
+                    "fixture fence gate must begin closed");
+        }
         if (heightDifference == 2 && !repairSteps) {
             addSteps(helper.getLevel(), door);
         }
@@ -439,10 +461,10 @@ public final class HomeArrivalGameTests {
         VillagerEntityMCA[] resident = {null};
         long[] started = {0L};
         Vec3[] previous = {null};
-        boolean[] openedDoor = {false};
+        boolean[] openedEntrance = {false};
         boolean[] repaired = {false};
         long[] repairedAt = {0L};
-        boolean[] crossedDoor = {false};
+        boolean[] crossedEntrance = {false};
         double[] outsideTurnDistance = {0.0D};
         int[] outsideDirection = {0};
         int[] outsideReversals = {0};
@@ -467,8 +489,8 @@ public final class HomeArrivalGameTests {
                         "HOME transit teleported: " + describe(villager));
             }
             previous[0] = villager.position();
-            openedDoor[0] |= helper.getLevel().getBlockState(door).getValue(DoorBlock.OPEN);
-            crossedDoor[0] |= villager.getBlockX() == door.getX()
+            openedEntrance[0] |= helper.getLevel().getBlockState(door).getValue(BlockStateProperties.OPEN);
+            crossedEntrance[0] |= villager.getBlockX() == door.getX()
                     && Math.abs(villager.getY() - door.getY()) < 0.75D;
             if (offsetApproach && villager.getX() < door.getX() - 0.25D && !villager.isSleeping()) {
                 double distance = Math.hypot(villager.getX() - (door.getX() + 0.5D),
@@ -490,7 +512,7 @@ public final class HomeArrivalGameTests {
                 MCA.LOGGER.info("[MCA Home Arrival] diagnostic elapsed={} {}", elapsed, describe(villager));
             }
             if (repairSteps && !repaired[0] && elapsed >= 300) {
-                helper.assertTrue(!villager.isSleeping() && !openedDoor[0]
+                helper.assertTrue(!villager.isSleeping() && !openedEntrance[0]
                                 && villager.getY() < door.getY() - 0.5D,
                         "two-block ledge was traversed without steps: " + describe(villager));
                 MCA.LOGGER.info("[MCA Home Arrival] blocked ledge elapsed={} {}", elapsed, describe(villager));
@@ -501,9 +523,9 @@ public final class HomeArrivalGameTests {
             if (villager.isSleeping()) {
                 helper.assertTrue(villager.getSleepingPos().filter(head::equals).isPresent(),
                         "villager slept at a different bed");
-                helper.assertTrue(openedDoor[0], "villager reached bed without opening the only entrance");
-                helper.assertTrue(!offsetApproach || crossedDoor[0],
-                        "offset HOME reached bed without observed physical doorway crossing");
+                helper.assertTrue(openedEntrance[0], "villager reached bed without opening the only entrance");
+                helper.assertTrue((!offsetApproach && !fenceGateEntrance) || crossedEntrance[0],
+                        "HOME reached bed without observed physical entrance crossing");
                 helper.assertTrue(!repairSteps || repaired[0], "villager reached raised HOME before repair");
                 MCA.LOGGER.info("[MCA Home Arrival] arrived rise={} repaired={} elapsed={} {}",
                         heightDifference, repaired[0], elapsed, describe(villager));
@@ -511,7 +533,7 @@ public final class HomeArrivalGameTests {
             } else if ((!repairSteps && elapsed >= 550)
                     || (repairSteps && repaired[0] && elapsed - repairedAt[0] >= 500)) {
                 helper.fail("REST did not reach HOME through entrance; rise=" + heightDifference
-                        + ", repaired=" + repaired[0] + ", doorOpened=" + openedDoor[0]
+                        + ", repaired=" + repaired[0] + ", entranceOpened=" + openedEntrance[0]
                         + ", outsideReversals=" + outsideReversals[0] + ", " + describe(villager));
             }
         });
@@ -616,6 +638,11 @@ public final class HomeArrivalGameTests {
 
     @AfterBatch(batch = "mca_home_flat_door")
     public static void cleanupFlat(ServerLevel level) {
+        cleanup(level);
+    }
+
+    @AfterBatch(batch = "mca_home_flat_fence_gate")
+    public static void cleanupFenceGate(ServerLevel level) {
         cleanup(level);
     }
 
