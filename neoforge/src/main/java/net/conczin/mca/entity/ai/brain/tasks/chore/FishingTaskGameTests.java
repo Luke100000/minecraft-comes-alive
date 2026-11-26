@@ -32,12 +32,15 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.HopperBlockEntity;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.BiomeResolver;
 import net.minecraft.world.level.biome.Biomes;
 import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.storage.ServerLevelData;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
@@ -636,40 +639,60 @@ public final class FishingTaskGameTests {
         MCAFishingBobberEntity bobber = MCAFishingBobberEntity.cast(helper.getLevel(), villager, water);
         tickUntilBobbing(helper, bobber);
         long rainSeed = findSeedForRainRoll(bobber);
+        BlockPos canopy = bobber.blockPosition().above(8);
+        var originalCanopy = helper.getLevel().getBlockState(canopy);
+        BlockPos rainProbe = bobber.blockPosition().above();
+        int originalSkyLight = helper.getLevel().getBrightness(LightLayer.SKY, rainProbe);
 
-        try (RainFixture ignored = new RainFixture(helper.getLevel(), bobber.blockPosition())) {
-        helper.getLevel().setWeatherParameters(6000, 0, false, false);
-        helper.getLevel().setRainLevel(0.0F);
-        setFishingCountdown(bobber, "timeUntilLured", 2);
-        bobber.getRandom().setSeed(rainSeed);
-        invokeCatchingFish(bobber);
-        helper.assertTrue(
-                getFishingCountdown(bobber, "timeUntilLured") == 1,
-                "dry fishing countdown did not advance by exactly one tick"
-        );
+        try {
+            helper.assertTrue(!originalCanopy.hasBlockEntity(), "rain canopy fixture would overwrite a block entity at " + canopy);
+            helper.getLevel().setBlock(canopy, Blocks.CHERRY_LEAVES.defaultBlockState(), 3);
+            try (RainFixture fixture = new RainFixture(helper.getLevel(), bobber.blockPosition())) {
+                fixture.prepare();
+                helper.assertTrue(helper.getLevel().canSeeSky(bobber.blockPosition().above())
+                                && helper.getLevel().getHeightmapPos(Heightmap.Types.MOTION_BLOCKING, bobber.blockPosition().above()).getY()
+                                <= bobber.blockPosition().above().getY(),
+                        "rain fixture did not clear overhead terrain above the bobber");
+                helper.getLevel().setWeatherParameters(6000, 0, false, false);
+                helper.getLevel().setRainLevel(0.0F);
+                setFishingCountdown(bobber, "timeUntilLured", 2);
+                bobber.getRandom().setSeed(rainSeed);
+                invokeCatchingFish(bobber);
+                helper.assertTrue(
+                        getFishingCountdown(bobber, "timeUntilLured") == 1,
+                        "dry fishing countdown did not advance by exactly one tick"
+                );
 
-        helper.getLevel().setWeatherParameters(0, 6000, true, false);
-        helper.getLevel().setRainLevel(1.0F);
-        helper.assertTrue(
-                helper.getLevel().isRainingAt(bobber.blockPosition().above()),
-                "rain timing fixture was not actually raining at the bobber; raining=" + helper.getLevel().isRaining()
-                        + "; sky=" + helper.getLevel().canSeeSky(bobber.blockPosition().above())
-                        + "; height=" + helper.getLevel().getHeightmapPos(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING, bobber.blockPosition().above())
-                        + "; topBlock=" + helper.getLevel().getBlockState(helper.getLevel().getHeightmapPos(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING, bobber.blockPosition().above()).below())
-                        + "; pos=" + bobber.blockPosition().above()
-                        + "; biome=" + helper.getLevel().getBiome(bobber.blockPosition().above()).unwrapKey()
-                        + "; precipitation=" + helper.getLevel().getBiome(bobber.blockPosition().above()).value().getPrecipitationAt(bobber.blockPosition().above())
-        );
-        setFishingCountdown(bobber, "timeUntilLured", 2);
-        bobber.getRandom().setSeed(rainSeed);
-        invokeCatchingFish(bobber);
-        helper.assertTrue(
-                getFishingCountdown(bobber, "timeUntilLured") <= 0,
-                "rain did not apply vanilla's extra fishing-countdown tick"
-        );
+                helper.getLevel().setWeatherParameters(0, 6000, true, false);
+                helper.getLevel().setRainLevel(1.0F);
+                helper.assertTrue(
+                        helper.getLevel().isRainingAt(bobber.blockPosition().above()),
+                        "rain timing fixture was not actually raining at the bobber; raining=" + helper.getLevel().isRaining()
+                                + "; sky=" + helper.getLevel().canSeeSky(bobber.blockPosition().above())
+                                + "; height=" + helper.getLevel().getHeightmapPos(Heightmap.Types.MOTION_BLOCKING, bobber.blockPosition().above())
+                                + "; topBlock=" + helper.getLevel().getBlockState(helper.getLevel().getHeightmapPos(Heightmap.Types.MOTION_BLOCKING, bobber.blockPosition().above()).below())
+                                + "; pos=" + bobber.blockPosition().above()
+                                + "; biome=" + helper.getLevel().getBiome(bobber.blockPosition().above()).unwrapKey()
+                                + "; precipitation=" + helper.getLevel().getBiome(bobber.blockPosition().above()).value().getPrecipitationAt(bobber.blockPosition().above())
+                );
+                setFishingCountdown(bobber, "timeUntilLured", 2);
+                bobber.getRandom().setSeed(rainSeed);
+                invokeCatchingFish(bobber);
+                helper.assertTrue(
+                        getFishingCountdown(bobber, "timeUntilLured") <= 0,
+                        "rain did not apply vanilla's extra fishing-countdown tick"
+                );
+            }
         } finally {
-            bobber.discard();
-            villager.discard();
+            try {
+                if (!originalCanopy.hasBlockEntity()) {
+                    helper.getLevel().setBlock(canopy, originalCanopy, 3);
+                    RainFixture.waitForSkyLight(helper.getLevel(), rainProbe, originalSkyLight);
+                }
+            } finally {
+                bobber.discard();
+                villager.discard();
+            }
         }
         helper.succeed();
     }
@@ -1420,6 +1443,8 @@ public final class FishingTaskGameTests {
     private static final class RainFixture implements AutoCloseable {
         private final ServerLevel world;
         private final Map<LevelChunk, BiomeResolver> originals = new HashMap<>();
+        private final Map<BlockPos, BlockState> skyBlocks = new HashMap<>();
+        private final BlockPos rainProbe;
         private final int clearTime;
         private final int rainTime;
         private final int thunderTime;
@@ -1430,6 +1455,7 @@ public final class FishingTaskGameTests {
 
         RainFixture(ServerLevel world, BlockPos bobber) {
             this.world = world;
+            rainProbe = bobber.above();
             ServerLevelData data = (ServerLevelData)world.getLevelData();
             clearTime = data.getClearWeatherTime();
             rainTime = data.getRainTime();
@@ -1438,7 +1464,6 @@ public final class FishingTaskGameTests {
             thundering = data.isThundering();
             rainLevel = world.getRainLevel(1);
             thunderLevel = world.getThunderLevel(1);
-            var plains = world.registryAccess().lookupOrThrow(Registries.BIOME).getOrThrow(Biomes.PLAINS);
             // BiomeManager can sample across a chunk border around the bobber.
             for (int cx = (bobber.getX() - 4) >> 4; cx <= (bobber.getX() + 4) >> 4; cx++) {
                 for (int cz = (bobber.getZ() - 4) >> 4; cz <= (bobber.getZ() + 4) >> 4; cz++) {
@@ -1452,26 +1477,82 @@ public final class FishingTaskGameTests {
                         }
                     }
                     originals.put(chunk, (x, y, z, sampler) -> palette.get(new BlockPos(x, y, z)));
-                    chunk.fillBiomesFromNoise((x, y, z, sampler) -> plains, world.getChunkSource().randomState().sampler());
-                    chunk.setUnsaved(true);
                 }
+            }
+        }
+
+        void prepare() {
+            int topY = world.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING, rainProbe).getY();
+            for (int y = rainProbe.getY(); y < topY; y++) {
+                BlockPos pos = new BlockPos(rainProbe.getX(), y, rainProbe.getZ());
+                BlockState original = world.getBlockState(pos);
+                if (original.hasBlockEntity()) {
+                    throw new IllegalStateException("Rain fixture would overwrite block entity at " + pos);
+                }
+                if (!original.isAir()) {
+                    skyBlocks.put(pos, original);
+                }
+            }
+            var plains = world.registryAccess().lookupOrThrow(Registries.BIOME).getOrThrow(Biomes.PLAINS);
+            for (LevelChunk chunk : originals.keySet()) {
+                chunk.fillBiomesFromNoise((x, y, z, sampler) -> plains, world.getChunkSource().randomState().sampler());
+                chunk.setUnsaved(true);
+            }
+            for (BlockPos pos : skyBlocks.keySet()) {
+                world.setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
+            }
+
+            long deadline = System.nanoTime() + 5_000_000_000L;
+            world.getServer().managedBlock(() -> {
+                world.getChunkSource().getLightEngine().tryScheduleUpdate();
+                return (world.canSeeSky(rainProbe)
+                        && world.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING, rainProbe).getY() <= rainProbe.getY()
+                        && world.getBrightness(LightLayer.SKY, rainProbe) == 15)
+                        || System.nanoTime() >= deadline;
+            });
+        }
+
+        static void waitForSkyLight(ServerLevel world, BlockPos rainProbe, int expected) {
+            long deadline = System.nanoTime() + 5_000_000_000L;
+            world.getServer().managedBlock(() -> {
+                world.getChunkSource().getLightEngine().tryScheduleUpdate();
+                return world.getBrightness(LightLayer.SKY, rainProbe) == expected || System.nanoTime() >= deadline;
+            });
+            if (world.getBrightness(LightLayer.SKY, rainProbe) != expected) {
+                throw new IllegalStateException("Rain fixture did not restore sky light at " + rainProbe);
             }
         }
 
         @Override
         public void close() {
-            for (var entry : originals.entrySet()) {
-                entry.getKey().fillBiomesFromNoise(entry.getValue(), world.getChunkSource().randomState().sampler());
-                entry.getKey().setUnsaved(true);
+            try {
+                RuntimeException restoreFailure = null;
+                for (var entry : skyBlocks.entrySet()) {
+                    try {
+                        world.setBlock(entry.getKey(), entry.getValue(), 3);
+                    } catch (RuntimeException e) {
+                        if (restoreFailure == null) restoreFailure = e;
+                        else restoreFailure.addSuppressed(e);
+                    }
+                }
+                if (restoreFailure != null) throw restoreFailure;
+            } finally {
+                try {
+                    for (var entry : originals.entrySet()) {
+                        entry.getKey().fillBiomesFromNoise(entry.getValue(), world.getChunkSource().randomState().sampler());
+                        entry.getKey().setUnsaved(true);
+                    }
+                } finally {
+                    ServerLevelData data = (ServerLevelData)world.getLevelData();
+                    data.setClearWeatherTime(clearTime);
+                    data.setRainTime(rainTime);
+                    data.setThunderTime(thunderTime);
+                    data.setRaining(raining);
+                    data.setThundering(thundering);
+                    world.setRainLevel(rainLevel);
+                    world.setThunderLevel(thunderLevel);
+                }
             }
-            ServerLevelData data = (ServerLevelData)world.getLevelData();
-            data.setClearWeatherTime(clearTime);
-            data.setRainTime(rainTime);
-            data.setThunderTime(thunderTime);
-            data.setRaining(raining);
-            data.setThundering(thundering);
-            world.setRainLevel(rainLevel);
-            world.setThunderLevel(thunderLevel);
         }
     }
 
