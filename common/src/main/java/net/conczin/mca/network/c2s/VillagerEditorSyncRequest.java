@@ -465,13 +465,13 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
         CompoundTag mcaData = normalizeVisualData(villagerData);
         migrateLegacyHairStyle(mcaData);
         CompoundTag fallbackMcaData = getMcaData(fallback);
-        Gender gender = getGender(villagerData);
-        clearInvalidIdentifier(mcaData, fallbackMcaData, "Skin", identifier -> SkinVisualIds.isBodySkin(identifier, gender));
-        clearInvalidIdentifier(mcaData, fallbackMcaData, "Clothes", identifier -> SkinVisualIds.isClothing(identifier, gender));
-        clearInvalidIdentifier(mcaData, fallbackMcaData, "Hair", identifier -> SkinVisualIds.isHairStyle(identifier, gender));
-        clearInvalidIdentifier(mcaData, fallbackMcaData, "HairStyle", identifier -> SkinVisualIds.isHairStyle(identifier, gender));
+        // Gender affects random appearance selection, not explicit editor choices.
+        clearInvalidIdentifier(mcaData, fallbackMcaData, "Skin", SkinVisualIds::isBodySkin);
+        clearInvalidIdentifier(mcaData, fallbackMcaData, "Clothes", SkinVisualIds::isClothing);
+        clearInvalidIdentifier(mcaData, fallbackMcaData, "Hair", SkinVisualIds::isHairStyle);
+        clearInvalidIdentifier(mcaData, fallbackMcaData, "HairStyle", SkinVisualIds::isHairStyle);
         for (LayeredHair.Category category : LayeredHair.Category.values()) {
-            clearInvalidIdentifier(mcaData, fallbackMcaData, category.getDataKey(), identifier -> SkinVisualIds.isHairLayer(identifier, category, gender));
+            clearInvalidIdentifier(mcaData, fallbackMcaData, category.getDataKey(), identifier -> SkinVisualIds.isHairLayer(identifier, category, Gender.UNASSIGNED));
         }
     }
 
