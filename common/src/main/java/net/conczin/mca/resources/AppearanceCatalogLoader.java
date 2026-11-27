@@ -80,16 +80,16 @@ final class AppearanceCatalogLoader {
                 continue;
             }
 
-            Gender gender = entry.metadata().has("gender")
-                    ? SkinListJson.resolveGender(null, entry)
-                    : fileGender;
-            if (gender == Gender.UNASSIGNED) {
-                gender = Gender.NEUTRAL;
-            }
             try {
+                Gender gender = entry.metadata().has("gender")
+                        ? SkinListJson.resolveGender(null, entry)
+                        : fileGender;
+                if (gender == Gender.UNASSIGNED) {
+                    gender = Gender.NEUTRAL;
+                }
                 EyeDefinition definition = EyeDefinition.parse(texture, gender, entry.metadata());
                 eyes.put(texture, definition);
-            } catch (IllegalArgumentException exception) {
+            } catch (com.google.gson.JsonParseException | IllegalArgumentException | UnsupportedOperationException exception) {
                 MCA.LOGGER.warn("Invalid eye definition {}", texture, exception);
             }
         }

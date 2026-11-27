@@ -4,6 +4,7 @@ import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.Chore;
+import net.conczin.mca.entity.ai.Genetics;
 import net.conczin.mca.entity.ai.Memories;
 import net.conczin.mca.entity.ai.MoveState;
 import net.conczin.mca.entity.ai.Traits;
@@ -174,7 +175,9 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
                 } else if (entity.getTraits().hasTrait(Traits.INFERTILE)) {
                     entity.sendChatMessage(player, "interaction.procreate.fail.infertile");
                 } else if (entity.getRelationships().mayProcreateAgain(player.level().getGameTime())) {
-                    if (!entity.getRelationships().startProcreating(player, player.level().getGameTime())) {
+                    if (!Genetics.canInheritEyes(entity, player)) {
+                        player.sendSystemMessage(Component.translatable("interaction.procreate.fail.eyegenetics"));
+                    } else if (!entity.getRelationships().startProcreating(player, player.level().getGameTime())) {
                         player.sendSystemMessage(Component.translatable("interaction.procreate.fail.inventoryfull"));
                     }
                 } else {

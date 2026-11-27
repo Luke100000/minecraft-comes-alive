@@ -78,7 +78,7 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
     }
 
     public boolean startProcreating(Entity spouse, long time) {
-        if (!mayProcreateAgain(time)) {
+        if (!mayProcreateAgain(time) || !Genetics.canInheritEyes(entity, spouse)) {
             return false;
         }
         int count = pregnancy.rollBabyCount();
@@ -114,7 +114,8 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
             if (pregnancy.procreate(spouse, attempt.babyCount)) {
                 entity.setTrackedValue(LAST_PROCREATION, (int) entity.level().getGameTime());
             } else if (spouse instanceof ServerPlayer player) {
-                player.sendSystemMessage(Component.translatable("interaction.procreate.fail.inventoryfull"));
+                player.sendSystemMessage(Component.translatable(Genetics.canInheritEyes(entity, spouse)
+                        ? "interaction.procreate.fail.inventoryfull" : "interaction.procreate.fail.eyegenetics"));
             }
         });
     }

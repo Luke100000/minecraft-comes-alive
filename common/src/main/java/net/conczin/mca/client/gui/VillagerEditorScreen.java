@@ -1515,7 +1515,7 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
 
     private void filter() {
         if (Objects.equals(page, "eyes_catalog")) {
-            filteredEyes = ClientAppearanceCatalog.eyeIdsForEditor(filterGender).stream()
+            filteredEyes = ClientAppearanceCatalog.eyeIdsForEditor(villager.getGenetics().getGender(), filterGender).stream()
                     .filter(id -> MCA.isBlankString(searchString) || id.toString().contains(searchString))
                     .toList();
 
@@ -1609,7 +1609,7 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
 
     private boolean hasSelectionGender(Gender gender) {
         if (page.equals("eyes_catalog")) {
-            return !ClientAppearanceCatalog.eyeIdsForEditor(gender).isEmpty();
+            return !ClientAppearanceCatalog.eyeIdsForEditor(villager.getGenetics().getGender(), gender).isEmpty();
         }
         if (page.equals("clothing")) {
             return ClientAppearanceCatalog.clothing().values().stream()
@@ -2474,7 +2474,9 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
                     if (villagerData != null) {
                         villagerVisualization.load(villagerData);
                     }
-                    villagerVisualization.readAdditionalSaveDataForEditor(tag);
+                    CompoundTag baseline = presetsBackupNbt != null ? presetsBackupNbt : saveEntityData(villager);
+                    CompoundTag merged = VillagerEditorSyncRequest.mergeAllowedEditorPatch(baseline, tag);
+                    villagerVisualization.readAdditionalSaveDataForEditor(merged);
                     villagerVisualization.refreshDimensions();
                     
                     // Restore main villager back to the original backup NBT to keep it unmodified until "Use" is clicked
@@ -2488,7 +2490,7 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
                     
                     // Cache the visual change flag
                     if (presetsBackupNbt != null) {
-                        hasVisualChange = !presetsBackupNbt.equals(tag);
+                        hasVisualChange = !presetsBackupNbt.equals(merged);
                     } else {
                         hasVisualChange = false;
                     }
@@ -2579,7 +2581,8 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
                 CompoundTag tag = PresetCodec.fromJsonString(json);
                 
                 // Permanently apply to main villager
-                villager.readAdditionalSaveDataForEditor(tag);
+                CompoundTag baseline = presetsBackupNbt != null ? presetsBackupNbt : saveEntityData(villager);
+                villager.readAdditionalSaveDataForEditor(VillagerEditorSyncRequest.mergeAllowedEditorPatch(baseline, tag));
                 
                 if (tag.contains("PlayerModel")) {
                     int modelVal = tag.getInt("PlayerModel");

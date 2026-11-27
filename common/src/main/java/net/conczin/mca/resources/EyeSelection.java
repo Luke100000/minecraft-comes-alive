@@ -40,8 +40,9 @@ public final class EyeSelection {
                 .toList();
     }
 
-    public static List<ResourceLocation> idsForEditor(Map<ResourceLocation, EyeDefinition> definitions, Gender filterGender) {
+    public static List<ResourceLocation> idsForEditor(Map<ResourceLocation, EyeDefinition> definitions, Gender targetGender, Gender filterGender) {
         return definitions.values().stream()
+                .filter(entry -> SkinSelection.matchesGender(entry.gender(), targetGender))
                 .filter(entry -> SkinSelection.matchesEditorGender(entry.gender(), filterGender))
                 .sorted(BY_ID)
                 .map(EyeDefinition::id)

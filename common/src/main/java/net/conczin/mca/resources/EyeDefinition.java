@@ -49,6 +49,9 @@ public record EyeDefinition(
     public EyeDefinition {
         id = Objects.requireNonNull(id);
         gender = gender == null || gender == Gender.UNASSIGNED ? Gender.NEUTRAL : gender;
+        if (!Float.isFinite(chance)) {
+            throw new IllegalArgumentException("Eye chance must be finite");
+        }
         chance = chance <= 0.0F ? 1.0F : chance;
         toneOverrides = Map.copyOf(toneOverrides);
     }

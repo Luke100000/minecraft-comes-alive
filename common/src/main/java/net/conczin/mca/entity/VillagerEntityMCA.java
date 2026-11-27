@@ -605,6 +605,10 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public VillagerEntityMCA getBreedOffspring(ServerLevel level, AgeableMob partner) {
+        if (!Genetics.canInheritEyes(this, partner)) {
+            MCA.LOGGER.warn("Declining offspring for {} and {} because a parent has unsupported eye genetics", getUUID(), partner.getUUID());
+            return null;
+        }
         VillagerEntityMCA child = partner instanceof VillagerEntityMCA partnerVillager
                 ? relations.getPregnancy().createChild(Gender.getRandom(), partnerVillager)
                 : relations.getPregnancy().createChild(Gender.getRandom());

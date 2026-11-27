@@ -5,16 +5,18 @@ import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.resources.EyeCatalog;
 import net.conczin.mca.resources.EyeStyles;
+import net.conczin.mca.server.world.data.PlayerSaveData;
 import net.conczin.mca.util.network.datasync.CDataManager;
 import net.conczin.mca.util.network.datasync.CDataParameter;
 import net.conczin.mca.util.network.datasync.CEnumParameter;
 import net.conczin.mca.util.network.datasync.CParameter;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.network.syncher.EntityDataSerializers;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.network.syncher.EntityDataAccessor;
+import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
@@ -207,6 +209,23 @@ public class Genetics implements Iterable<Genetics.Gene> {
 
     private float temperatureBaseRandom(float temp) {
         return (random.nextFloat() - 0.5F) * 0.35F + temp * 0.4F + 0.1F;
+    }
+
+    /** Checks the parents' saved eye formats before starting or completing breeding. */
+    public static boolean canInheritEyes(Entity first, Entity second) {
+        return canContributeEyes(first) && canContributeEyes(second);
+    }
+
+    private static boolean canContributeEyes(Entity parent) {
+        CompoundTag payload;
+        if (parent instanceof VillagerLike<?> villager) {
+            payload = villager.getGenetics().getEyePayload();
+        } else if (parent instanceof ServerPlayer player) {
+            payload = PlayerSaveData.get(player).getEntityData().getCompound(EyeGenetics.KEY);
+        } else {
+            return true;
+        }
+        return payload.isEmpty() || EyeGenetics.isSupported(payload);
     }
 
     public void combine(Genetics mother, Genetics father) {

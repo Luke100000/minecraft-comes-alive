@@ -44,7 +44,13 @@ public final class SkinListJson {
             }
 
             JsonObject metadata = object.deepCopy();
-            String identifier = GsonHelper.getAsString(metadata, "id");
+            String identifier;
+            try {
+                identifier = GsonHelper.getAsString(metadata, "id");
+            } catch (JsonParseException exception) {
+                MCA.LOGGER.warn("Invalid skin list entry in {}, expected a string id", fileId);
+                return;
+            }
             metadata.remove("id");
             entries.add(new Entry(identifier, metadata));
         });

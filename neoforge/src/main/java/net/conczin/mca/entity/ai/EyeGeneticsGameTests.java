@@ -204,6 +204,51 @@ public final class EyeGeneticsGameTests {
         helper.succeed();
     }
 
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", skyAccess = true)
+    public static void futureEyesDeferBirthUntilCompatibleDataReturns(GameTestHelper helper) {
+        var mother = villager(helper);
+        var father = villager(helper);
+        mother.getGenetics().setGender(Gender.FEMALE);
+        father.getGenetics().setGender(Gender.MALE);
+        var fixtureCenter = helper.getBounds().getCenter();
+        mother.setPos(fixtureCenter.add(-0.2, 0, 0));
+        father.setPos(fixtureCenter.add(0.2, 0, 0));
+        helper.getLevel().addFreshEntity(mother);
+        helper.getLevel().addFreshEntity(father);
+        mother.getRelationships().marry(father);
+        father.getRelationships().marry(mother);
+        father.getGenetics().initializeEyesIfMissing();
+        CompoundTag supported = father.getGenetics().getEyePayload();
+        CompoundTag future = new CompoundTag();
+        future.putInt("Format", 99);
+        father.getGenetics().setEyePayload(future);
+        var pregnancy = mother.getRelationships().getPregnancy();
+        helper.assertTrue(!pregnancy.tryStartGestation(), "unsupported parent started gestation");
+        helper.assertTrue(!pregnancy.isPregnant(), "declined gestation changed pregnancy state");
+        pregnancy.setPregnant(true);
+        pregnancy.setBabyAge(Config.getInstance().babyItemGrowUpTime - 60);
+        pregnancy.tick();
+        helper.assertTrue(pregnancy.isPregnant(), "unsupported parent consumed existing pregnancy");
+        helper.assertTrue(pregnancy.getBabyAge() == Config.getInstance().babyItemGrowUpTime, "declined birth reset gestation progress");
+        helper.assertTrue(!mother.getRelationships().startProcreating(father, helper.getLevel().getGameTime()), "unsupported parent started procreation animation");
+        helper.assertTrue(future.equals(father.getGenetics().getEyePayload()), "declined birth rewrote future DNA");
+        helper.assertTrue(mother.getBreedOffspring(helper.getLevel(), father) == null, "offspring hook accepted unsupported DNA");
+        helper.assertTrue(!pregnancy.procreate(father, 1), "baby-item procreation accepted unsupported DNA");
+
+        var childType = pregnancy.getGender().getVillagerType();
+        helper.assertTrue(helper.getEntities(childType).stream().noneMatch(villager -> villager != mother && villager != father),
+                "birth spawned a child while parental DNA was unsupported");
+        father.getGenetics().setEyePayload(supported);
+        pregnancy.tick();
+        var children = helper.getEntities(childType).stream().filter(villager -> villager != mother && villager != father).toList();
+        helper.assertTrue(children.size() == 1, "deferred birth did not spawn exactly one child after restoring compatible DNA");
+        helper.assertTrue(!pregnancy.isPregnant(), "successful retry left the pregnancy active");
+        children.getFirst().discard();
+        mother.discard();
+        father.discard();
+        helper.succeed();
+    }
+
     @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air")
     public static void missingEyeDatapackDoesNotEraseSavedSelection(GameTestHelper helper) {
         var original = net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("missing_eye_pack", "rare/iris");

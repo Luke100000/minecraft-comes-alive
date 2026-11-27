@@ -74,11 +74,19 @@ public class SkinExporter {
 
     public static NativeImage createSkin(VillagerLike<?> villager, String clothesVariant) {
         NativeImage base = new NativeImage(64, 64, true);
-        composite(base, getSkin(villager), getSkinColor(villager));
-        compositeFace(base, getFace(villager), villager);
-        composite(base, getClothes(villager, clothesVariant), 0xFFFFFFFF);
-        compositeHair(base, villager);
-        return base;
+        boolean completed = false;
+        try {
+            composite(base, getSkin(villager), getSkinColor(villager));
+            compositeFace(base, getFace(villager), villager);
+            composite(base, getClothes(villager, clothesVariant), 0xFFFFFFFF);
+            compositeHair(base, villager);
+            completed = true;
+            return base;
+        } finally {
+            if (!completed) {
+                base.close();
+            }
+        }
     }
 
     public static ResourceLocation getSkin(VillagerLike<?> villager) {

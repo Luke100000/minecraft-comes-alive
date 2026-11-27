@@ -64,7 +64,10 @@ public abstract class SkinListEntry {
         String strB = idxB >= 0 ? b.substring(idxB) : b;
         String numA = digits(strA);
         String numB = digits(strB);
-        if (numA.isEmpty() || numB.isEmpty()) {
+        if (numA.isEmpty() != numB.isEmpty()) {
+            return numA.isEmpty() ? 1 : -1;
+        }
+        if (numA.isEmpty()) {
             return a.compareTo(b);
         }
         String normalizedA = stripLeadingZeroes(numA);
