@@ -4,6 +4,7 @@ import com.google.gson.JsonObject;
 import net.conczin.mca.Config;
 import net.minecraft.world.entity.Entity;
 
+import java.io.IOException;
 import java.io.OutputStream;
 import java.util.List;
 
@@ -35,7 +36,7 @@ public class ElevenlabsSpeechManager extends RealtimeSpeechManager {
     }
 
     @Override
-    public void downloadAudio(OutputStream output, String voiceId, String text) {
+    public void downloadAudio(OutputStream output, String voiceId, String text) throws IOException {
         String payload = buildSpeakPayload(text, Config.CLIENT.elevenlabsModel.get());
         RealtimeSpeechManager.download(output, this.url + voiceId + "?output_format=pcm_22050", payload, Config.CLIENT.elevenlabsPrivateAPIkey.get());
     }

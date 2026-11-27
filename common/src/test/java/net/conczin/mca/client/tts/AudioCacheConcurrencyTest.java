@@ -3,11 +3,17 @@ package net.conczin.mca.client.tts;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.sun.net.httpserver.HttpServer;
+import net.conczin.mca.Config;
+import net.conczin.mca.NativeConfigDefaultsExtension;
 import net.conczin.mca.client.tts.sound.PCMAudioStream;
+import net.conczin.mca.config.ConfigScope;
 import net.minecraft.SharedConstants;
 import net.minecraft.server.Bootstrap;
+import net.neoforged.neoforge.common.ModConfigSpec;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -183,6 +189,77 @@ class AudioCacheConcurrencyTest {
         } finally {
             Files.deleteIfExists(targetPath);
         }
+    }
+
+    @Test
+    void truncatedOnlineAudioCanBeRetriedWithoutPublishingPartialFile() throws Exception {
+        byte[] audio = new byte[512];
+        ThreadLocalRandom.current().nextBytes(audio);
+        HttpServer server = startAudioServer("/v1/tts/xtts-v2", audio);
+        String identifier = "concurrency_test/" + UUID.randomUUID() + ".ogg";
+        Path targetPath = Path.of("tts_cache").resolve(identifier);
+        var urlSetting = Config.CLIENT.onlineTTSServer;
+        String previousUrl = urlSetting.get();
+        ModConfigSpec.ConfigValue<?> nativeUrl = NativeConfigDefaultsExtension.spec(ConfigScope.CLIENT)
+                .getValues().get(urlSetting.getPath());
+        try {
+            String localUrl = "http://127.0.0.1:" + server.getAddress().getPort() + "/";
+            urlSetting.set(localUrl);
+            nativeUrl.clearCache();
+            assertEquals(localUrl, urlSetting.get());
+            OnlineSpeechManager manager = new OnlineSpeechManager();
+            assertFalse(AudioCache.cachedRetrieve(identifier, out -> manager.downloadAudio(out, "en", "male_0", "Hello")));
+            assertFalse(Files.exists(targetPath));
+            assertTrue(AudioCache.cachedRetrieve(identifier, out -> manager.downloadAudio(out, "en", "male_0", "Hello")));
+            assertArrayEquals(audio, Files.readAllBytes(targetPath));
+        } finally {
+            urlSetting.set(previousUrl);
+            nativeUrl.clearCache();
+            server.stop(0);
+            Files.deleteIfExists(targetPath);
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void truncatedRealtimeAudioCanBeRetriedWithoutPublishingPartialStream(boolean persistent) throws Exception {
+        byte[] audio = new byte[512];
+        ThreadLocalRandom.current().nextBytes(audio);
+        HttpServer server = startAudioServer("/v1/tts/piper/speak", audio);
+        String identifier = "concurrency_test/" + UUID.randomUUID();
+        Path targetPath = Path.of("tts_cache").resolve(identifier);
+        try {
+            String url = "http://127.0.0.1:" + server.getAddress().getPort() + "/";
+            RealtimeSpeechManager manager = new RealtimeSpeechManager(url);
+            assertFalse(AudioCache.get(identifier, out -> manager.downloadAudio(out, "voice", "Hello"), persistent));
+            assertFalse(Files.exists(targetPath));
+            assertFalse(AudioCache.inMemory.containsKey(identifier));
+            assertTrue(AudioCache.get(identifier, out -> manager.downloadAudio(out, "voice", "Hello"), persistent));
+            assertArrayEquals(audio, readBytes(AudioCache.getPCMAudioStream(identifier), audio.length));
+        } finally {
+            server.stop(0);
+            AudioCache.inMemory.remove(identifier);
+            Files.deleteIfExists(targetPath);
+        }
+    }
+
+    private static HttpServer startAudioServer(String path, byte[] audio) throws IOException {
+        AtomicInteger requests = new AtomicInteger();
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext(path, exchange -> {
+            try {
+                exchange.getRequestBody().readAllBytes();
+                exchange.getResponseHeaders().set("Connection", "close");
+                exchange.sendResponseHeaders(200, audio.length);
+                int bytesToSend = requests.getAndIncrement() == 0 ? 256 : audio.length;
+                exchange.getResponseBody().write(audio, 0, bytesToSend);
+                exchange.getResponseBody().flush();
+            } finally {
+                exchange.close();
+            }
+        });
+        server.start();
+        return server;
     }
 
     @Test

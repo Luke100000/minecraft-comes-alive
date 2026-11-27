@@ -815,6 +815,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             }
 
             tickDespawnDelay();
+            if (isRemoved()) {
+                return;
+            }
 
             residency.tick();
 
@@ -1396,6 +1399,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             return;
         }
 
+        Component deathMessage = getCombatTracker().getDeathMessage();
         super.die(cause);
 
         // NeoForge can cancel LivingDeathEvent inside super.die(). Leave MCA's persistent
@@ -1411,8 +1415,8 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             return;
         }
 
-        //death message
-        getResidency().getHomeVillage().flatMap(Village::getCivilRegistry).ifPresent(r -> r.addText(getCombatTracker().getDeathMessage()));
+        getResidency().getHomeVillage().flatMap(Village::getCivilRegistry)
+                .ifPresent(registry -> registry.addText(deathMessage));
 
         //drop stuff
         InventoryUtils.dropAllItems(this, inventory);
@@ -1430,6 +1434,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         }
 
         //move out
+        if (!requiresHome()) {
+            residency.clearGuestHomeClaims();
+        }
         residency.leaveVillage();
 
         if (interactedWith) {
@@ -2141,6 +2148,11 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
                 setProfession(VillagerProfession.NONE);
                 setDespawnDelay(0);
             } else {
+                if (isSleeping() && residency.mayReleaseHomePoi()) {
+                    stopSleeping();
+                }
+                releasePoi(MemoryModuleType.HOME);
+                residency.clearGuestHomeClaims();
                 this.discard();
             }
         }

@@ -11,7 +11,6 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
@@ -116,7 +115,7 @@ public class OnlineSpeechManager {
         }
     }
 
-    public void downloadAudio(OutputStream output, String language, String voice, String text) {
+    public void downloadAudio(OutputStream output, String language, String voice, String text) throws IOException {
         Map<String, String> params = Map.of(
                 "text", text,
                 "language", language,
@@ -137,15 +136,7 @@ public class OnlineSpeechManager {
             connection.setRequestMethod("POST");
             connection.setDoOutput(true);
 
-            try (InputStream input = connection.getInputStream()) {
-                byte[] buffer = new byte[4096];
-                int bytesRead;
-                while ((bytesRead = input.read(buffer)) != -1) {
-                    output.write(buffer, 0, bytesRead);
-                }
-            }
-        } catch (IOException | IllegalArgumentException e) {
-            MCA.LOGGER.warn("Failed to download {}: {}", url, e.getMessage());
+            RealtimeSpeechManager.copyAudioResponse(connection, output);
         } finally {
             if (connection != null) {
                 connection.disconnect();

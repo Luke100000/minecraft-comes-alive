@@ -21,7 +21,6 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.function.Consumer;
 
 public class AudioCache {
     private static final int MIN_SIZE = 128;
@@ -53,7 +52,7 @@ public class AudioCache {
         return new PCMAudioStream(readFromDisk(identifier));
     }
 
-    public static boolean get(String identifier, Consumer<OutputStream> retriever, boolean persistent) {
+    static boolean get(String identifier, AudioRetriever retriever, boolean persistent) {
         if (persistent) {
             return cachedRetrieve(identifier, retriever);
         }
@@ -65,9 +64,9 @@ public class AudioCache {
         return true;
     }
 
-    private static ByteBuffer retrieve(Consumer<OutputStream> retriever) {
+    private static ByteBuffer retrieve(AudioRetriever retriever) {
         try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
-            retriever.accept(baos);
+            retriever.writeTo(baos);
             byte[] bytes = baos.toByteArray();
             if (bytes.length == 0) {
                 return null;
@@ -106,7 +105,7 @@ public class AudioCache {
         }
     }
 
-    public static boolean cachedRetrieve(String identifier, Consumer<OutputStream> retriever) {
+    static boolean cachedRetrieve(String identifier, AudioRetriever retriever) {
         Path cachePath = resolveCachePath(identifier);
         if (cachePath == null) {
             return false;
@@ -141,7 +140,7 @@ public class AudioCache {
         }
     }
 
-    private static boolean writeCacheAtomically(Path cachePath, Consumer<OutputStream> retriever) throws IOException {
+    private static boolean writeCacheAtomically(Path cachePath, AudioRetriever retriever) throws IOException {
         Path parent = cachePath.getParent();
         if (parent != null) {
             Files.createDirectories(parent);
@@ -149,7 +148,7 @@ public class AudioCache {
         Path tempFile = Files.createTempFile(parent, cachePath.getFileName().toString() + ".", ".tmp");
         try (Closeable cleanup = () -> Files.deleteIfExists(tempFile)) {
             try (OutputStream out = new BufferedOutputStream(Files.newOutputStream(tempFile))) {
-                retriever.accept(out);
+                retriever.writeTo(out);
             }
             if (Files.size(tempFile) <= MIN_SIZE) {
                 return false;
@@ -178,5 +177,10 @@ public class AudioCache {
 
     public static String toHex(byte[] bytes) {
         return HexFormat.of().withUpperCase().formatHex(bytes);
+    }
+
+    @FunctionalInterface
+    interface AudioRetriever {
+        void writeTo(OutputStream output) throws IOException;
     }
 }

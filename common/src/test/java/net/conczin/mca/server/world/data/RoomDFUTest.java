@@ -497,6 +497,30 @@ class RoomDFUTest {
         assertEquals(expected, migrated.buildings().get(10).getFloorCells());
     }
 
+    @Test
+    void releasedRoomColumnsOutsideParentFloorRemainSelectableAfterResaving() {
+        CompoundTag saved = releasedFloorVillage(true);
+        BlockPos first = new BlockPos(0, 64, 0);
+        BlockPos second = new BlockPos(1, 64, 0);
+        BlockPos roomOnly = new BlockPos(2, 64, 0);
+        Set<BlockPos> roomColumns = Set.of(first, second, roomOnly);
+        saved.getList("buildings", Tag.TAG_COMPOUND).getCompound(0)
+                .put("floorRegions", list(legacyRegion(64, roomColumns)));
+
+        Village migrated = new Village(saved, null);
+        Village reopened = new Village(migrated.save(), null);
+        assertEquals(roomColumns, reopened.getBuilding(10).orElseThrow().getFloorCells());
+        assertEquals(roomColumns, reopened.getStructure(20).orElseThrow().getFloor(0).orElseThrow()
+                .geometry().cells().stream().map(FloorGeometry.Cell::feet)
+                .collect(java.util.stream.Collectors.toSet()));
+        for (BlockPos position : roomColumns) {
+            Village.ClientPositionTarget target = reopened.resolveClientTarget(position);
+            assertEquals(10, target.room().orElseThrow().getId());
+            assertEquals(20, target.structureId());
+            assertEquals(0, target.floorId());
+        }
+    }
+
     private static CompoundTag releasedFloorVillage(boolean mainInheritanceEnabled) {
         CompoundTag village = new CompoundTag();
         CompoundTag main = releasedFloorRoom(10, mainInheritanceEnabled);

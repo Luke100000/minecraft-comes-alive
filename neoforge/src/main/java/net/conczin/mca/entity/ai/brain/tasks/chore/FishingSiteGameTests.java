@@ -586,6 +586,7 @@ public final class FishingSiteGameTests {
                 helper.assertTrue(villager.getVillagerBrain().getCurrentJob() == Chore.FISH,
                         "fishing job changed before the distant catch: tick=" + ticks[0]
                                 + ", pos=" + villager.position()
+                                + ", profession=" + villager.getProfessionId()
                                 + ", inventoryRods=" + villager.getInventory().countItem(Items.FISHING_ROD)
                                 + ", held=" + villager.getItemInHand(villager.getDominantHand())
                                 + ", taskAbandonReason=" + task.abandonReason
@@ -1049,6 +1050,8 @@ public final class FishingSiteGameTests {
     }
 
     private static Session naturalSession(GameTestHelper helper, VillagerEntityMCA villager) {
+        // Prevent village guard recruitment from replacing the controlled fishing brain.
+        villager.setVillagerXp(1);
         Session task = new Session(helper.makeMockPlayer(GameType.SURVIVAL));
         @SuppressWarnings("unchecked")
         Brain<VillagerEntityMCA> brain = (Brain<VillagerEntityMCA>)(Brain<?>)villager.getBrain();

@@ -290,7 +290,7 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
                     break;
                 }
                 BlockPos pos = RandomPos.generateRandomDirection(entity.getRandom(), 1024, 0).offset(entity.blockPosition());
-                MCA.getStructureLocator().locate(entity.getUUID(), world, pos,
+                MCA.getStructureLocator().locateRumor(entity.getUUID(), player.getUUID(), world, pos,
                         HolderSet.direct(structure.orElseThrow()), 64).thenAccept(position -> {
                     if (!entity.isAlive() || player.isRemoved() || entity.level() != world || player.level() != world) {
                         return;

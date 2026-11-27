@@ -93,13 +93,9 @@ public class ExtendedFindPointOfInterestTask extends Behavior<VillagerEntityMCA>
         };
         Set<Pair<Holder<PoiType>, BlockPos>> set = pointOfInterestStorage
                 .findAllClosestFirstWithType(this.poiType, predicate, villager.blockPosition(), POI_SORTING_RADIUS, PoiManager.Occupancy.HAS_SPACE)
-                // Limit candidates before validating HOME block states. The POI query already
-                // reads and sorts POI records across the radius, but isValidPoi may load the
-                // world chunk for each bed it checks. Invalid or occupied nearby beds consume
-                // one of the five slots intentionally, avoiding checks of more distant bed
-                // chunks on the same attempt.
-                .limit(MAX_POSITIONS_PER_RUN)
+                // Skip unavailable beds before spending the pathfinding budget.
                 .filter(poi -> isValidPoi(serverWorld, poi.getSecond()))
+                .limit(MAX_POSITIONS_PER_RUN)
                 .collect(Collectors.toSet());
         Path path = findPathToPois(villager, set);
         if (path != null && path.canReach()) {
@@ -133,9 +129,9 @@ public class ExtendedFindPointOfInterestTask extends Behavior<VillagerEntityMCA>
             return true;
         }
 
-        // Keep HOME acquisition on the same compatibility contract used to register
-        // HOME POIs and by Set Home/bed navigation.
-        return BedPoiCompatibility.isAvailableHomePoiState(level.getBlockState(pos));
+        // The POI index can report beds in unloaded chunks. Read only loaded terrain.
+        var chunk = level.getChunkSource().getChunkNow(pos.getX() >> 4, pos.getZ() >> 4);
+        return chunk != null && BedPoiCompatibility.isAvailableHomePoiState(chunk.getBlockState(pos));
     }
 
     static class RetryMarker {

@@ -2,6 +2,7 @@ package net.conczin.mca.entity.ai.brain.tasks;
 
 import com.google.common.collect.ImmutableList;
 import com.mojang.datafixers.util.Pair;
+import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
@@ -24,6 +25,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.behavior.Behavior;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.monster.Skeleton;
@@ -343,6 +345,8 @@ public final class ArcherRetreatSafetyGameTests {
     private static Arena criticalFixture(GameTestHelper helper) {
         Arena arena = fixture(helper, 0, false, true);
         helper.runAfterDelay(20, () -> arena.checked(() -> {
+            helper.assertTrue(arena.archer.getMaxHealth() >= 1000.0F,
+                    "critical-health fixture lost its health modifier after spawning" + arena.describe());
             helper.assertTrue(arena.archer.getBrain().hasMemoryValue(MemoryModuleTypeMCA.WEARS_ARMOR)
                             && RangedWeaponHelper.isHoldingSupportedWeapon(arena.archer),
                     "healthy REST guard did not equip before the injury" + arena.describe());
@@ -377,7 +381,11 @@ public final class ArcherRetreatSafetyGameTests {
             arena.archer.getTraits().removeTrait(Traits.DWARFISM);
             arena.archer.getGenetics().setGene(Genetics.SIZE, 0.5F);
             arena.archer.getGenetics().setGene(Genetics.WIDTH, 0.5F);
-            arena.archer.getAttribute(Attributes.MAX_HEALTH).setBaseValue(1000.0D);
+            var health = arena.archer.getAttribute(Attributes.MAX_HEALTH);
+            double configuredHealth = Config.SERVER.villagerMaxHealth.get();
+            health.setBaseValue(configuredHealth);
+            health.addTransientModifier(new AttributeModifier(MCA.locate("gametest_retreat_health"),
+                    1000.0D - configuredHealth, AttributeModifier.Operation.ADD_VALUE));
             arena.archer.setHealth(1000.0F);
             arena.archer.getAttribute(Attributes.KNOCKBACK_RESISTANCE).setBaseValue(1.0D);
             arena.archer.setItemSlot(EquipmentSlot.MAINHAND, Items.BOW.getDefaultInstance());

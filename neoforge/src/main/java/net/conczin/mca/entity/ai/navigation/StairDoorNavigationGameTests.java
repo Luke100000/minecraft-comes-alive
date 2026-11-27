@@ -405,6 +405,75 @@ public final class StairDoorNavigationGameTests {
     }
 
     @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 180)
+    public static void groundedOverhangCanReachAdjacentBottomSlab(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos arena = helper.absolutePos(new BlockPos(40, 3, 40));
+        prepareArea(helper, arena, 5, 7);
+        BlockPos feet = arena.above(3);
+        BlockPos slab = feet.west();
+        level.setBlock(feet.south().below(), Blocks.GRANITE.defaultBlockState(), 3);
+        level.setBlock(feet.south(), Blocks.GRANITE_WALL.defaultBlockState(), 3);
+        level.setBlock(slab, Blocks.SMOOTH_SANDSTONE_SLAB.defaultBlockState(), 3);
+        VillagerEntityMCA actor = spawnProbe(helper, Vec3.atBottomCenterOf(feet).add(0.055D, 0.0D, 0.45D));
+        helper.assertTrue(actor.blockPosition().equals(feet) && level.getBlockState(feet.below()).isAir(),
+                "the grounded actor's center must overhang air");
+
+        BlockPos target = slab.above();
+        Path path = actor.getNavigation().createPath(target, 0);
+        helper.assertTrue(path != null && path.canReach() && path.getEndNode().asBlockPos().equals(target),
+                "the live grounded departure must admit the adjacent slab: " + describe(path));
+        startWalking(helper, actor, target, true);
+        helper.succeedWhen(() -> helper.assertTrue(actor.onGround() && actor.getBlockX() == slab.getX()
+                        && actor.getBlockZ() == slab.getZ() && Math.abs(actor.getY() - (slab.getY() + 0.5D)) < 0.02D,
+                "villager must physically reach the slab surface: " + actor.position()));
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 180)
+    public static void groundedOverhangRejectsSlabStepAcrossUnsupportedGap(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos arena = helper.absolutePos(new BlockPos(40, 3, 40));
+        prepareArea(helper, arena, 5, 7);
+        BlockPos feet = arena.above(3);
+        BlockPos slab = feet.north();
+        level.setBlock(feet.south().below(), Blocks.GRANITE.defaultBlockState(), 3);
+        level.setBlock(feet.south(), Blocks.GRANITE_WALL.defaultBlockState(), 3);
+        level.setBlock(slab, Blocks.SMOOTH_SANDSTONE_SLAB.defaultBlockState(), 3);
+        VillagerEntityMCA actor = spawnProbe(helper, Vec3.atBottomCenterOf(feet).add(0.055D, 0.0D, 0.4502D));
+        BlockPos target = slab.above();
+        Path path = actor.getNavigation().createPath(target, 0);
+        helper.assertTrue(path == null || !path.canReach(),
+                "the villager loses footing before a grounded step can reach this slab: " + describe(path));
+        helper.succeed();
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 180)
+    public static void groundedOverhangAboveTorchCanReachAdjacentBottomSlab(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos arena = helper.absolutePos(new BlockPos(40, 3, 40));
+        prepareArea(helper, arena, 5, 7);
+        BlockPos feet = arena.above(3);
+        BlockPos slab = feet.west();
+        level.setBlock(feet.south().below(), Blocks.GRANITE.defaultBlockState(), 3);
+        level.setBlock(feet.south(), Blocks.GRANITE_WALL.defaultBlockState(), 3);
+        level.setBlock(feet.below(2), Blocks.GRANITE.defaultBlockState(), 3);
+        level.setBlock(feet.below(), Blocks.TORCH.defaultBlockState(), 3);
+        level.setBlock(slab, Blocks.SMOOTH_SANDSTONE_SLAB.defaultBlockState(), 3);
+        VillagerEntityMCA actor = spawnProbe(helper, Vec3.atBottomCenterOf(feet).add(0.055D, 0.0D, 0.45D));
+        helper.assertTrue(actor.blockPosition().equals(feet) && level.getBlockState(feet.below()).is(Blocks.TORCH)
+                        && level.getBlockState(feet.below()).getCollisionShape(level, feet.below()).isEmpty(),
+                "the grounded actor's center must overhang a collisionless non-air block");
+
+        BlockPos target = slab.above();
+        Path path = actor.getNavigation().createPath(target, 0);
+        helper.assertTrue(path != null && path.canReach() && path.getEndNode().asBlockPos().equals(target),
+                "the live grounded departure above a torch must admit the adjacent slab: " + describe(path));
+        startWalking(helper, actor, target, true);
+        helper.succeedWhen(() -> helper.assertTrue(actor.onGround() && actor.getBlockX() == slab.getX()
+                        && actor.getBlockZ() == slab.getZ() && Math.abs(actor.getY() - (slab.getY() + 0.5D)) < 0.02D,
+                "villager must physically reach the slab surface: " + actor.position()));
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 180)
     public static void fourLayerSnowUnderTwoBlockEaveRejectsImpossibleJumpAndTakesOpenDetour(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos snow = helper.absolutePos(new BlockPos(40, 3, 40));

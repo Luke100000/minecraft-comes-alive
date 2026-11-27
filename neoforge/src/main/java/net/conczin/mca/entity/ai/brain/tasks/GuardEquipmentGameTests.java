@@ -1,6 +1,7 @@
 package net.conczin.mca.entity.ai.brain.tasks;
 
 import net.conczin.mca.Config;
+import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
 import net.conczin.mca.entity.EquipmentSet;
@@ -27,6 +28,9 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.phys.Vec3;
+import net.neoforged.fml.config.ModConfig;
+import net.neoforged.fml.config.ModConfigs;
+import net.neoforged.neoforge.common.ModConfigSpec;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatArea;
@@ -393,11 +397,24 @@ public final class GuardEquipmentGameTests {
                 .withPosition(Vec3.atBottomCenterOf(start.east(3))).spawn(MobSpawnType.STRUCTURE);
         boolean originalAnyNightOwl = Config.SERVER.allowAnyNightOwl.get();
         double originalNightOwlChance = Config.SERVER.nightOwlChance.get();
+        ModConfigSpec serverSpec = ModConfigs.getModConfigs(MCA.MOD_ID).stream()
+                .filter(config -> config.getType() == ModConfig.Type.SERVER)
+                .map(config -> (ModConfigSpec) config.getSpec())
+                .findFirst().orElseThrow();
+        ModConfigSpec.BooleanValue nativeAnyNightOwl = serverSpec.getValues().get(Config.SERVER.allowAnyNightOwl.getPath());
+        ModConfigSpec.DoubleValue nativeNightOwlChance = serverSpec.getValues().get(Config.SERVER.nightOwlChance.getPath());
+        boolean originalRawAnyNightOwl = nativeAnyNightOwl.getRaw();
+        double originalRawNightOwlChance = nativeNightOwlChance.getRaw();
         try {
             // Guard schedules must continue to honor the civilian night-owl opt-in.
             // Force chance to one to make both branches deterministic.
             Config.SERVER.allowAnyNightOwl.set(false);
             Config.SERVER.nightOwlChance.set(1.0);
+            // Simulate applying these WORLD-restart settings at the restart boundary.
+            nativeAnyNightOwl.clearCache();
+            nativeNightOwlChance.clearCache();
+            helper.assertTrue(!Config.SERVER.allowAnyNightOwl.get() && Config.SERVER.nightOwlChance.get() == 1.0,
+                    "day-shift fixture did not apply its restart settings");
             guard.refreshBrain(helper.getLevel());
             archer.refreshBrain(helper.getLevel());
             for (VillagerEntityMCA defender : new VillagerEntityMCA[]{guard, archer}) {
@@ -408,6 +425,8 @@ public final class GuardEquipmentGameTests {
             }
 
             Config.SERVER.allowAnyNightOwl.set(true);
+            nativeAnyNightOwl.clearCache();
+            helper.assertTrue(Config.SERVER.allowAnyNightOwl.get(), "night-shift fixture did not apply its restart setting");
             guard.refreshBrain(helper.getLevel());
             archer.refreshBrain(helper.getLevel());
             for (VillagerEntityMCA defender : new VillagerEntityMCA[]{guard, archer}) {
@@ -419,6 +438,13 @@ public final class GuardEquipmentGameTests {
         } finally {
             Config.SERVER.allowAnyNightOwl.set(originalAnyNightOwl);
             Config.SERVER.nightOwlChance.set(originalNightOwlChance);
+            nativeAnyNightOwl.clearCache();
+            nativeNightOwlChance.clearCache();
+            // Restore both the active and any pending restart values.
+            nativeAnyNightOwl.get();
+            nativeNightOwlChance.get();
+            nativeAnyNightOwl.set(originalRawAnyNightOwl);
+            nativeNightOwlChance.set(originalRawNightOwlChance);
             guard.discard();
             archer.discard();
         }

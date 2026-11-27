@@ -46,6 +46,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
     private static final byte TRAPDOOR_CLOSED_OR_ABSENT = 1;
     private static final byte TRAPDOOR_OPEN = 2;
     private final Long2BooleanMap clearanceCache = new Long2BooleanOpenHashMap();
+    private double liveOverhangDepartureFloor = Double.NEGATIVE_INFINITY;
     private final Long2BooleanMap climbableCache = new Long2BooleanOpenHashMap();
     private final Long2ByteMap descendingProbeCache = new Long2ByteOpenHashMap();
     private final Long2ByteMap openTrapdoorCache = new Long2ByteOpenHashMap();
@@ -189,8 +190,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         if (this.countExpandedNodes) {
             this.expandedNodes++;
         }
-        int nodeCount = super.getNeighbors(nodes, origin);
-        nodeCount = rejectBlockedTransitions(nodes, nodeCount, origin);
+        int nodeCount = collectGroundNeighbors(nodes, origin);
         if (!isClimbable(origin.x, origin.y, origin.z)) {
             nodeCount = addDescendingClimbableEntries(nodes, nodeCount, origin.asBlockPos());
             return addClosedHatchDescent(nodes, nodeCount, origin);
@@ -212,6 +212,30 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         }
 
         return nodeCount;
+    }
+
+    private int collectGroundNeighbors(Node[] nodes, Node origin) {
+        if (origin == this.startNode && this.mob.onGround() && !this.mob.onClimbable()
+                && !this.mob.isInWater() && !this.mob.isInLava()) {
+            BlockPos feet = this.mob.blockPosition();
+            AABB body = this.mob.getBoundingBox();
+            if (feet.equals(origin.asBlockPos())
+                    && body.minY > this.getFloorLevel(feet) + RAISED_START_EPSILON) {
+                AABB footSlice = new AABB(body.minX, body.minY - FLOOR_EPSILON, body.minZ,
+                        body.maxX, body.minY, body.maxZ);
+                if (this.currentContext.level().findSupportingBlock(this.mob, footSlice).isPresent()) {
+                    // Actual footing is higher than the floor modeled beneath the body's center.
+                    // Correct vanilla's departure height for this expansion before checking the live sweep.
+                    this.liveOverhangDepartureFloor = body.minY;
+                    try {
+                        return rejectBlockedTransitions(nodes, super.getNeighbors(nodes, origin), origin, true);
+                    } finally {
+                        this.liveOverhangDepartureFloor = Double.NEGATIVE_INFINITY;
+                    }
+                }
+            }
+        }
+        return rejectBlockedTransitions(nodes, super.getNeighbors(nodes, origin), origin, false);
     }
 
     /** A closed hatch beneath the feet is a valid route only to safe ground in its own column. */
@@ -319,7 +343,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         return origin == this.startNode && this.mob.onGround() ? this.mob.getBoundingBox() : getMobBoxAt(origin);
     }
 
-    private int rejectBlockedTransitions(Node[] nodes, int nodeCount, Node origin) {
+    private int rejectBlockedTransitions(Node[] nodes, int nodeCount, Node origin, boolean overhangingDeparture) {
         boolean raisedSurface = requiresRaisedSurfaceSweep(origin);
         AABB originBox = null;
         int writeIndex = 0;
@@ -336,8 +360,8 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
             if (raisedSurface) {
                 if (originBox == null) originBox = getDepartureBox(origin);
                 destinationBox = getMobBoxAt(candidate);
-                if (!canSweepTo(originBox, destinationBox,
-                        new PathingCollisionView(this.currentContext.level(), origin, candidate, this.mob))) {
+                var collisions = new PathingCollisionView(this.currentContext.level(), origin, candidate, this.mob);
+                if (!canSweepTo(originBox, destinationBox, collisions, overhangingDeparture)) {
                     continue;
                 }
                 // The native guard is live-body-only and sees actual closed blocks.
@@ -742,7 +766,8 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
     @Nullable
     @Override
     protected Node findAcceptedNode(int x, int y, int z, int maxYStep, double currentFloor, Direction direction, PathType previousType) {
-        Node node = super.findAcceptedNode(x, y, z, maxYStep, currentFloor, direction, previousType);
+        double departureFloor = Math.max(currentFloor, this.liveOverhangDepartureFloor);
+        Node node = super.findAcceptedNode(x, y, z, maxYStep, departureFloor, direction, previousType);
         if (node == null || node.costMalus < 0.0F) {
             return node;
         }
@@ -809,6 +834,11 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
     private static final int MAX_JUMP_SWEEP_TICKS = 20;
 
     private boolean canSweepTo(AABB startBox, AABB destinationBox, CollisionGetter collisions) {
+        return canSweepTo(startBox, destinationBox, collisions, false);
+    }
+
+    private boolean canSweepTo(AABB startBox, AABB destinationBox, CollisionGetter collisions,
+                               boolean overhangingDeparture) {
         double rise = destinationBox.minY - startBox.minY;
         Vec3 travel = new Vec3(
                 destinationBox.minX - startBox.minX,
@@ -821,13 +851,19 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
                     || collisions.noBlockCollision(this.mob, startBox.expandTowards(0.0D, rise, 0.0D));
         }
         if (rise > this.mob.maxUpStep()) {
-            if (canStepUpTo(startBox, destinationBox, travel, collisions)) {
+            if (canStepUpTo(startBox, destinationBox, travel, collisions, overhangingDeparture)) {
                 return true;
             }
             if (!collisions.noBlockCollision(this.mob, startBox.expandTowards(0.0D, rise, 0.0D))) {
                 return false;
             }
             return canJumpSweepTo(startBox, rise, travel, steps, collisions);
+        }
+
+        if (overhangingDeparture && rise > RAISED_START_EPSILON) {
+            // MoveControl does not jump a step within maxUpStep. Carrying the body
+            // at the destination height would admit a gap the villager falls into.
+            return canStepUpTo(startBox, destinationBox, travel, collisions, true);
         }
 
         AABB sweepBox = startBox;
@@ -844,7 +880,8 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
      * Multi-tread obstacles such as stairs can exceed {@code maxUpStep()} overall while remaining
      * walkable via consecutive step-ups without jumping.
      */
-    private boolean canStepUpTo(AABB startBox, AABB destinationBox, Vec3 travel, CollisionGetter collisions) {
+    private boolean canStepUpTo(AABB startBox, AABB destinationBox, Vec3 travel, CollisionGetter collisions,
+                                boolean needsContinuousFooting) {
         double maxStep = this.mob.maxUpStep();
         if (maxStep <= 0.0D) {
             return false;
@@ -857,6 +894,10 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         for (int index = 0; index < stepCount; index++) {
             AABB next = current.move(stepX, 0.0D, stepZ);
             if (collisions.noBlockCollision(this.mob, next)) {
+                if (needsContinuousFooting && collisions.noBlockCollision(this.mob,
+                        new AABB(next.minX, next.minY - FLOOR_EPSILON, next.minZ, next.maxX, next.minY, next.maxZ))) {
+                    return false;
+                }
                 current = next;
                 continue;
             }
