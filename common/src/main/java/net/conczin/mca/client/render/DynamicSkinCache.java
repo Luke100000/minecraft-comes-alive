@@ -4,7 +4,6 @@ import com.mojang.blaze3d.platform.NativeImage;
 import net.conczin.mca.MCA;
 import net.conczin.mca.client.gui.immersive_library.SkinCache;
 import net.conczin.mca.client.resources.SkinExporter;
-import net.conczin.mca.client.resources.SkinPorter;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ZombieVillagerEntityMCA;
 import net.conczin.mca.entity.ai.Genetics;
@@ -18,6 +17,8 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -29,6 +30,9 @@ public final class DynamicSkinCache {
 
     private static final Set<SkinKey> INCOMPLETE_CACHE = new HashSet<>();
     private static final Set<SkinKey> INCOMPLETE_FACE_CACHE = new HashSet<>();
+    private static final Map<ResourceLocation, Object> SLIM_TEXTURE_PENDING = new HashMap<>();
+    private static final Set<ResourceLocation> SLIM_TEXTURE_FAILED =
+            Collections.newSetFromMap(new MaxSizeHashMap<ResourceLocation, Boolean>(128));
     private static final Map<ResourceLocation, ResourceLocation> SLIM_TEXTURE_CACHE = new MaxSizeHashMap<>(128) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<ResourceLocation, ResourceLocation> eldest) {
@@ -72,6 +76,8 @@ public final class DynamicSkinCache {
         CACHE.clear();
         FACE_CACHE.clear();
         SLIM_TEXTURE_CACHE.clear();
+        SLIM_TEXTURE_PENDING.clear();
+        SLIM_TEXTURE_FAILED.clear();
         INCOMPLETE_CACHE.clear();
         INCOMPLETE_FACE_CACHE.clear();
     }
@@ -86,6 +92,8 @@ public final class DynamicSkinCache {
         }
 
         ResourceLocation slim = SLIM_TEXTURE_CACHE.remove(source);
+        SLIM_TEXTURE_PENDING.remove(source);
+        SLIM_TEXTURE_FAILED.remove(source);
         if (slim != null) {
             releaseDynamicTexture(slim);
         }
@@ -118,31 +126,54 @@ public final class DynamicSkinCache {
         if (cached != null) {
             return cached;
         }
-
-        NativeImage image = SkinExporter.loadTexture(source);
-        if (image == null) {
+        if (SLIM_TEXTURE_FAILED.contains(source) || SLIM_TEXTURE_PENDING.containsKey(source)) {
             return source;
         }
-        if (image.getWidth() != 64 || image.getHeight() != 64) {
-            image.close();
+        Minecraft client = Minecraft.getInstance();
+        if (client == null || !client.isSameThread()) {
             return source;
         }
 
+        Object request = new Object();
+        SLIM_TEXTURE_PENDING.put(source, request);
+        try {
+            SkinCache.loadSlimTextureAsync(source, image -> finishSlimTexture(source, request, image));
+        } catch (RuntimeException e) {
+            SLIM_TEXTURE_PENDING.remove(source, request);
+            MCA.LOGGER.error("Failed to schedule slim MCA texture {}", source, e);
+        }
+        return source;
+    }
+
+    private static void finishSlimTexture(ResourceLocation source, Object request, NativeImage image) {
+        DynamicTexture texture = null;
         boolean registered = false;
         try {
-            SkinPorter.convertDefaultToSlim(image);
+            if (SLIM_TEXTURE_PENDING.get(source) != request) {
+                return;
+            }
+            if (image == null) {
+                SLIM_TEXTURE_FAILED.add(source);
+                return;
+            }
             ResourceLocation id = MCA.locate("dynamic/slim/" + UUID.nameUUIDFromBytes(
                     source.toString().getBytes(StandardCharsets.UTF_8)));
-            Minecraft.getInstance().getTextureManager().register(id, new DynamicTexture(image));
+            texture = new DynamicTexture(image);
+            Minecraft.getInstance().getTextureManager().register(id, texture);
             registered = true;
             SLIM_TEXTURE_CACHE.put(source, id);
-            return id;
         } catch (Exception exception) {
             MCA.LOGGER.error("Failed to generate slim MCA texture {}", source, exception);
-            return source;
         } finally {
+            SLIM_TEXTURE_PENDING.remove(source, request);
             if (!registered) {
-                image.close();
+                if (texture == null) {
+                    if (image != null) {
+                        image.close();
+                    }
+                } else {
+                    texture.close();
+                }
             }
         }
     }

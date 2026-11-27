@@ -10,7 +10,9 @@ import net.conczin.mca.client.gui.immersive_library.responses.Response;
 import net.conczin.mca.client.gui.immersive_library.types.Content;
 import net.conczin.mca.client.gui.immersive_library.types.LiteContent;
 import net.conczin.mca.client.render.DynamicSkinCache;
+import net.conczin.mca.client.resources.SkinExporter;
 import net.conczin.mca.client.resources.SkinMeta;
+import net.conczin.mca.client.resources.SkinPorter;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.minecraft.client.renderer.texture.DynamicTexture;
@@ -29,6 +31,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
 import static net.conczin.mca.client.gui.immersive_library.Api.request;
 
@@ -189,6 +192,41 @@ public class SkinCache {
             return;
         }
         CompletableFuture.runAsync(() -> decodeResources(contentid, expectedVersion, load));
+    }
+
+    /** Load and reshape a slim-arm texture off-thread, then return ownership on the client thread. */
+    public static void loadSlimTextureAsync(ResourceLocation source, Consumer<NativeImage> onLoaded) {
+        Minecraft client = Minecraft.getInstance();
+        CompletableFuture.runAsync(() -> {
+            NativeImage image = null;
+            try {
+                image = SkinExporter.loadTexture(source);
+                if (image != null) {
+                    if (image.getWidth() == 64 && image.getHeight() == 64) {
+                        SkinPorter.convertDefaultToSlim(image);
+                    } else {
+                        image.close();
+                        image = null;
+                    }
+                }
+            } catch (Exception e) {
+                if (image != null) {
+                    image.close();
+                    image = null;
+                }
+                MCA.LOGGER.warn("Failed to prepare slim MCA texture {}", source, e);
+            }
+
+            NativeImage converted = image;
+            try {
+                client.execute(() -> onLoaded.accept(converted));
+            } catch (RuntimeException e) {
+                if (converted != null) {
+                    converted.close();
+                }
+                MCA.LOGGER.warn("Failed to deliver slim MCA texture {}", source, e);
+            }
+        });
     }
 
     private static boolean isCurrentLoad(int contentid, int expectedVersion, Object load) {
