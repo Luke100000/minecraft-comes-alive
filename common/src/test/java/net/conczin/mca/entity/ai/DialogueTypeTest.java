@@ -1,29 +1,21 @@
 package net.conczin.mca.entity.ai;
 
 import net.minecraft.SharedConstants;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.Options;
 import net.minecraft.locale.Language;
 import net.minecraft.network.chat.FormattedText;
 import net.minecraft.server.Bootstrap;
-import net.minecraft.server.packs.PackType;
-import net.minecraft.server.packs.resources.ReloadableResourceManager;
 import net.minecraft.util.FormattedCharSequence;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import sun.misc.Unsafe;
 
-import java.lang.reflect.Field;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class DialogueTypeTest {
     private Language previousLanguage;
-    private Minecraft previousMinecraft;
-    private ReloadableResourceManager resourceManager;
 
     @BeforeAll
     static void bootstrapMinecraft() {
@@ -32,60 +24,39 @@ class DialogueTypeTest {
     }
 
     @BeforeEach
-    void installDialogueLanguage() throws Exception {
-        previousMinecraft = Minecraft.getInstance();
-        Minecraft minecraft = allocate(Minecraft.class);
-        Options options = allocate(Options.class);
-        options.languageCode = "en_us";
-        resourceManager = new ReloadableResourceManager(PackType.CLIENT_RESOURCES);
-        setField(minecraft, "options", options);
-        setField(minecraft, "resourceManager", resourceManager);
-        setStaticField(Minecraft.class, "instance", minecraft);
-
+    void installDialogueLanguage() {
         previousLanguage = Language.getInstance();
         Language.inject(new TestLanguage(previousLanguage, Map.of(
                 "flirty.dialogue.greet/1", "Generic flirty greeting",
+                "male.adult.dialogue.greet/1", "Ordinary adult greeting",
                 "male.adultp.dialogue.greet/1", "Hey dad!"
         )));
     }
 
     @AfterEach
-    void restoreLanguage() throws Exception {
+    void restoreLanguage() {
         Language.inject(previousLanguage);
-        resourceManager.close();
-        setStaticField(Minecraft.class, "instance", previousMinecraft);
     }
 
     @Test
     void flirtyAdultChildUsesParentDialogueInsteadOfGenericFlirtyFallback() {
         String key = "#Gmale.#Emca:flirty.#TADULTP.dialogue.greet/1";
 
-        assertEquals("male.adultp.dialogue.greet/1", DialogueType.applyFallback(key));
+        assertEquals("male.adultp.dialogue.greet/1", DialogueType.applyFallback(key, () -> true));
     }
 
     @Test
     void flirtyUnrelatedAdultStillUsesPersonalityDialogue() {
         String key = "#Gmale.#Emca:flirty.#TADULT.dialogue.greet/1";
 
-        assertEquals("flirty.dialogue.greet/1", DialogueType.applyFallback(key));
+        assertEquals("flirty.dialogue.greet/1", DialogueType.applyFallback(key, () -> true));
     }
 
-    private static <T> T allocate(Class<T> type) throws Exception {
-        Field field = Unsafe.class.getDeclaredField("theUnsafe");
-        field.setAccessible(true);
-        return type.cast(((Unsafe) field.get(null)).allocateInstance(type));
-    }
+    @Test
+    void disabledPersonalityTranslationsUseTheOrdinaryGreeting() {
+        String key = "#Gmale.#Emca:flirty.#TADULT.dialogue.greet/1";
 
-    private static void setField(Object target, String name, Object value) throws Exception {
-        Field field = target.getClass().getDeclaredField(name);
-        field.setAccessible(true);
-        field.set(target, value);
-    }
-
-    private static void setStaticField(Class<?> type, String name, Object value) throws Exception {
-        Field field = type.getDeclaredField(name);
-        field.setAccessible(true);
-        field.set(null, value);
+        assertEquals("male.adult.dialogue.greet/1", DialogueType.applyFallback(key, () -> false));
     }
 
     private static final class TestLanguage extends Language {

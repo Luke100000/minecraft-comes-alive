@@ -1,5 +1,6 @@
 package net.conczin.mca.mixin;
 
+import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
@@ -13,7 +14,6 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.WorldGenLevel;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.dimension.DimensionType;
 import net.minecraft.world.level.storage.WritableLevelData;
 import org.spongepowered.asm.mixin.Mixin;
@@ -40,11 +40,21 @@ abstract class MixinServerWorld extends Level implements WorldGenLevel {
     @WrapMethod(method = "sendBlockUpdated")
     private void mca$checkPathAfterBlockChange(BlockPos changed, BlockState before, BlockState after,
                                                int flags, Operation<Void> original) {
-        if (!before.hasProperty(BlockStateProperties.OPEN) || !after.hasProperty(BlockStateProperties.OPEN)) {
-            original.call(changed, before, after, flags);
-            return;
-        }
-        MCAGroundPathNavigation.duringBlockUpdate(changed, before, after,
+        MCAGroundPathNavigation.duringBlockUpdate((ServerLevel) (Object) this, changed, before, after,
                 () -> original.call(changed, before, after, flags));
+    }
+
+    @ModifyExpressionValue(
+            method = "sendBlockUpdated",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lnet/minecraft/world/phys/shapes/Shapes;joinIsNotEmpty(Lnet/minecraft/world/phys/shapes/VoxelShape;Lnet/minecraft/world/phys/shapes/VoxelShape;Lnet/minecraft/world/phys/shapes/BooleanOp;)Z"
+            )
+    )
+    private boolean mca$recordCollisionShapeChanged(boolean changed) {
+        if (changed) {
+            MCAGroundPathNavigation.markCurrentBlockUpdateChangedCollision();
+        }
+        return changed;
     }
 }

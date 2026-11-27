@@ -122,6 +122,14 @@ public class GraveyardManager extends SavedData {
         }
     }
 
+    public void registerMissingGrave(UUID deceasedId, GlobalPos grave) {
+        synchronized (occupiedGraves) {
+            if (occupiedGraves.putIfAbsent(deceasedId, grave) == null) {
+                setDirty();
+            }
+        }
+    }
+
     public void clearOccupiedGrave(UUID deceasedId, GlobalPos grave) {
         synchronized (occupiedGraves) {
             if (occupiedGraves.remove(deceasedId, grave)) {

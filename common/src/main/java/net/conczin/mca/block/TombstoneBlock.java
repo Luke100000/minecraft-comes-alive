@@ -321,6 +321,19 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
             super(BlockEntityTypesMCA.TOMBSTONE, pos, state);
         }
 
+        @Override
+        public void setLevel(Level level) {
+            super.setLevel(level);
+            registerGraveIfPresent();
+        }
+
+        private void registerGraveIfPresent() {
+            if (level instanceof ServerLevel serverLevel) {
+                getEntityUuid().ifPresent(uuid -> GraveyardManager.getGlobal(serverLevel)
+                        .registerMissingGrave(uuid, GlobalPos.of(serverLevel.dimension(), worldPosition)));
+            }
+        }
+
         public static Optional<Data> of(@Nullable BlockEntity be) {
             return Optional.ofNullable(be).filter(p -> p instanceof Data).map(Data.class::cast);
         }
@@ -560,9 +573,19 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
         @Override
         protected void loadAdditional(ValueInput input) {
             super.loadAdditional(input);
-            entityData = input.read("EntityData", CompoundTag.CODEC).map(EntityData::new);
+            entityData = input.read("EntityData", CompoundTag.CODEC).map(tag -> {
+                // The target format wraps the entity and its metadata in EntityData.
+                // Legacy block entities instead store the raw entity here and metadata at the root.
+                if (tag.getCompound("EntityData").isPresent()
+                        || tag.getString("id").filter(id -> !id.isBlank()).isEmpty()) {
+                    return new EntityData(tag);
+                }
+                return new EntityData(tag, input.getStringOr("EntityName", ""),
+                        Gender.byId(input.getIntOr("EntityGender", 0)));
+            });
             resurrectionProgress = input.getIntOr("ResurrectionProgress", 0);
             cure = input.getBooleanOr("Cure", false);
+            registerGraveIfPresent();
         }
 
         @Override

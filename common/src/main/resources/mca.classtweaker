@@ -65,12 +65,22 @@ accessible method net/minecraft/client/renderer/entity/FishingHookRenderer strin
 # Reuse Projectile's lifecycle without inheriting ThrowableProjectile's water bubbles/collision tick.
 accessible method net/minecraft/world/entity/projectile/Projectile <init> (Lnet/minecraft/world/entity/EntityType;Lnet/minecraft/world/level/Level;)V
 
-# Reuse ItemEntity's vanilla infinite-delay sentinel when identifying protected MCA reel items.
-accessible field net/minecraft/world/entity/item/ItemEntity INFINITE_PICKUP_DELAY I
-
 # Widen LivingEntity's air-movement calculation so MCA villagers can preserve
 # navigation-controlled vertical velocity while traversing climbables.
 extendable method net/minecraft/world/entity/LivingEntity handleRelativeFrictionAndCalculateMovement (Lnet/minecraft/world/phys/Vec3;F)Lnet/minecraft/world/phys/Vec3;
+
+# Let reachability probes use the navigator's existing search and budget.
+accessible field net/minecraft/world/entity/ai/navigation/PathNavigation pathFinder Lnet/minecraft/world/level/pathfinder/PathFinder;
+accessible field net/minecraft/world/level/pathfinder/PathFinder maxVisitedNodes I
+accessible field net/minecraft/world/entity/ai/navigation/PathNavigation maxVisitedNodesMultiplier F
+
+# Commit a detached probe only when movement accepts it, using the native route state.
+accessible field net/minecraft/world/entity/ai/navigation/PathNavigation targetPos Lnet/minecraft/core/BlockPos;
+accessible field net/minecraft/world/entity/ai/navigation/PathNavigation reachRange I
+accessible method net/minecraft/world/entity/ai/navigation/PathNavigation resetStuckTimeout ()V
+# Preserve native debug data when a probe result is copied.
+extendable class net/minecraft/world/level/pathfinder/Path
+accessible method net/minecraft/world/level/pathfinder/Path setDebug ([Lnet/minecraft/world/level/pathfinder/Node;[Lnet/minecraft/world/level/pathfinder/Node;Ljava/util/Set;)V
 
 # Reuse TrapDoorBlock's vanilla hand-openability and toggle behavior.
 accessible method net/minecraft/world/level/block/TrapDoorBlock getType ()Lnet/minecraft/world/level/block/state/properties/BlockSetType;

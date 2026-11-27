@@ -13,6 +13,7 @@ import net.conczin.mca.entity.ai.brain.VillagerTasksMCA;
 import net.conczin.mca.entity.ai.navigation.BedApproachTarget;
 import net.conczin.mca.server.world.data.Building;
 import net.conczin.mca.server.world.data.IndoorRoomCache;
+import net.conczin.mca.server.world.data.RoomWorkflow;
 import net.conczin.mca.server.world.data.Village;
 import net.conczin.mca.server.world.data.VillageManager;
 import net.minecraft.core.BlockPos;
@@ -215,6 +216,7 @@ public final class HomelessShelterGameTests {
         Map<VillagerEntityMCA, Set<BlockPos>> visited = new LinkedHashMap<>();
         Map<VillagerEntityMCA, Integer> consecutiveBedTicks = new LinkedHashMap<>();
         Map<VillagerEntityMCA, Integer> longestBedStay = new LinkedHashMap<>();
+        Map<VillagerEntityMCA, Integer> lateBedTicks = new LinkedHashMap<>();
         Set<VillagerEntityMCA> longerWalks = new HashSet<>();
         VillagerEntityMCA[] owner = {null};
         Village[] village = {null};
@@ -253,6 +255,7 @@ public final class HomelessShelterGameTests {
                 visited.put(villager, new HashSet<>());
                 consecutiveBedTicks.put(villager, 0);
                 longestBedStay.put(villager, 0);
+                lateBedTicks.put(villager, 0);
             }
             started[0] = level.getGameTime();
         });
@@ -277,6 +280,10 @@ public final class HomelessShelterGameTests {
                             "villager left its resolved room: " + villager.position());
                     visited.get(villager).add(villager.blockPosition());
                 }
+                if (elapsed >= 300 && elapsed < 400 && BedPoiCompatibility.isCompatibleBedState(
+                        level.getBlockState(villager.blockPosition()))) {
+                    lateBedTicks.compute(villager, (ignored, count) -> count + 1);
+                }
                 if (elapsed >= 400) {
                     helper.assertTrue(visited.get(villager).size() >= 3 && longerWalks.contains(villager),
                             "villager did not wander across room floor: " + visited.get(villager));
@@ -292,6 +299,9 @@ public final class HomelessShelterGameTests {
                                     + "; walk=" + villager.getBrain().getMemory(MemoryModuleType.WALK_TARGET)
                                     + "; noAi=" + villager.isNoAi()
                                     + "; navDone=" + villager.getNavigation().isDone());
+                    helper.assertTrue(lateBedTicks.get(villager) < 20,
+                            "villager lingered on the occupied bed: " + lateBedTicks.get(villager)
+                                    + " of the final 100 ticks");
                 }
             }
             if (elapsed >= 400) {
@@ -465,6 +475,7 @@ public final class HomelessShelterGameTests {
     @GameTest(batch = "mca_occupied_shelter_floor", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
     public static void homelessRestChoosesIndoorFloorInsteadOfOccupiedBed(GameTestHelper helper) {
         BlockPos floor = helper.absolutePos(new BlockPos(2, 1, 2));
+        previousDayTime = helper.getLevel().getOverworldClockTime();
         setDayTime(helper.getLevel(), 13000L);
         for (BlockPos pos : BlockPos.betweenClosed(floor, floor.offset(6, 0, 6))) {
             helper.getLevel().setBlock(pos.below(), Blocks.STONE.defaultBlockState(), 3);
@@ -561,10 +572,10 @@ public final class HomelessShelterGameTests {
         helper.getLevel().setBlock(origin.south().below(), Blocks.STONE.defaultBlockState(), 3);
         VillagerEntityMCA villager = spawn(helper, origin);
         STROLL_VILLAGERS.add(villager);
-        helper.runAfterDelay(10, () -> {
+        helper.runAfterDelay(10, () -> whenSkyLightBlocked(helper, villager.blockPosition(), 50, () -> {
             verifyStandingDestinations(helper, villager);
             helper.succeed();
-        });
+        }));
     }
 
     @GameTest(batch = "mca_indoor_stroll_movement", templateNamespace = "minecraft",
@@ -689,8 +700,6 @@ public final class HomelessShelterGameTests {
         List<VillagerEntityMCA> walkers = new ArrayList<>();
         Map<VillagerEntityMCA, Set<BlockPos>> visited = new LinkedHashMap<>();
         Map<VillagerEntityMCA, WalkTarget> pending = new LinkedHashMap<>();
-        Map<VillagerEntityMCA, Integer> lateBedTicks = new LinkedHashMap<>();
-        Map<VillagerEntityMCA, Integer> longestLateBedStreak = new LinkedHashMap<>();
         VillagerEntityMCA[] owner = {null};
         long[] started = {0L};
         helper.runAfterDelay(10, () -> {
@@ -715,8 +724,6 @@ public final class HomelessShelterGameTests {
                 villager.setNoAi(false);
                 walkers.add(villager);
                 visited.put(villager, new HashSet<>());
-                lateBedTicks.put(villager, 0);
-                longestLateBedStreak.put(villager, 0);
             }
             started[0] = helper.getLevel().getGameTime();
         });
@@ -737,23 +744,11 @@ public final class HomelessShelterGameTests {
                 }
                 villager.getBrain().getMemory(MemoryModuleType.WALK_TARGET)
                         .ifPresentOrElse(walk -> pending.put(villager, walk), () -> pending.remove(villager));
-                if (elapsed >= 1100 && elapsed < 1200) {
-                    // Passing across the occupied bed several times is not lingering.
-                    // Reject a continuous stay instead of summing unrelated crossings.
-                    boolean onBed = BedPoiCompatibility.isCompatibleBedState(
-                            helper.getLevel().getBlockState(villager.blockPosition()));
-                    int streak = onBed ? lateBedTicks.get(villager) + 1 : 0;
-                    lateBedTicks.put(villager, streak);
-                    longestLateBedStreak.merge(villager, streak, Math::max);
-                }
             }
             if (elapsed >= 1200) {
                 for (VillagerEntityMCA villager : walkers) {
                     helper.assertTrue(visited.get(villager).size() >= 3,
                             "villager did not stroll between floor cells: " + villager.position() + ", cells=" + visited.get(villager));
-                    helper.assertTrue(longestLateBedStreak.get(villager) < 20,
-                            "villager lingered continuously on the bed: "
-                                    + longestLateBedStreak.get(villager) + " of the final 100 ticks");
                 }
                 helper.assertTrue(owner[0].isSleeping()
                                 && owner[0].getBrain().getMemory(MemoryModuleType.HOME)
@@ -872,80 +867,75 @@ public final class HomelessShelterGameTests {
     @GameTest(batch = "mca_shelter_room_cache", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 560)
     public static void sharedRoomCacheReusesBedsAndInvalidatesRoofChanges(GameTestHelper helper) {
-        verifyRoomCache(helper, false);
+        verifyUnregisteredRoomCache(helper);
     }
 
     @GameTest(batch = "mca_registered_room_cache", templateNamespace = "minecraft",
-            template = "bastion/blocks/air", timeoutTicks = 560)
-    public static void registeredRoomCacheDoesNotRestoreInvalidatedGeometry(GameTestHelper helper) {
-        verifyRoomCache(helper, true);
-    }
-
-    @GameTest(batch = "mca_registered_room_partition_cache", templateNamespace = "minecraft",
-            template = "bastion/blocks/air", timeoutTicks = 100)
-    public static void registeredRoomCacheDiscoversRemovedPartitionOnFirstUse(GameTestHelper helper) {
-        verifyRemovedPartition(helper, false);
-    }
-
-    @GameTest(batch = "mca_registered_room_partition_cache", templateNamespace = "minecraft",
-            template = "bastion/blocks/air", timeoutTicks = 1500)
-    public static void registeredRoomCacheDiscoversRemovedPartitionAfterExpiry(GameTestHelper helper) {
-        verifyRemovedPartition(helper, true);
-    }
-
-    private static void verifyRemovedPartition(GameTestHelper helper, boolean expire) {
-        BlockPos center = helper.absolutePos(new BlockPos(expire ? 2128 : 1872, 2, 80));
+            template = "bastion/blocks/air", timeoutTicks = 200)
+    public static void registeredRoomFastPathUsesPersistedGeometryWithoutRescanning(GameTestHelper helper) {
+        BlockPos center = helper.absolutePos(new BlockPos(1616, 2, 80));
         BlockPos head = prepareBedsideHouse(helper, center);
         ServerLevel level = helper.getLevel();
-        BlockPos adjacentRoom = center.west(3).north(2);
-        for (int z = -3; z <= 3; z++) {
-            for (int y = 0; y < 3; y++) {
-                level.setBlock(center.offset(-1, y, z), Blocks.STONE.defaultBlockState(), 3);
-            }
-        }
-        BlockPos door = center.west();
-        var state = Blocks.OAK_DOOR.defaultBlockState().setValue(DoorBlock.FACING, Direction.EAST);
-        level.setBlock(door, state.setValue(DoorBlock.HALF, DoubleBlockHalf.LOWER), 3);
-        level.setBlock(door.above(), state.setValue(DoorBlock.HALF, DoubleBlockHalf.UPPER), 3);
         var cache = VillageManager.get(level).getIndoorRooms();
-        Building[] registered = {null};
         helper.runAfterDelay(10, () -> {
             Village village = registerStrollHouse(helper, center);
-            registered[0] = village.findPhysicalRoomAt(head).orElseThrow();
-            helper.assertTrue(!registered[0].containsFloorPosition(adjacentRoom),
-                    "fixture partition did not separate the bed from the adjacent room");
-            if (expire) {
-                helper.assertTrue(!cache.resolve(head).orElseThrow().floorCells().contains(adjacentRoom),
-                        "initial room discovery ignored the partition");
-            }
-        });
-        // Wait beyond both the idle lifetime and the cache's periodic eviction pass.
-        int removeAt = expire ? 1420 : 20;
-        helper.runAfterDelay(removeAt, () -> {
-            for (int z = -3; z <= 3; z++) {
-                // Keep the door column: removing its upper half also changes
-                // a recorded ceiling and would mask stale wall membership.
-                if (z == 0) continue;
-                for (int y = 0; y < 3; y++) {
-                    level.setBlock(center.offset(-1, y, z), Blocks.AIR.defaultBlockState(), 3);
-                }
-            }
-        });
-        helper.runAfterDelay(removeAt + 10, () -> {
-            helper.assertTrue(!registered[0].containsFloorPosition(adjacentRoom),
-                    "fixture registration refreshed before testing cache discovery");
-            var resolved = cache.resolve(head).orElseThrow();
-            helper.assertTrue(resolved.floorCells().contains(adjacentRoom)
-                            && resolved.floorCells().contains(door),
-                    "room discovery restored a stale registered partition after its wall was removed");
-            helper.assertTrue(!resolved.floorCells().contains(center.east().south(5)),
-                    "merged interior room included the covered exterior doorstep");
+            Building registered = village.findPhysicalRoomAt(head).orElseThrow();
+
+            int[] zeroScanBudget = {0};
+            var house = cache.resolveHouseValidBed(head, zeroScanBudget).orElseThrow();
+            helper.assertTrue(house.floorCells().containsAll(registered.getFloorCells()),
+                    "registered village house did not resolve via O(1) fast path without scan budget");
+            var room = cache.resolve(head).orElseThrow();
+            helper.assertTrue(room.floorCells().equals(registered.getFloorCells()),
+                    "registered room lookup did not return persisted room cells");
+            helper.assertTrue(cache.resolve(head).orElseThrow() == room,
+                    "repeated O(1) registered room lookup did not reuse cached view");
+
+            // Break roof without updating the registered village room: O(1) fast path still uses persisted room
+            BlockPos roof = center.north().above(3);
+            level.setBlock(roof.west(), Blocks.AIR.defaultBlockState(), 3);
+            level.setBlock(roof, Blocks.AIR.defaultBlockState(), 3);
+            level.setBlock(roof.east(), Blocks.AIR.defaultBlockState(), 3);
+            helper.assertTrue(cache.resolve(head).orElseThrow() == room,
+                    "registered room fast path unnecessarily rescanned world blocks");
+
+            // Refreshing the registered room via RoomWorkflow updates the O(1) view immediately
+            new RoomWorkflow(VillageManager.get(level), level).scanRoom(head, registered.getId(), null);
+            var refreshed = cache.resolve(head).orElseThrow();
+            helper.assertTrue(!refreshed.floorCells().contains(roof.below(3)),
+                    "updated registered room did not publish refreshed floor cells to IndoorRoomCache");
             helper.succeed();
         });
     }
 
-    private static void verifyRoomCache(GameTestHelper helper, boolean registered) {
-        BlockPos center = helper.absolutePos(new BlockPos(registered ? 1616 : 1360, 2, 80));
+    @GameTest(batch = "mca_registered_room_partition_cache", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 200)
+    public static void unregisteredBedExplicitInvalidateRefreshesBeforeTtlExpiry(GameTestHelper helper) {
+        BlockPos center = helper.absolutePos(new BlockPos(1872, 2, 80));
+        BlockPos head = prepareBedsideHouse(helper, center);
+        ServerLevel level = helper.getLevel();
+        var cache = VillageManager.get(level).getIndoorRooms();
+        BlockPos roof = center.north().above(3);
+        List<BlockPos> breach = List.of(roof.west(), roof, roof.east());
+        helper.runAfterDelay(10, () -> {
+            var initial = cache.resolve(head).orElseThrow();
+            helper.assertTrue(initial.floorCells().contains(roof.below(3)),
+                    "initial unregistered room omitted roofed column");
+            for (BlockPos pos : breach) {
+                level.setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
+            }
+            helper.assertTrue(cache.resolve(head).orElseThrow() == initial,
+                    "unregistered cache did not retain entry within TTL before explicit invalidate");
+            cache.invalidate(head);
+            var refreshed = cache.resolve(head).orElseThrow();
+            helper.assertTrue(refreshed != initial && !refreshed.floorCells().contains(roof.below(3)),
+                    "explicit invalidate did not refresh unregistered shelter immediately");
+            helper.succeed();
+        });
+    }
+
+    private static void verifyUnregisteredRoomCache(GameTestHelper helper) {
+        BlockPos center = helper.absolutePos(new BlockPos(1360, 2, 80));
         BlockPos head = prepareBedsideHouse(helper, center);
         ServerLevel level = helper.getLevel();
         BlockPos secondFoot = center.west(3).south();
@@ -963,7 +953,6 @@ public final class HomelessShelterGameTests {
         // Open three to verify that a genuinely exposed column is invalidated.
         List<BlockPos> breach = List.of(roof.west(), roof, roof.east());
         helper.runAfterDelay(10, () -> {
-            if (registered) registerStrollHouse(helper, center);
             original[0] = cache.resolve(head).orElseThrow();
             helper.assertTrue(cache.resolve(secondHead).orElseThrow() == original[0],
                     "beds in the same room did not reuse one geometry result");
@@ -982,21 +971,21 @@ public final class HomelessShelterGameTests {
                 level.setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
             }
         });
-        helper.runAfterDelay(110, () -> {
+        helper.runAfterDelay(115, () -> {
             openedRoof[0] = cache.resolve(head).orElseThrow();
             helper.assertTrue(openedRoof[0] != original[0],
-                    "roof opening retained the cached geometry rather than rescanning");
+                    "roof opening retained the cached geometry past TTL rather than rescanning");
             helper.assertTrue(!openedRoof[0].floorCells().contains(roof.below(3)),
                     "unroofed column still belonged to the indoor room");
         });
-        helper.runAfterDelay(320, () -> {
+        helper.runAfterDelay(165, () -> {
             helper.assertTrue(cache.resolve(head).orElseThrow().floorCells().equals(openedRoof[0].floorCells()),
-                    "unchanged roof opening altered the cached room on retry");
+                    "unchanged roof opening altered the cached room within TTL");
             for (BlockPos pos : breach) level.setBlock(pos, Blocks.STONE.defaultBlockState(), 3);
         });
-        helper.runAfterDelay(525, () -> {
+        helper.runAfterDelay(230, () -> {
             IndoorRoomCache.Room repaired = cache.resolve(head).orElseThrow();
-            helper.assertTrue(repaired != openedRoof[0], "repaired roof did not produce fresh geometry");
+            helper.assertTrue(repaired != openedRoof[0], "repaired roof did not produce fresh geometry after TTL");
             helper.assertTrue(repaired.floorCells().contains(roof.below(3)),
                     "repaired roof did not restore the formerly unroofed floor column");
             helper.succeed();

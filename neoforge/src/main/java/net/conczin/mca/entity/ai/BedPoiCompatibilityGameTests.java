@@ -4,6 +4,7 @@ import net.conczin.mca.MCA;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.Registries;
+import net.conczin.mca.neoforge.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.entity.ai.village.poi.PoiTypes;
@@ -14,16 +15,29 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
+import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.common.world.poi.ExtendPoiTypesEvent;
+import net.conczin.mca.neoforge.gametest.PrefixGameTestTemplate;
 import net.neoforged.neoforge.registries.RegisterEvent;
+
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /** Test-only registration for a vanilla-style bed deliberately absent from #minecraft:beds. */
 @EventBusSubscriber(modid = MCA.MOD_ID)
+@PrefixGameTestTemplate(false)
 public final class BedPoiCompatibilityGameTests {
     private static final ResourceKey<Block> UNTAGGED_BED_KEY = ResourceKey.create(
             Registries.BLOCK, MCA.locate("gametest_untagged_bed"));
+    private static final ResourceKey<Block> HOME_BED_KEY = ResourceKey.create(
+            Registries.BLOCK, MCA.locate("gametest_registered_home_bed"));
+    private static final ResourceKey<Block> MEETING_BED_KEY = ResourceKey.create(
+            Registries.BLOCK, MCA.locate("gametest_registered_meeting_bed"));
     private static BedBlock untaggedBed;
+    private static BedBlock registeredHomeBed;
+    private static BedBlock registeredMeetingBed;
 
     private BedPoiCompatibilityGameTests() {
     }
@@ -41,6 +55,47 @@ public final class BedPoiCompatibilityGameTests {
                     .setId(UNTAGGED_BED_KEY));
             return untaggedBed;
         });
+        event.register(Registries.BLOCK, HOME_BED_KEY.identifier(), () -> {
+            registeredHomeBed = new TestBedBlock(BlockBehaviour.Properties.of().strength(0.2F).noOcclusion().setId(HOME_BED_KEY));
+            return registeredHomeBed;
+        });
+        event.register(Registries.BLOCK, MEETING_BED_KEY.identifier(), () -> {
+            registeredMeetingBed = new TestBedBlock(BlockBehaviour.Properties.of().strength(0.2F).noOcclusion().setId(MEETING_BED_KEY));
+            return registeredMeetingBed;
+        });
+    }
+
+    // Simulate a mod whose own POI extension runs after MCA's original listener.
+    @SubscribeEvent(priority = EventPriority.LOWEST)
+    public static void registerBedPois(ExtendPoiTypesEvent event) {
+        if (registeredHomeBed == null) {
+            return;
+        }
+        event.addStatesToPoi(PoiTypes.HOME, headStates(registeredHomeBed));
+        event.addStatesToPoi(PoiTypes.MEETING, headStates(registeredMeetingBed));
+    }
+
+    private static Set<BlockState> headStates(BedBlock bed) {
+        return bed.getStateDefinition().getPossibleStates().stream()
+                .filter(state -> state.getValue(BedBlock.PART) == BedPart.HEAD)
+                .collect(Collectors.toSet());
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void lateModBedPoiRegistrationIsPreserved(GameTestHelper helper) {
+        for (BlockState state : headStates(registeredHomeBed)) {
+            helper.assertTrue(PoiTypes.forState(state).orElseThrow().is(PoiTypes.HOME),
+                    "The mod's HOME registration was not preserved");
+        }
+        for (BlockState state : headStates(registeredMeetingBed)) {
+            helper.assertTrue(PoiTypes.forState(state).orElseThrow().is(PoiTypes.MEETING),
+                    "The mod's non-HOME registration was not preserved");
+        }
+        for (BlockState state : headStates(untaggedBed())) {
+            helper.assertTrue(PoiTypes.forState(state).orElseThrow().is(PoiTypes.HOME),
+                    "An unregistered modded bed was not registered as HOME");
+        }
+        helper.succeed();
     }
 
     public static BedBlock untaggedBed() {

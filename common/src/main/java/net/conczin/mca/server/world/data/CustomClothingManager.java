@@ -17,7 +17,9 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.permissions.Permission;
 import net.minecraft.server.permissions.PermissionLevel;
 import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.storage.SavedDataStorage;
 
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -35,28 +37,45 @@ public class CustomClothingManager {
 
     public static Storage<Clothing> getClothing() {
         Optional<MinecraftServer> server = MCA.getServer();
-        return server.<Storage<Clothing>>map(minecraftServer -> WorldUtils.loadData(
-                        minecraftServer.overworld(),
-                        (nbt, provider) -> new Storage<>(nbt, Clothing::new),
-                        ignored -> new Storage<>(),
-                        "immersive_library_clothing"
-                ))
-                .orElse(CLOTHING_DUMMY);
+        return server.<Storage<Clothing>>map(minecraftServer -> {
+            var world = minecraftServer.overworld();
+            var storage = world.getDataStorage();
+            return loadSafely(storage, WorldUtils.getSavedDataFolder(storage), world.registryAccess(),
+                    "immersive_library_clothing", Clothing::new);
+        }).orElse(CLOTHING_DUMMY);
     }
 
     public static Storage<Hair> getHair() {
         Optional<MinecraftServer> server = MCA.getServer();
-        return server.<Storage<Hair>>map(minecraftServer -> WorldUtils.loadData(
-                        minecraftServer.overworld(),
-                        (nbt, provider) -> new Storage<>(nbt, Hair::new),
-                        ignored -> new Storage<>(),
-                        "immersive_library_hair"
-                ))
-                .orElse(HAIR_DUMMY);
+        return server.<Storage<Hair>>map(minecraftServer -> {
+            var world = minecraftServer.overworld();
+            var storage = world.getDataStorage();
+            return loadSafely(storage, WorldUtils.getSavedDataFolder(storage), world.registryAccess(),
+                    "immersive_library_hair", Hair::new);
+        }).orElse(HAIR_DUMMY);
+    }
+
+    static <T extends SkinListEntry> Storage<T> loadSafely(SavedDataStorage storage, Path dataFolder,
+                                                              HolderLookup.Provider registries, String dataId,
+                                                              BiFunction<String, JsonObject, T> entryFromNbt) {
+        return WorldUtils.loadDataSafely(
+                storage,
+                dataFolder,
+                registries,
+                dataId,
+                Storage::new,
+                (nbt, provider) -> new Storage<>(nbt, entryFromNbt),
+                (data, path) -> {
+                    data.unreadableSavedData = true;
+                    data.setDirty(false);
+                    MCA.LOGGER.error("MCA custom skin data {} could not be loaded. Original save will not be overwritten.", path);
+                }
+        );
     }
 
     public static class Storage<T extends SkinListEntry> extends SavedData {
         final Map<String, T> entries = new HashMap<>();
+        private boolean unreadableSavedData;
 
         public Storage() {
         }
@@ -66,6 +85,11 @@ public class CustomClothingManager {
             for (String identifier : nbt.keySet()) {
                 entries.put(identifier, entryFromNbt.apply(identifier, gson.fromJson(nbt.getString(identifier).orElse("{}"), JsonObject.class)));
             }
+        }
+
+        @Override
+        public void setDirty(boolean dirty) {
+            super.setDirty(dirty && !unreadableSavedData);
         }
 
         public CompoundTag save(CompoundTag nbt, HolderLookup.Provider provider) {

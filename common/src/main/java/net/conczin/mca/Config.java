@@ -19,7 +19,7 @@ public final class Config extends CommonConfig {
     private static final int DEFAULTS_VERSION = 1;
     private static final Config INSTANCE = loadOrCreate();
 
-    private static CommonConfig serverConfig;
+    private static volatile CommonConfig serverConfig;
 
     @SuppressWarnings("unused")
     public String README = "https://github.com/Luke100000/minecraft-comes-alive/wiki";

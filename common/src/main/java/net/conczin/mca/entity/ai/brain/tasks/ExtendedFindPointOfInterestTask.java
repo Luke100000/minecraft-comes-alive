@@ -5,7 +5,6 @@ import com.mojang.datafixers.util.Pair;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.conczin.mca.entity.VillagerEntityMCA;
-import net.conczin.mca.entity.ai.BedDebugLog;
 import net.conczin.mca.entity.ai.BedPoiCompatibility;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
@@ -19,8 +18,6 @@ import net.minecraft.world.entity.ai.village.poi.PoiManager;
 import net.minecraft.world.entity.ai.village.poi.PoiType;
 import net.minecraft.world.level.pathfinder.Path;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.BiPredicate;
@@ -83,37 +80,21 @@ public class ExtendedFindPointOfInterestTask extends Behavior<VillagerEntityMCA>
         this.positionExpireTimeLimit = l + POSITION_EXPIRE_INTERVAL + (long) serverWorld.getRandom().nextInt(POSITION_EXPIRE_INTERVAL);
         PoiManager pointOfInterestStorage = serverWorld.getPoiManager();
         this.foundPositionsToExpiry.long2ObjectEntrySet().removeIf(entry -> !entry.getValue().isAttempting(l));
-        List<String> exclusions = new ArrayList<>();
         Predicate<BlockPos> predicate = blockPos -> {
             RetryMarker retryMarker = this.foundPositionsToExpiry.get(blockPos.asLong());
             if (retryMarker != null) {
                 if (!retryMarker.shouldRetry(l)) {
-                    noteHomeExclusion(exclusions, blockPos, "RETRY_COOLDOWN");
                     return false;
                 }
                 retryMarker.setAttemptTime(l);
             }
-            boolean allowed = this.predicate.test(villager, blockPos);
-            if (!allowed) {
-                noteHomeExclusion(exclusions, blockPos, "RESIDENCY_BUILDING_RULE");
-            }
-            return allowed;
+            return this.predicate.test(villager, blockPos);
         };
         Set<Pair<Holder<PoiType>, BlockPos>> set = pointOfInterestStorage
                 .findAllClosestFirstWithType(this.poiType, predicate, villager.blockPosition(), POI_SORTING_RADIUS, PoiManager.Occupancy.HAS_SPACE)
-                // Limit candidates before validating HOME block states. The POI query already
-                // reads and sorts POI records across the radius, but isValidPoi may load the
-                // world chunk for each bed it checks. Invalid or occupied nearby beds consume
-                // one of the five slots intentionally, avoiding checks of more distant bed
-                // chunks on the same attempt.
+                // Skip unavailable beds before spending the pathfinding budget.
+                .filter(poi -> isValidPoi(serverWorld, poi.getSecond()))
                 .limit(MAX_POSITIONS_PER_RUN)
-                .filter(poi -> {
-                    boolean valid = isValidPoi(serverWorld, poi.getSecond());
-                    if (!valid) {
-                        noteHomeExclusion(exclusions, poi.getSecond(), "OCCUPIED_OR_INVALID_BED");
-                    }
-                    return valid;
-                })
                 .collect(Collectors.toSet());
         Path path = findPathToPois(villager, set);
         if (path != null && path.canReach()) {
@@ -129,28 +110,11 @@ public class ExtendedFindPointOfInterestTask extends Behavior<VillagerEntityMCA>
                     this.foundPositionsToExpiry.clear();
                     onFinish.accept(villager);
                 });
-                logHomeSelection(villager, set, path, claimedPosition.isPresent() ? "CLAIMED" : "CLAIM_LOST", exclusions);
             });
-            if (pointOfInterestStorage.getType(blockPos2).isEmpty()) {
-                logHomeSelection(villager, set, path, "TARGET_POI_MISSING", exclusions);
-            }
         } else {
             for (Pair<Holder<PoiType>, BlockPos> blockPos2 : set) {
                 this.foundPositionsToExpiry.computeIfAbsent(blockPos2.getSecond().asLong(), m -> new RetryMarker(villager.level().getRandom(), l));
             }
-            logHomeSelection(villager, set, path, set.isEmpty() ? "NO_ELIGIBLE_CANDIDATES" : "NO_REACHABLE_PATH", exclusions);
-        }
-    }
-
-    private void noteHomeExclusion(List<String> exclusions, BlockPos pos, String reason) {
-        if (this.targetMemoryModuleType == MemoryModuleType.HOME && BedDebugLog.ENABLED && exclusions.size() < 8) {
-            exclusions.add(pos.toShortString() + ":" + reason);
-        }
-    }
-
-    private void logHomeSelection(VillagerEntityMCA villager, Set<Pair<Holder<PoiType>, BlockPos>> candidates, Path path, String result, List<String> exclusions) {
-        if (this.targetMemoryModuleType == MemoryModuleType.HOME && BedDebugLog.ENABLED) {
-            BedDebugLog.selection(villager, candidates.stream().map(Pair::getSecond).collect(Collectors.toSet()), path, result, exclusions);
         }
     }
 
@@ -163,9 +127,9 @@ public class ExtendedFindPointOfInterestTask extends Behavior<VillagerEntityMCA>
             return true;
         }
 
-        // Keep HOME acquisition on the same compatibility contract used to register
-        // HOME POIs and by Set Home/bed navigation.
-        return BedPoiCompatibility.isAvailableHomePoiState(level.getBlockState(pos));
+        // The POI index can report beds in unloaded chunks. Read only loaded terrain.
+        var chunk = level.getChunkSource().getChunkNow(pos.getX() >> 4, pos.getZ() >> 4);
+        return chunk != null && BedPoiCompatibility.isAvailableHomePoiState(chunk.getBlockState(pos));
     }
 
     static class RetryMarker {

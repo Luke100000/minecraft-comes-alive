@@ -84,16 +84,12 @@ public final class ShelterLookupGameTests {
             helper.assertTrue(initial[0].floorCells().contains(standing), "lookup returned another room");
             helper.assertTrue(cache.resolve(bed).orElseThrow() == initial[0], "saved occupant and bed are not in the same discovered room");
             initialEntry[0] = entryFor(cache, bed);
-            helper.assertTrue(field(initialEntry[0], "completeDependencies").equals(true),
-                    "captured house exceeded the bounded dependency proof");
-            logEntry(fixture + ":cold", initialEntry[0]);
             ShelterLookupProbeGameTests.log(cache, bed, fixture);
             for (int i = 0; i < 100; i++) assertSameRoom(helper, villager, initial[0]);
             helper.assertTrue(entryFor(cache, bed) == initialEntry[0], "immediate successful lookups repeated floor discovery");
         }).thenIdle(41).thenExecute(() -> {
             var current = SeekIndoorShelterTask.currentRoom(villager).orElseThrow();
             Object entry = entryFor(cache, bed);
-            logEntry(fixture + ":after-validation", entry);
             assertValidatedRoom(helper, initial[0], initialEntry[0], current, entry);
             initial[0] = current;
             initialEntry[0] = entry;
@@ -108,9 +104,8 @@ public final class ShelterLookupGameTests {
                                             IndoorRoomCache.Room current, Object currentEntry) {
         helper.assertTrue(current.floorCells().equals(previous.floorCells()),
                 "unchanged saved room changed membership during validation");
-        helper.assertTrue(field(currentEntry, "completeDependencies").equals(true)
-                        && current == previous && currentEntry == previousEntry,
-                "complete unchanged dependency proof failed to reuse its room");
+        helper.assertTrue(current == previous && currentEntry == previousEntry,
+                "unchanged TTL cache entry failed to reuse its room");
     }
 
     @GameTest(batch = BATCH, templateNamespace = "mca", template = TEMPLATE, skyAccess = true, timeoutTicks = 280)
@@ -124,19 +119,19 @@ public final class ShelterLookupGameTests {
         helper.startSequence().thenIdle(10).thenExecute(() -> {
             helper.assertTrue(level.canSeeSky(bed.above()), "captured bed does not have the reported missing roof");
             helper.assertTrue(cache.resolve(bed).isEmpty(), "missing-roof bed was accepted as a sheltered room");
-            initialEntry[0] = ((Map<?, ?>) field(cache, "entries")).get(bed);
+            initialEntry[0] = ((Map<?, ?>) field(cache, "unregistered")).get(bed);
             helper.assertTrue(initialEntry[0] != null, "failed discovery was not cached");
             ShelterLookupProbeGameTests.log(cache, bed, "reported_shelter_missing_roof");
             for (int i = 0; i < 100; i++) helper.assertTrue(cache.resolve(bed).isEmpty(), "failed shelter unexpectedly succeeded");
-            helper.assertTrue(((Map<?, ?>) field(cache, "entries")).get(bed) == initialEntry[0],
+            helper.assertTrue(((Map<?, ?>) field(cache, "unregistered")).get(bed) == initialEntry[0],
                     "immediate failed attempts rescanned the missing-roof house");
         }).thenIdle(41).thenExecute(() -> {
             helper.assertTrue(cache.resolve(bed).isEmpty(), "unchanged exposed bed became sheltered");
-            helper.assertTrue(((Map<?, ?>) field(cache, "entries")).get(bed) == initialEntry[0],
-                    "failed missing-roof entry incorrectly used the successful-room validation interval");
+            helper.assertTrue(((Map<?, ?>) field(cache, "unregistered")).get(bed) == initialEntry[0],
+                    "failed missing-roof entry expired before its TTL");
         }).thenIdle(160).thenExecute(() -> {
             helper.assertTrue(cache.resolve(bed).isEmpty(), "unchanged exposed bed became sheltered on retry");
-            Object next = ((Map<?, ?>) field(cache, "entries")).get(bed);
+            Object next = ((Map<?, ?>) field(cache, "unregistered")).get(bed);
             helper.assertTrue(next != initialEntry[0], "failed missing-roof entry never retried after its failure lifetime");
             MCA.LOGGER.info("[MCA Shelter Lookup] missing-roof failedQueries=100 reusedAfter41Ticks=true retriedAfter201Ticks=true");
         }).thenSucceed();
@@ -226,19 +221,17 @@ public final class ShelterLookupGameTests {
         VillagerEntityMCA villager = spawn(level, standing);
         IndoorRoomCache cache = VillageManager.get(level).getIndoorRooms();
         var walk = LocalInsideBrownianWalk.create(0.5F);
-        Object[] entry = {null};
-        long[] firstUse = {0};
         helper.startSequence().thenIdle(10).thenExecute(() -> {
             helper.assertTrue(!walk.tryStart(level, villager, level.getGameTime()), "outside villager unexpectedly began an indoor walk");
-            entry[0] = entryFor(cache, bed);
-            firstUse[0] = (long) field(entry[0], "lastUsed");
+            helper.assertTrue(entryFor(cache, bed) != null, "initial outside lookup did not populate room cache");
+            cache.invalidate(bed);
         }).thenIdle(1).thenExecute(() -> {
             helper.assertTrue(!walk.tryStart(level, villager, level.getGameTime()), "deferred outside walk unexpectedly succeeded");
-            helper.assertTrue((long) field(entry[0], "lastUsed") == firstUse[0],
+            helper.assertTrue(!((Map<?, ?>) field(cache, "unregistered")).containsKey(bed),
                     "unsuccessful indoor walk repeated its expensive room lookup on the next tick");
         }).thenIdle(40).thenExecute(() -> {
             helper.assertTrue(!walk.tryStart(level, villager, level.getGameTime()), "unchanged outside villager became sheltered");
-            helper.assertTrue((long) field(entry[0], "lastUsed") > firstUse[0], "failed indoor walk never retried after its interval");
+            helper.assertTrue(entryFor(cache, bed) != null, "failed indoor walk never retried after its interval");
         }).thenSucceed();
     }
 
@@ -317,7 +310,7 @@ public final class ShelterLookupGameTests {
     }
 
     private static Object entryFor(IndoorRoomCache cache, BlockPos bed) {
-        for (Object entry : ((Map<?, ?>) field(cache, "entries")).values()) {
+        for (Object entry : ((Map<?, ?>) field(cache, "unregistered")).values()) {
             for (Object room : (List<?>) field(entry, "rooms")) {
                 if (((IndoorRoomCache.Room) room).floorCells().contains(bed)) return entry;
             }
@@ -326,14 +319,8 @@ public final class ShelterLookupGameTests {
     }
 
     private static String describe(Object entry) {
-        return "created=" + field(entry, "created") + " completeDependencies=" + field(entry, "completeDependencies")
-                + " observed=" + ((Map<?, ?>) field(entry, "observed")).size()
-                + " columns=" + ((Map<?, ?>) field(entry, "columns")).size()
-                + " heightColumns=" + ((Map<?, ?>) field(entry, "ceilingHeights")).size();
-    }
-
-    private static void logEntry(String label, Object entry) {
-        MCA.LOGGER.info("[MCA Shelter Lookup] {} {}", label, describe(entry));
+        return "rooms=" + ((List<?>) field(entry, "rooms")).size()
+                + " expiresAt=" + field(entry, "expiresAt");
     }
 
     @AfterBatch(batch = BATCH)

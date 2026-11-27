@@ -1,6 +1,9 @@
 package net.conczin.mca.entity.ai.brain.tasks;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.GlobalPos;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * Limits repeated publications for one villager and one behavior when the
@@ -8,25 +11,61 @@ import net.minecraft.core.BlockPos;
  * Displacement permits another attempt, but only new progress toward the
  * destination renews its failure window.
  */
-final class WalkTargetRetryGate {
+public final class WalkTargetRetryGate {
     private final long retryIntervalTicks;
     private final double progressDistanceSqr;
     private final int immediateRetries;
+    @Nullable
+    private final MemoryModuleType<GlobalPos> destinationMemory;
+    @Nullable
+    private GlobalPos assignment;
     private BlockPos previousDestination;
     private long previousAttemptTime;
     private BlockPos stalledOrigin;
     private BlockPos progressOrigin;
     private long stalledSince;
     private int immediateRetriesRemaining;
+    private long openPreemptedSince = Long.MIN_VALUE;
+    private long unresolvedFailureSince = Long.MIN_VALUE;
 
-    WalkTargetRetryGate(long retryIntervalTicks, double progressDistanceSqr) {
-        this(retryIntervalTicks, progressDistanceSqr, 0);
+    public WalkTargetRetryGate(long retryIntervalTicks, double progressDistanceSqr) {
+        this(retryIntervalTicks, progressDistanceSqr, 0, null);
     }
 
-    WalkTargetRetryGate(long retryIntervalTicks, double progressDistanceSqr, int immediateRetries) {
+    public WalkTargetRetryGate(long retryIntervalTicks, double progressDistanceSqr, int immediateRetries) {
+        this(retryIntervalTicks, progressDistanceSqr, immediateRetries, null);
+    }
+
+    public WalkTargetRetryGate(long retryIntervalTicks, double progressDistanceSqr, int immediateRetries,
+                               @Nullable MemoryModuleType<GlobalPos> destinationMemory) {
         this.retryIntervalTicks = retryIntervalTicks;
         this.progressDistanceSqr = progressDistanceSqr;
         this.immediateRetries = immediateRetries;
+        this.destinationMemory = destinationMemory;
+    }
+
+    @Nullable
+    public MemoryModuleType<GlobalPos> destinationMemory() {
+        return destinationMemory;
+    }
+
+    @Nullable
+    public GlobalPos assignment() {
+        return assignment;
+    }
+
+    void bindAssignment(GlobalPos assignment) {
+        this.assignment = assignment;
+    }
+
+    public void forgetAssignment() {
+        resetActive();
+        assignment = null;
+    }
+
+    @Nullable
+    public BlockPos activeDestination() {
+        return previousDestination;
     }
 
     boolean tryReserve(BlockPos destination, BlockPos origin, long gameTime) {
@@ -50,6 +89,11 @@ final class WalkTargetRetryGate {
             } else {
                 progressOrigin = origin.immutable();
                 stalledSince = gameTime;
+                openPreemptedSince = Long.MIN_VALUE;
+                // The first reservation may follow adoption of a matching runtime failure.
+                if (previousDestination != null || assignment == null || !assignment.pos().equals(destination)) {
+                    unresolvedFailureSince = Long.MIN_VALUE;
+                }
             }
         }
 
@@ -60,9 +104,22 @@ final class WalkTargetRetryGate {
 
     /** Completion or a changed route ends the matching retry episode. */
     void reset(BlockPos destination) {
-        if (previousDestination != null && previousDestination.equals(destination)) {
-            previousDestination = null;
+        if (matchesDestination(destination)) {
+            resetActive();
         }
+    }
+
+    /** A changed route permits one immediate attempt within the existing failure episode. */
+    void permitRetryAfterInvalidation(BlockPos destination, long gameTime) {
+        if (destination.equals(previousDestination)) {
+            previousAttemptTime = gameTime - retryIntervalTicks;
+        }
+    }
+
+    public void resetActive() {
+        previousDestination = null;
+        openPreemptedSince = Long.MIN_VALUE;
+        unresolvedFailureSince = Long.MIN_VALUE;
     }
 
     /** An active partial path may make progress without asking its producer for a new target. */
@@ -85,10 +142,57 @@ final class WalkTargetRetryGate {
         }
         progressOrigin = origin.immutable();
         stalledSince = gameTime;
+        unresolvedFailureSince = Long.MIN_VALUE;
         return true;
     }
 
     long stalledSince() {
         return stalledSince;
+    }
+
+    public void noteFailure(BlockPos destination, long since) {
+        if (unresolvedFailureSince == Long.MIN_VALUE && matchesDestination(destination)) {
+            unresolvedFailureSince = since;
+        }
+    }
+
+    /** Reconcile a clock from another gate of the same logical owner after closing preemption. */
+    public void adoptEstablishedFailure(BlockPos destination, long since) {
+        if (matchesDestination(destination)) {
+            unresolvedFailureSince = since;
+        }
+    }
+
+    public void clearFailure() {
+        unresolvedFailureSince = Long.MIN_VALUE;
+    }
+
+    public long unresolvedFailureSince(BlockPos destination) {
+        return matchesDestination(destination) ? unresolvedFailureSince : Long.MIN_VALUE;
+    }
+
+    private boolean matchesDestination(BlockPos destination) {
+        return assignment != null ? assignment.pos().equals(destination) : destination.equals(previousDestination);
+    }
+
+    public void observePreemption(long time, boolean preempted) {
+        if (previousDestination == null && unresolvedFailureSince == Long.MIN_VALUE) {
+            openPreemptedSince = Long.MIN_VALUE;
+            return;
+        }
+        if (preempted) {
+            if (openPreemptedSince == Long.MIN_VALUE || time < openPreemptedSince) {
+                openPreemptedSince = time;
+            }
+        } else if (openPreemptedSince != Long.MIN_VALUE) {
+            long delta = Math.max(0L, time - openPreemptedSince);
+            openPreemptedSince = Long.MIN_VALUE;
+            if (previousDestination != null) {
+                stalledSince += delta;
+            }
+            if (unresolvedFailureSince != Long.MIN_VALUE) {
+                unresolvedFailureSince += delta;
+            }
+        }
     }
 }

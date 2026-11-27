@@ -9,6 +9,7 @@ import net.conczin.mca.entity.ai.Traits;
 import net.conczin.mca.entity.ai.SchedulesMCA;
 import net.conczin.mca.entity.ai.brain.VillagerTasksMCA;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
+import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
@@ -16,18 +17,22 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.ai.behavior.Behavior;
+import net.minecraft.world.entity.ai.behavior.EntityTracker;
 import net.minecraft.world.entity.ai.behavior.SleepInBed;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.ai.village.poi.PoiTypes;
 import net.minecraft.world.entity.schedule.Activity;
+import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.block.BedBlock;
+import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.phys.Vec3;
 import net.conczin.mca.neoforge.gametest.AfterBatch;
@@ -53,6 +58,8 @@ public final class HomeArrivalGameTests {
     private static Long originalDayTime;
     private static Boolean originalDaylightCycle;
     private static Boolean originalTeleport;
+    private static Boolean originalAnyDoor;
+    private static Boolean originalFenceGates;
 
     private HomeArrivalGameTests() {
     }
@@ -224,6 +231,12 @@ public final class HomeArrivalGameTests {
         verifyArrival(helper, 0, false);
     }
 
+    @GameTest(batch = "mca_home_flat_fence_gate", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 600)
+    public static void restWalksThroughClosedFenceGateAndSleeps(GameTestHelper helper) {
+        verifyArrival(helper, 0, false, false, new BlockPos(3, 4, 5), true);
+    }
+
     @GameTest(batch = "mca_home_raised_steps", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 600)
     public static void restClimbsTwoStepsThroughClosedDoorAndSleeps(GameTestHelper helper) {
@@ -278,6 +291,138 @@ public final class HomeArrivalGameTests {
         });
     }
 
+    @GameTest(batch = "mca_home_foreign_failure", templateNamespace = "minecraft",
+            template = "bastion/blocks/air")
+    public static void restPreservesFailedPlayerRouteWhileItsWalkTargetRemains(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(3, 4, 5));
+        BlockPos door = start.east(6);
+        BlockPos head = door.east(5);
+        prepareHouse(helper, start, door, head.west());
+        VillagerEntityMCA villager = spawnResident(helper, start, head);
+        var player = helper.makeMockPlayer(GameType.SURVIVAL);
+        try {
+            player.setPos(Vec3.atBottomCenterOf(start.south(4)));
+            WalkTarget interactionWalk = new WalkTarget(new EntityTracker(player, false), 0.5F, 2);
+            var brain = villager.getBrain();
+            // REST becomes eligible before the movement sink has retired the interrupted interaction.
+            brain.setMemory(MemoryModuleType.WALK_TARGET, interactionWalk);
+            long now = helper.getLevel().getGameTime();
+            WalkTargetFailureMemory.record(villager, player.blockPosition(), now - 5L);
+            var homeProducer = VillagerTasksMCA.getRestPackage(0.5F).stream()
+                    .filter(entry -> entry.getFirst() == 2).findFirst().orElseThrow().getSecond();
+            helper.assertTrue(homeProducer.tryStart(helper.getLevel(), villager, now),
+                    "HOME producer did not get a turn during the interruption");
+            helper.assertTrue(brain.getMemory(MemoryModuleType.WALK_TARGET).orElse(null) == interactionWalk,
+                    "HOME replaced a player movement command that was still active");
+            helper.assertTrue(WalkTargetFailureMemory.hasFailureFor(villager, player.blockPosition()),
+                    "HOME erased a failed player route while its movement command was still active");
+            brain.eraseMemory(MemoryModuleType.WALK_TARGET);
+            homeProducer.doStop(helper.getLevel(), villager, now);
+            homeProducer.tryStart(helper.getLevel(), villager, now + 1);
+            helper.assertTrue(brain.hasMemoryValue(MemoryModuleType.WALK_TARGET)
+                            && !WalkTargetFailureMemory.hasFailureFor(villager, player.blockPosition()),
+                    "HOME did not take over movement after the player command was retired");
+        } finally {
+            player.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_home_compact_door", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 400)
+    public static void compactBedroomAllowsClosedWoodenDoorApproachButRejectsIronDoor(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(3, 4, 5));
+        BlockPos center = start.east(3);
+        BlockPos foot = start.east(4);
+        BlockPos head = foot.east();
+        BlockPos bedsideDoor = head.south();
+        ServerLevel level = helper.getLevel();
+        BlockPos min = center.offset(-8, -2, -8);
+        BlockPos max = center.offset(8, 5, 8);
+        for (BlockPos pos : BlockPos.betweenClosed(min, max)) {
+            ORIGINAL_BLOCKS.putIfAbsent(pos.immutable(), level.getBlockState(pos));
+        }
+        ChunkPos minChunk = ChunkPos.containing(min);
+        ChunkPos maxChunk = ChunkPos.containing(max);
+        for (int x = minChunk.x(); x <= maxChunk.x(); x++) {
+            for (int z = minChunk.z(); z <= maxChunk.z(); z++) {
+                if (!level.getForceLoadedChunks().contains(new ChunkPos(x, z).pack())) {
+                    FORCED_CHUNKS.add(new ChunkPos(x, z));
+                }
+            }
+        }
+        prepareFlatArea(helper, center, 8, 5);
+        // Seal every approach cell around the 1x2 bed except head.south().
+        for (int dx = -1; dx <= 2; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                BlockPos cell = foot.offset(dx, 0, dz);
+                if (cell.equals(foot) || cell.equals(head) || cell.equals(bedsideDoor)) {
+                    continue;
+                }
+                for (int y = 0; y < 3; y++) {
+                    level.setBlock(cell.above(y), Blocks.STONE.defaultBlockState(), 3);
+                }
+            }
+        }
+        for (int dx = -1; dx <= 2; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                level.setBlock(foot.offset(dx, 3, dz), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        BlockState bed = Blocks.BED.pick(DyeColor.WHITE).defaultBlockState().setValue(BedBlock.FACING, Direction.EAST);
+        level.setBlock(foot, bed.setValue(BedBlock.PART, BedPart.FOOT), 3);
+        level.setBlock(head, bed.setValue(BedBlock.PART, BedPart.HEAD), 3);
+
+        configureNight(level);
+        originalAnyDoor = Config.getInstance().villagersInteractWithAnyDoor;
+        originalFenceGates = Config.getInstance().villagersInteractWithFenceGates;
+        Config.getInstance().villagersInteractWithAnyDoor = false;
+        BlockState ironDoor = Blocks.IRON_DOOR.defaultBlockState().setValue(DoorBlock.FACING, Direction.NORTH);
+        level.setBlock(bedsideDoor, ironDoor.setValue(DoorBlock.HALF, DoubleBlockHalf.LOWER), 3);
+        level.setBlock(bedsideDoor.above(), ironDoor.setValue(DoorBlock.HALF, DoubleBlockHalf.UPPER), 3);
+
+        VillagerEntityMCA villager = spawnResident(helper, bedsideDoor.south(3), head);
+        BedApproachTarget bedTarget = BedApproachTarget.create(level, head).orElseThrow();
+        helper.assertTrue(bedTarget.getPathTargets(villager).isEmpty(),
+                "closed iron door beside a sealed bed was accepted as a walkable bedside approach");
+
+        level.setBlock(bedsideDoor.above(), Blocks.AIR.defaultBlockState(), 3);
+        level.setBlock(bedsideDoor, Blocks.OAK_FENCE_GATE.defaultBlockState(), 3);
+        Config.getInstance().villagersInteractWithFenceGates = false;
+        helper.assertTrue(bedTarget.getPathTargets(villager).isEmpty(),
+                "non-operable closed fence gate beside a sealed bed was accepted as a bedside approach");
+        Config.getInstance().villagersInteractWithFenceGates = true;
+        helper.assertTrue(bedTarget.getPathTargets(villager).contains(bedsideDoor),
+                "operable closed fence gate beside a compact bed was rejected as a bedside approach");
+        level.setBlock(bedsideDoor.above(), Blocks.OAK_FENCE_GATE.defaultBlockState(), 3);
+        villager.setAge(AgeState.BABY.toAge());
+        try {
+            helper.assertTrue(villager.getBbHeight() < 1.0F,
+                    "baby resident fixture was not sub-1-block tall: " + villager.getBbHeight());
+            helper.assertTrue(bedTarget.getPathTargets(villager).contains(bedsideDoor),
+                    "2-high stacked operable fence gates beside a compact bed rejected a sub-block resident");
+        } finally {
+            villager.setAge(0);
+        }
+
+        BlockState oakDoor = Blocks.OAK_DOOR.defaultBlockState().setValue(DoorBlock.FACING, Direction.NORTH);
+        level.setBlock(bedsideDoor, oakDoor.setValue(DoorBlock.HALF, DoubleBlockHalf.LOWER), 3);
+        level.setBlock(bedsideDoor.above(), oakDoor.setValue(DoorBlock.HALF, DoubleBlockHalf.UPPER), 3);
+        helper.assertTrue(bedTarget.getPathTargets(villager).contains(bedsideDoor),
+                "closed wooden door beside a compact bed was rejected as a bedside approach");
+
+        long started = level.getGameTime();
+        helper.onEachTick(() -> {
+            if (villager.isSleeping()) {
+                helper.assertTrue(villager.getSleepingPos().filter(head::equals).isPresent(),
+                        "compact bedroom resident slept at wrong bed");
+                helper.succeed();
+            } else if (level.getGameTime() - started >= 350L) {
+                helper.fail("resident failed to enter and sleep through bedside wooden door: " + describe(villager));
+            }
+        });
+    }
+
     private static void verifyArrival(GameTestHelper helper, int heightDifference, boolean repairSteps) {
         verifyArrival(helper, heightDifference, repairSteps, false);
     }
@@ -289,6 +434,11 @@ public final class HomeArrivalGameTests {
 
     private static void verifyArrival(GameTestHelper helper, int heightDifference, boolean repairSteps,
                                       boolean offsetApproach, BlockPos relativeStart) {
+        verifyArrival(helper, heightDifference, repairSteps, offsetApproach, relativeStart, false);
+    }
+
+    private static void verifyArrival(GameTestHelper helper, int heightDifference, boolean repairSteps,
+                                      boolean offsetApproach, BlockPos relativeStart, boolean fenceGateEntrance) {
         BlockPos start = helper.absolutePos(relativeStart);
         if (repairSteps) {
             var bounds = helper.getBounds();
@@ -302,6 +452,16 @@ public final class HomeArrivalGameTests {
         BlockPos foot = door.east(4);
         BlockPos head = foot.east();
         prepareHouse(helper, start, door, foot);
+        if (fenceGateEntrance) {
+            ServerLevel level = helper.getLevel();
+            originalFenceGates = Config.getInstance().villagersInteractWithFenceGates;
+            Config.getInstance().villagersInteractWithFenceGates = true;
+            level.setBlock(door, Blocks.OAK_FENCE_GATE.defaultBlockState()
+                    .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.EAST), 3);
+            level.setBlock(door.above(), Blocks.AIR.defaultBlockState(), 3);
+            helper.assertTrue(!level.getBlockState(door).getValue(BlockStateProperties.OPEN),
+                    "fixture fence gate must begin closed");
+        }
         if (heightDifference == 2 && !repairSteps) {
             addSteps(helper.getLevel(), door);
         }
@@ -310,10 +470,10 @@ public final class HomeArrivalGameTests {
         VillagerEntityMCA[] resident = {null};
         long[] started = {0L};
         Vec3[] previous = {null};
-        boolean[] openedDoor = {false};
+        boolean[] openedEntrance = {false};
         boolean[] repaired = {false};
         long[] repairedAt = {0L};
-        boolean[] crossedDoor = {false};
+        boolean[] crossedEntrance = {false};
         double[] outsideTurnDistance = {0.0D};
         int[] outsideDirection = {0};
         int[] outsideReversals = {0};
@@ -338,8 +498,8 @@ public final class HomeArrivalGameTests {
                         "HOME transit teleported: " + describe(villager));
             }
             previous[0] = villager.position();
-            openedDoor[0] |= helper.getLevel().getBlockState(door).getValue(DoorBlock.OPEN);
-            crossedDoor[0] |= villager.getBlockX() == door.getX()
+            openedEntrance[0] |= helper.getLevel().getBlockState(door).getValue(BlockStateProperties.OPEN);
+            crossedEntrance[0] |= villager.getBlockX() == door.getX()
                     && Math.abs(villager.getY() - door.getY()) < 0.75D;
             if (offsetApproach && villager.getX() < door.getX() - 0.25D && !villager.isSleeping()) {
                 double distance = Math.hypot(villager.getX() - (door.getX() + 0.5D),
@@ -361,7 +521,7 @@ public final class HomeArrivalGameTests {
                 MCA.LOGGER.info("[MCA Home Arrival] diagnostic elapsed={} {}", elapsed, describe(villager));
             }
             if (repairSteps && !repaired[0] && elapsed >= 300) {
-                helper.assertTrue(!villager.isSleeping() && !openedDoor[0]
+                helper.assertTrue(!villager.isSleeping() && !openedEntrance[0]
                                 && villager.getY() < door.getY() - 0.5D,
                         "two-block ledge was traversed without steps: " + describe(villager));
                 MCA.LOGGER.info("[MCA Home Arrival] blocked ledge elapsed={} {}", elapsed, describe(villager));
@@ -372,9 +532,9 @@ public final class HomeArrivalGameTests {
             if (villager.isSleeping()) {
                 helper.assertTrue(villager.getSleepingPos().filter(head::equals).isPresent(),
                         "villager slept at a different bed");
-                helper.assertTrue(openedDoor[0], "villager reached bed without opening the only entrance");
-                helper.assertTrue(!offsetApproach || crossedDoor[0],
-                        "offset HOME reached bed without observed physical doorway crossing");
+                helper.assertTrue(openedEntrance[0], "villager reached bed without opening the only entrance");
+                helper.assertTrue((!offsetApproach && !fenceGateEntrance) || crossedEntrance[0],
+                        "HOME reached bed without observed physical entrance crossing");
                 helper.assertTrue(!repairSteps || repaired[0], "villager reached raised HOME before repair");
                 MCA.LOGGER.info("[MCA Home Arrival] arrived rise={} repaired={} elapsed={} {}",
                         heightDifference, repaired[0], elapsed, describe(villager));
@@ -382,7 +542,7 @@ public final class HomeArrivalGameTests {
             } else if ((!repairSteps && elapsed >= 550)
                     || (repairSteps && repaired[0] && elapsed - repairedAt[0] >= 500)) {
                 helper.fail("REST did not reach HOME through entrance; rise=" + heightDifference
-                        + ", repaired=" + repaired[0] + ", doorOpened=" + openedDoor[0]
+                        + ", repaired=" + repaired[0] + ", entranceOpened=" + openedEntrance[0]
                         + ", outsideReversals=" + outsideReversals[0] + ", " + describe(villager));
             }
         });
@@ -490,6 +650,11 @@ public final class HomeArrivalGameTests {
         cleanup(level);
     }
 
+    @AfterBatch(batch = "mca_home_flat_fence_gate")
+    public static void cleanupFenceGate(ServerLevel level) {
+        cleanup(level);
+    }
+
     @AfterBatch(batch = "mca_home_raised_steps")
     public static void cleanupSteps(ServerLevel level) {
         cleanup(level);
@@ -515,6 +680,11 @@ public final class HomeArrivalGameTests {
         cleanup(level);
     }
 
+    @AfterBatch(batch = "mca_home_foreign_failure")
+    public static void cleanupForeignFailure(ServerLevel level) {
+        cleanup(level);
+    }
+
     @AfterBatch(batch = "mca_home_bedside_corner")
     public static void cleanupBedsideCorner(ServerLevel level) {
         cleanup(level);
@@ -532,6 +702,11 @@ public final class HomeArrivalGameTests {
 
     @AfterBatch(batch = "mca_home_intermediate_span")
     public static void cleanupIntermediateSpan(ServerLevel level) {
+        cleanup(level);
+    }
+
+    @AfterBatch(batch = "mca_home_compact_door")
+    public static void cleanupCompactDoor(ServerLevel level) {
         cleanup(level);
     }
 
@@ -553,6 +728,14 @@ public final class HomeArrivalGameTests {
             level.getGameRules().set(GameRules.ADVANCE_TIME, originalDaylightCycle, level.getServer());
             Config.getInstance().allowVillagerTeleporting = originalTeleport;
             originalDayTime = null;
+        }
+        if (originalAnyDoor != null) {
+            Config.getInstance().villagersInteractWithAnyDoor = originalAnyDoor;
+            originalAnyDoor = null;
+        }
+        if (originalFenceGates != null) {
+            Config.getInstance().villagersInteractWithFenceGates = originalFenceGates;
+            originalFenceGates = null;
         }
     }
 

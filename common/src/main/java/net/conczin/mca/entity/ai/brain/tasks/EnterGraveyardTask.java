@@ -101,8 +101,12 @@ public class EnterGraveyardTask extends Behavior<VillagerEntityMCA> {
     }
 
     private static void setMourningPosition(VillagerEntityMCA villager, GlobalPos position) {
+        villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_POSITION)
+                .ifPresent(previous -> {
+                    ExtendedWalkTowardsTask.retractOwnedMovement(villager, MemoryModuleTypeMCA.MOURNING_POSITION);
+                    WalkTargetFailureMemory.clearForProducer(villager, MemoryModuleTypeMCA.MOURNING_POSITION, previous);
+                });
         villager.getBrain().setMemory(MemoryModuleTypeMCA.MOURNING_POSITION, position);
-        WalkTargetFailureMemory.clear(villager);
     }
 
     public static boolean isAtMourningSite(VillagerEntityMCA villager) {
@@ -158,12 +162,13 @@ public class EnterGraveyardTask extends Behavior<VillagerEntityMCA> {
 
         // Keep the established preference when usable. Search the alternatives
         // together so an enclosed stand cannot monopolize an accessible grave.
-        Path preferredPath = villager.getNavigation().createPath(Set.of(preferred), 0);
+        var navigation = villager.getNavigation();
+        Path preferredPath = MCAGroundPathNavigation.probePath(navigation, Set.of(preferred), 0);
         if (preferredPath != null && preferredPath.canReach()) {
             return Optional.of(preferred);
         }
         positions.remove(preferred);
-        Path alternativePath = villager.getNavigation().createPath(positions, 0);
+        Path alternativePath = MCAGroundPathNavigation.probePath(navigation, positions, 0);
         if (alternativePath != null && alternativePath.canReach()) {
             return Optional.of(alternativePath.getTarget());
         }

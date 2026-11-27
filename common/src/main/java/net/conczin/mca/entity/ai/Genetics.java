@@ -7,6 +7,8 @@ import net.conczin.mca.util.network.datasync.CDataManager;
 import net.conczin.mca.util.network.datasync.CDataParameter;
 import net.conczin.mca.util.network.datasync.CEnumParameter;
 import net.conczin.mca.util.network.datasync.CParameter;
+import net.minecraft.network.syncher.EntityDataAccessor;
+import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
@@ -46,6 +48,18 @@ public class Genetics implements Iterable<Genetics.Gene> {
     public static <E extends Entity> CDataManager.Builder<E> createTrackedData(CDataManager.Builder<E> builder) {
         GENOMES.forEach(g -> builder.addAll(g.getParam()));
         return builder.addAll(GENDER);
+    }
+
+    public static boolean affectsDimensions(CDataManager<?> data, EntityDataAccessor<?> accessor) {
+        return data.isParam(SIZE.getParam(), accessor)
+                || data.isParam(WIDTH.getParam(), accessor)
+                || data.isParam(GENDER, accessor);
+    }
+
+    public static boolean affectsDimensions(CDataManager<?> data, SynchedEntityData.DataValue<?> value) {
+        return data.isParam(SIZE.getParam(), value)
+                || data.isParam(WIDTH.getParam(), value)
+                || data.isParam(GENDER, value);
     }
 
     public float getVerticalScaleFactor() {

@@ -1,7 +1,6 @@
 package net.conczin.mca.entity.ai.chatAI.modules;
 
 import net.conczin.mca.entity.VillagerEntityMCA;
-import net.conczin.mca.server.world.data.Building;
 import net.conczin.mca.server.world.data.Village;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -44,8 +43,8 @@ public class VillageModule {
 
         // Buildings
         village.ifPresent(v -> {
-            String buildings = v.getBuildings().values().stream()
-                    .map(Building::getType)
+            String buildings = v.getPresentBuildingTypes().stream()
+                    .sorted()
                     .map(b -> nameExceptions.getOrDefault(b, b))
                     .filter(s -> !s.isEmpty())
                     .distinct()

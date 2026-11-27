@@ -187,6 +187,9 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         if (minecraft.gui.hud.isHidden() != restoreHudHidden) {
             minecraft.gui.hud.toggle();
         }
+        if (villager != null) {
+            SpeechManager.INSTANCE.stopPreview(villager);
+        }
         super.removed();
     }
 

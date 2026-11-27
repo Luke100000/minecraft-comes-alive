@@ -17,10 +17,10 @@ public final class Structure implements VillageBuilding {
 
     private int id;
     private int logicalBuildingId;
-    private boolean originGeometryApproximate;
     private BlockPos source;
     private BlockPos min;
     private BlockPos max;
+    private boolean originGeometryApproximate;
     private final Map<Integer, StructureFloor> floors = new HashMap<>();
 
     public Structure(int id, BlockPos source, Collection<StructureFloor> floors) {
@@ -61,15 +61,22 @@ public final class Structure implements VillageBuilding {
         }
     }
 
+    int nextFloorId() {
+        return floors.keySet().stream().mapToInt(Integer::intValue).max().orElse(-1) + 1;
+    }
+
+    void putFloor(StructureFloor floor) {
+        putFloorUnique(floor);
+        recomputeBoundsFromFloors();
+    }
+
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
         tag.putInt("id", id);
         tag.putInt("buildingId", getLogicalBuildingId());
-        if (originGeometryApproximate) {
-            tag.putBoolean("originGeometryApproximate", true);
-        }
         tag.put("source", NbtHelper.encodeBlockPos(source));
         tag.put("floors", NbtHelper.fromList(getFloors(), StructureFloor::save));
+        if (originGeometryApproximate) tag.putBoolean("originGeometryApproximate", true);
         return tag;
     }
 
@@ -262,7 +269,6 @@ public final class Structure implements VillageBuilding {
         min = bounds.min();
         max = bounds.max();
     }
-
 
     @Override
     public int getId() {

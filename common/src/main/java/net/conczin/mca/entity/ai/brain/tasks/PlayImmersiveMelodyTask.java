@@ -24,9 +24,8 @@ public class PlayImmersiveMelodyTask extends Behavior<VillagerEntityMCA> {
     private static final int PERFORMANCE_DURATION = 900;
     private static final int RETRY_COOLDOWN = 2400;
     private static final float JOIN_CHANCE = 0.25f;
-    private static final Map<VillagerEntityMCA, Long> nextAttemptTimes = new WeakHashMap<>();
-    private static final Map<VillagerEntityMCA, Long> nextPerformanceTimes = new WeakHashMap<>();
 
+    private long nextAttemptTime;
     private InstrumentItem.Playback selectedPlayback;
     private Performance performance;
 
@@ -37,13 +36,13 @@ public class PlayImmersiveMelodyTask extends Behavior<VillagerEntityMCA> {
     @Override
     protected boolean checkExtraStartConditions(ServerLevel level, VillagerEntityMCA villager) {
         if (!canPerform(villager)
-            || level.getGameTime() < nextAttemptTimes.getOrDefault(villager, 0L)
-            || level.getGameTime() < nextPerformanceTimes.getOrDefault(villager, 0L)
+            || level.getGameTime() < nextAttemptTime
+            || level.getGameTime() < villager.getNextMelodyPerformanceTime()
             || Config.getInstance().immersiveMelodiesChance <= 0.0f) {
             return false;
         }
         // Failed rolls consume the attempt too: RunOne can retry on the next brain tick.
-        nextAttemptTimes.put(villager, level.getGameTime() + RETRY_COOLDOWN);
+        nextAttemptTime = level.getGameTime() + RETRY_COOLDOWN;
         if (villager.getRandom().nextFloat() >= Config.getInstance().immersiveMelodiesChance) {
             return false;
         }
@@ -68,7 +67,7 @@ public class PlayImmersiveMelodyTask extends Behavior<VillagerEntityMCA> {
             if (performance.ownerInstrument.isEmpty()) return;
 
             level.getEntitiesOfClass(VillagerEntityMCA.class, villager.getBoundingBox().inflate(8.0), other -> other != villager && canPerform(other)
-                                                                                                               && level.getGameTime() >= nextPerformanceTimes.getOrDefault(other, 0L))
+                                                                                                               && level.getGameTime() >= other.getNextMelodyPerformanceTime())
                     .stream().filter(other -> other.getRandom().nextFloat() < JOIN_CHANCE).forEach(other -> startPerforming(level, other, performance));
         }
     }
@@ -118,7 +117,7 @@ public class PlayImmersiveMelodyTask extends Behavior<VillagerEntityMCA> {
             stopPerforming(level, villager, stack);
             return false;
         });
-        nextPerformanceTimes.put(villager, level.getGameTime() + RETRY_COOLDOWN);
+        villager.setNextMelodyPerformanceTime(level.getGameTime() + RETRY_COOLDOWN);
         return stack;
     }
 

@@ -17,6 +17,12 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class BlueprintSnapshotProtocolTest {
+    @BeforeAll
+    static void bootstrapMinecraft() {
+        SharedConstants.tryDetectVersion();
+        Bootstrap.bootStrap();
+    }
+
     @Test
     void snapshotAndServerPlannerAgreeForIdenticalEvidence() {
         FloorGeometry ground = flatFloor(64, 0, 3);
@@ -33,7 +39,7 @@ class BlueprintSnapshotProtocolTest {
         FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
         try {
             GetVillageResponse.STREAM_CODEC.encode(buffer, new GetVillageResponse(
-                    server.save(), Rank.PEASANT, 0, true, Set.of(), Map.of(), Map.of()));
+                    server.saveForClient(), Rank.PEASANT, 0, true, Set.of(), Map.of(), Map.of()));
             Village snapshot = new Village(GetVillageResponse.STREAM_CODEC.decode(buffer).getData(), null);
             var modes = new Village.RoomScanMode[]{Village.RoomScanMode.UPDATE_ROOM, Village.RoomScanMode.ADD_ROOM,
                     Village.RoomScanMode.ADD_BUILDING, Village.RoomScanMode.ADD_ATTACHMENT};
@@ -56,7 +62,7 @@ class BlueprintSnapshotProtocolTest {
         }
     }
 
-    private static RoomScanPlan freshPlan(Village village, BlockPos source, FloorGeometry floor, boolean attachment) {
+    private static RoomWorkflow.Plan freshPlan(Village village, BlockPos source, FloorGeometry floor, boolean attachment) {
         Set<SelectedFloorScanner.Transition> transitions = floor.cells().stream()
                 .filter(cell -> floor.cellAt(cell.feet().east()).isPresent())
                 .map(cell -> new SelectedFloorScanner.Transition(cell.feet(), cell.feet().east()))
@@ -66,19 +72,13 @@ class BlueprintSnapshotProtocolTest {
         var structure = village.getStructure(10).orElseThrow();
         var contacts = attachment ? Set.of(new StructureConnector.VerticalConnection(
                 structure, structure.getFloor(0).orElseThrow())) : Set.<StructureConnector.VerticalConnection>of();
-        return RoomScanPlanner.analyzeFresh(village, source,
+        return RoomWorkflow.analyzeFresh(village, null, source,
                 new StructureScanner.FloorObservation(scan, contacts, Set.of())).plan();
     }
 
     private static FloorGeometry flatFloor(int y, int minX, int maxX) {
         return new FloorGeometry(java.util.stream.IntStream.rangeClosed(minX, maxX)
                 .mapToObj(x -> new FloorGeometry.Cell(new BlockPos(x, y, 0), y + 4)).toList(), Map.of());
-    }
-
-    @BeforeAll
-    static void bootstrapMinecraft() {
-        SharedConstants.tryDetectVersion();
-        Bootstrap.bootStrap();
     }
 
     @Test
@@ -97,17 +97,18 @@ class BlueprintSnapshotProtocolTest {
         serverVillage.registerStructure(structure, room);
 
         GetVillageResponse response = new GetVillageResponse(
-                serverVillage.save(), Rank.PEASANT, 0, true, Set.of(), Map.of(), Map.of());
+                serverVillage.saveForClient(), Rank.PEASANT, 0, true, Set.of(), Map.of(), Map.of());
         FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
         try {
             GetVillageResponse.STREAM_CODEC.encode(buffer, response);
             GetVillageResponse decoded = GetVillageResponse.STREAM_CODEC.decode(buffer);
             Village clientSnapshot = new Village(decoded.getData(), null);
 
-            RoomScanPlan plan = clientSnapshot.getRoomScanPlan(null, source);
+            Village.ClientPositionTarget target = clientSnapshot.resolveClientTarget(source);
 
-            assertEquals(Village.RoomScanMode.UPDATE_ROOM, plan.mode());
-            assertEquals(42, plan.currentRoom().orElseThrow().getId());
+            assertEquals(42, target.room().orElseThrow().getId());
+            assertEquals(10, target.structureId());
+            assertEquals(0, target.floorId());
         } finally {
             buffer.release();
         }
