@@ -30,9 +30,9 @@ class ConfigDefaultMapUpgradeTest {
     void upstreamMapUpgradesHavePersistedVersionMarkersAndDefaults() {
         assertEquals(0, Config.SERVER.defaultMapsVersion.getDefault());
         assertEquals(0, Config.CLIENT.defaultMapsVersion.getDefault());
-        assertTrue(Config.SERVER.defaultMapsVersion.getSpec().test(1));
-        assertTrue(Config.CLIENT.defaultMapsVersion.getSpec().test(1));
-        assertFalse(Config.SERVER.defaultMapsVersion.getSpec().test(2));
+        assertTrue(Config.SERVER.defaultMapsVersion.accepts(1));
+        assertTrue(Config.CLIENT.defaultMapsVersion.accepts(1));
+        assertFalse(Config.SERVER.defaultMapsVersion.accepts(2));
         assertEquals("minecraft:cleric", Config.decodeMap(
                 Config.SERVER.professionConversionsMap.getDefault(),
                 String.class, String.class, "professionConversionsMap").get("villagersplus:alchemist"));

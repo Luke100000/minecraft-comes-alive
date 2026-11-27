@@ -2,7 +2,6 @@ package net.conczin.mca.fabric.config;
 
 import com.electronwill.nightconfig.core.CommentedConfig;
 import com.electronwill.nightconfig.toml.TomlParser;
-import com.electronwill.nightconfig.toml.TomlWriter;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.config.ConfigBackend;
@@ -12,11 +11,8 @@ import net.conczin.mca.config.ConfigValue;
 
 import java.io.IOException;
 import java.io.Reader;
-import java.io.Writer;
-import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -71,14 +67,18 @@ public final class FabricTomlConfigBackend implements ConfigBackend {
         });
     }
 
-    public void loadGlobal(boolean physicalClient) {
+    public void loadGlobal() {
         load(ConfigScope.COMMON, directory.resolve(Config.COMMON_FILE_NAME), true);
         load(ConfigScope.SERVER, directory.resolve(Config.SERVER_FILE_NAME), true);
-        if (physicalClient) load(ConfigScope.CLIENT, directory.resolve(Config.CLIENT_FILE_NAME), true);
+    }
+
+    public void loadClient() {
+        load(ConfigScope.CLIENT, directory.resolve(Config.CLIENT_FILE_NAME), true);
     }
 
     /** A world override is used only when present; absent overrides never get created. */
     public void startWorld(Path worldConfigDirectory) {
+        FabricLegacyTomlMigration.migrateWorld(worldConfigDirectory);
         Path worldFile = worldConfigDirectory.resolve(Config.SERVER_FILE_NAME);
         if (Files.isRegularFile(worldFile)) load(ConfigScope.SERVER, worldFile, false);
         else load(ConfigScope.SERVER, directory.resolve(Config.SERVER_FILE_NAME), false);
@@ -124,7 +124,7 @@ public final class FabricTomlConfigBackend implements ConfigBackend {
         schema.markLoaded();
 
         boolean create = !Files.exists(file) && createIfMissing;
-        if (valid && allEntriesValid && (create || (createIfMissing && Files.isRegularFile(file)))) {
+        if (valid && allEntriesValid && (create || Files.isRegularFile(file))) {
             boolean migrated = create && Config.migrateLegacy(schema, file);
             // Default-map versions apply to existing, valid TOML too.
             boolean upgraded = Config.upgradeDefaultMaps(schema);
@@ -135,7 +135,7 @@ public final class FabricTomlConfigBackend implements ConfigBackend {
                 if (migrated) Config.markLegacyImported(schema);
             } catch (IOException ex) {
                 values.get(scope).set(next);
-                MCA.LOGGER.error("Cannot create MCA config file {} (error type {})",
+                MCA.LOGGER.error("Cannot persist MCA config file {} (error type {})",
                         file, ex.getClass().getSimpleName());
             }
         }
@@ -161,7 +161,6 @@ public final class FabricTomlConfigBackend implements ConfigBackend {
     }
 
     private void write(ConfigScope scope, Path destination) throws IOException {
-        Files.createDirectories(destination.getParent());
         CommentedConfig document;
         if (Files.isRegularFile(destination)) {
             try (Reader reader = Files.newBufferedReader(destination)) {
@@ -174,20 +173,14 @@ public final class FabricTomlConfigBackend implements ConfigBackend {
             if (section.comment() != null && document.getComment(section.path()) == null)
                 document.setComment(section.path(), section.comment());
         }
+        var snapshot = values.get(scope).get();
         for (ConfigSchema.Entry<?> entry : Config.schema(scope).entries()) {
-            document.set(entry.name(), values.get(scope).get().get(entry.name()));
+            document.set(entry.name(), snapshot.get(entry.name()));
             String expectedComment = nativeComment(entry);
             if (expectedComment != null && document.getComment(entry.name()) == null)
                 document.setComment(entry.name(), expectedComment);
         }
-        Path temp = Files.createTempFile(destination.getParent(), ".mca-config-", ".tmp");
-        try {
-            try (Writer writer = Files.newBufferedWriter(temp)) { new TomlWriter().write(document, writer); }
-            try { Files.move(temp, destination, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING); }
-            catch (AtomicMoveNotSupportedException ex) {
-                throw new IOException("Atomic TOML replacement unavailable for " + destination, ex);
-            }
-        } finally { Files.deleteIfExists(temp); }
+        FabricTomlFile.write(destination, document);
     }
 
     /** Match ModConfigSpec.Builder#defineInRange comment lines without requiring FCP at runtime. */

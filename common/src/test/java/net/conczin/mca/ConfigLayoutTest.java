@@ -3,6 +3,7 @@ package net.conczin.mca;
 import net.conczin.mca.config.ConfigSchema;
 import net.conczin.mca.config.ConfigScope;
 import net.conczin.mca.config.ConfigValue;
+import net.neoforged.neoforge.common.ModConfigSpec;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -12,6 +13,19 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ConfigLayoutTest {
+    @Test
+    void nativeBooleanSettingsUseEditableBooleanValues() {
+        for (ConfigScope scope : ConfigScope.values()) {
+            ModConfigSpec nativeSpec = NativeConfigDefaultsExtension.spec(scope);
+            for (ConfigSchema.Entry<?> entry : Config.schema(scope).entries()) {
+                if (entry.defaultValue() instanceof Boolean) {
+                    assertTrue(nativeSpec.getValues().get(entry.path()) instanceof ModConfigSpec.BooleanValue,
+                            () -> "Native configuration editor cannot edit boolean " + entry.name());
+                }
+            }
+        }
+    }
+
     @Test
     void nativeSectionsKeepTranslationsDeclaredBeforePush() {
         assertEquals("mca.configuration.section.villager_behavior",
@@ -34,29 +48,29 @@ class ConfigLayoutTest {
 
     @Test
     void exposesNativeCommonServerAndClientSpecs() {
-        assertTrue(Config.COMMON_SPEC.getValues().contains(List.of("villager_behavior", "useSquidwardModels")));
-        assertTrue(Config.COMMON_SPEC.getValues().contains(List.of("ai", "villagerChatAIToken")));
-        assertTrue(Config.SERVER_SPEC.getValues().contains(List.of("village_behavior", "archerArrowsIgnoreVillagers")));
-        assertTrue(Config.SERVER_SPEC.getValues().contains(List.of("destiny", "destinySpawnLocations")));
-        assertTrue(Config.SERVER_SPEC.getValues().contains(List.of("destiny", "launchIntoDestiny")));
-        assertTrue(Config.SERVER_SPEC.getValues().contains(List.of("mod_features", "overwriteOriginalVillagers")));
-        assertTrue(Config.CLIENT_SPEC.getValues().contains(List.of("villager_behavior", "showNameTags")));
+        assertTrue(Config.COMMON_SPEC.paths().contains("villager_behavior.useSquidwardModels"));
+        assertTrue(Config.COMMON_SPEC.paths().contains("ai.villagerChatAIToken"));
+        assertTrue(Config.SERVER_SPEC.paths().contains("village_behavior.archerArrowsIgnoreVillagers"));
+        assertTrue(Config.SERVER_SPEC.paths().contains("destiny.destinySpawnLocations"));
+        assertTrue(Config.SERVER_SPEC.paths().contains("destiny.launchIntoDestiny"));
+        assertTrue(Config.SERVER_SPEC.paths().contains("mod_features.overwriteOriginalVillagers"));
+        assertTrue(Config.CLIENT_SPEC.paths().contains("villager_behavior.showNameTags"));
     }
 
     @Test
     void keepsServerSyncedSettingsInServerConfig() {
         assertEquals(true, Config.SERVER.archerArrowsIgnoreVillagers.getDefault());
         assertEquals(24000, Config.SERVER.babyItemGrowUpTime.getDefault());
-        assertFalse(Config.SERVER.villagerMaxAgeTime.getSpec().test(3));
-        assertTrue(Config.SERVER.villagerMaxAgeTime.getSpec().test(4));
+        assertFalse(Config.SERVER.villagerMaxAgeTime.accepts(3));
+        assertTrue(Config.SERVER.villagerMaxAgeTime.accepts(4));
         assertEquals(3, Config.SERVER.addContentGloballyPermissionLevel.getDefault());
-        assertTrue(Config.SERVER_SPEC.getValues().contains(List.of("villager_behavior", "enabledTraits")));
-        assertTrue(Config.SERVER_SPEC.getValues().contains(List.of("villager_behavior", "babyItemGrowUpTime")));
-        assertTrue(Config.SERVER_SPEC.getValues().contains(List.of("player_customization", "addContentGloballyPermissionLevel")));
-        assertTrue(Config.SERVER_SPEC.getValues().contains(List.of("player_customization", "allowPlayerSizeAdjustment")));
-        assertTrue(Config.SERVER_SPEC.getValues().contains(List.of("player_customization", "scalePlayerHitboxWithSizeAndWidth")));
-        assertTrue(Config.SERVER_SPEC.getValues().contains(List.of("destiny", "allowBodyCustomizationInDestiny")));
-        assertFalse(Config.SERVER_SPEC.getValues().contains(List.of("player_customization", "launchIntoDestiny")));
+        assertTrue(Config.SERVER_SPEC.paths().contains("villager_behavior.enabledTraits"));
+        assertTrue(Config.SERVER_SPEC.paths().contains("villager_behavior.babyItemGrowUpTime"));
+        assertTrue(Config.SERVER_SPEC.paths().contains("player_customization.addContentGloballyPermissionLevel"));
+        assertTrue(Config.SERVER_SPEC.paths().contains("player_customization.allowPlayerSizeAdjustment"));
+        assertTrue(Config.SERVER_SPEC.paths().contains("player_customization.scalePlayerHitboxWithSizeAndWidth"));
+        assertTrue(Config.SERVER_SPEC.paths().contains("destiny.allowBodyCustomizationInDestiny"));
+        assertFalse(Config.SERVER_SPEC.paths().contains("player_customization.launchIntoDestiny"));
         for (String key : List.of(
                 "allowBodyCustomizationInDestiny",
                 "allowTraitCustomizationInDestiny",
@@ -70,11 +84,11 @@ class ConfigLayoutTest {
                 "allowDestinyCommandOnce",
                 "allowDestinyCommandMoreThanOnce",
                 "allowDestinyTeleportation")) {
-            assertTrue(Config.SERVER_SPEC.getValues().contains(List.of("destiny", key)), key);
+            assertTrue(Config.SERVER_SPEC.paths().contains("destiny." + key), key);
         }
-        assertTrue(Config.SERVER_SPEC.getValues().contains(List.of("villager_behavior", "villagerMaxHealth")));
-        assertTrue(Config.SERVER_SPEC.getValues().contains(List.of("village_behavior", "taxesFactor")));
-        assertFalse(Config.COMMON_SPEC.getValues().contains(List.of("mod_features", "overwriteOriginalVillagers")));
+        assertTrue(Config.SERVER_SPEC.paths().contains("villager_behavior.villagerMaxHealth"));
+        assertTrue(Config.SERVER_SPEC.paths().contains("village_behavior.taxesFactor"));
+        assertFalse(Config.COMMON_SPEC.paths().contains("mod_features.overwriteOriginalVillagers"));
     }
 
     @Test
@@ -82,14 +96,14 @@ class ConfigLayoutTest {
         assertEquals(false, Config.COMMON.useSquidwardModels.getDefault());
         assertEquals(true, Config.CLIENT.showNameTags.getDefault());
         assertEquals(5.0, Config.CLIENT.nameTagDistance.getDefault());
-        assertFalse(Config.CLIENT_SPEC.getValues().contains(List.of("villager_behavior", "useSquidwardModels")));
-        assertTrue(Config.CLIENT_SPEC.getValues().contains(List.of("tts", "enableOnlineTTS")));
-        assertTrue(Config.CLIENT_SPEC.getValues().contains(List.of("tts", "onlineTTSModel")));
-        assertTrue(Config.COMMON_SPEC.getValues().contains(List.of("villager_behavior", "useSquidwardModels")));
-        assertFalse(Config.COMMON_SPEC.getValues().contains(List.of("ai", "enableOnlineTTS")));
-        assertFalse(Config.COMMON_SPEC.getValues().contains(List.of("ai", "onlineTTSModel")));
-        assertFalse(Config.COMMON_SPEC.getValues().contains(List.of("villager_behavior", "showNameTags")));
-        assertFalse(Config.COMMON_SPEC.getValues().contains(List.of("player_customization", "enablePlayerShaders")));
+        assertFalse(Config.CLIENT_SPEC.paths().contains("villager_behavior.useSquidwardModels"));
+        assertTrue(Config.CLIENT_SPEC.paths().contains("tts.enableOnlineTTS"));
+        assertTrue(Config.CLIENT_SPEC.paths().contains("tts.onlineTTSModel"));
+        assertTrue(Config.COMMON_SPEC.paths().contains("villager_behavior.useSquidwardModels"));
+        assertFalse(Config.COMMON_SPEC.paths().contains("ai.enableOnlineTTS"));
+        assertFalse(Config.COMMON_SPEC.paths().contains("ai.onlineTTSModel"));
+        assertFalse(Config.COMMON_SPEC.paths().contains("villager_behavior.showNameTags"));
+        assertFalse(Config.COMMON_SPEC.paths().contains("player_customization.enablePlayerShaders"));
     }
 
     @Test
@@ -99,8 +113,8 @@ class ConfigLayoutTest {
                 "villagerChatAIModel",
                 "villagerChatAIUseTools",
                 "villagerChatAIContextPermissionLevel")) {
-            assertTrue(Config.SERVER_SPEC.getValues().contains(List.of("ai", key)), key);
-            assertFalse(Config.COMMON_SPEC.getValues().contains(List.of("ai", key)), key);
+            assertTrue(Config.SERVER_SPEC.paths().contains("ai." + key), key);
+            assertFalse(Config.COMMON_SPEC.paths().contains("ai." + key), key);
         }
 
         for (String key : List.of(
@@ -112,23 +126,23 @@ class ConfigLayoutTest {
                 "villagerChatAIUseSharedLongTermMemory",
                 "villagerChatAIIncludeSessionInformation",
                 "inworldAIToken")) {
-            assertTrue(Config.COMMON_SPEC.getValues().contains(List.of("ai", key)), key);
-            assertFalse(Config.SERVER_SPEC.getValues().contains(List.of("ai", key)), key);
+            assertTrue(Config.COMMON_SPEC.paths().contains("ai." + key), key);
+            assertFalse(Config.SERVER_SPEC.paths().contains("ai." + key), key);
         }
 
-        assertFalse(Config.COMMON_SPEC.getValues().contains(List.of("ai", "inworldAIResourceNames")));
+        assertFalse(Config.COMMON_SPEC.paths().contains("ai.inworldAIResourceNames"));
     }
 
     @Test
     void configSectionsGroupValuesByTheirActualDomain() {
-        assertTrue(Config.SERVER_SPEC.getValues().contains(List.of("player_customization", "bypassTraitRestrictions")));
-        assertFalse(Config.CLIENT_SPEC.getValues().contains(List.of("villager_behavior", "bypassTraitRestrictions")));
+        assertTrue(Config.SERVER_SPEC.paths().contains("player_customization.bypassTraitRestrictions"));
+        assertFalse(Config.CLIENT_SPEC.paths().contains("villager_behavior.bypassTraitRestrictions"));
 
-        assertTrue(Config.SERVER_SPEC.getValues().contains(List.of("villager_behavior", "useModernUSANamesOnly")));
-        assertTrue(Config.SERVER_SPEC.getValues().contains(List.of("villager_behavior", "structuresInRumors")));
-        assertTrue(Config.SERVER_SPEC.getValues().contains(List.of("villager_behavior", "professionConversionsMap")));
-        assertTrue(Config.SERVER_SPEC.getValues().contains(List.of("village_behavior", "guardsTargetEntities")));
-        assertTrue(Config.SERVER_SPEC.getValues().contains(List.of("village_behavior", "taxesMap")));
+        assertTrue(Config.SERVER_SPEC.paths().contains("villager_behavior.useModernUSANamesOnly"));
+        assertTrue(Config.SERVER_SPEC.paths().contains("villager_behavior.structuresInRumors"));
+        assertTrue(Config.SERVER_SPEC.paths().contains("villager_behavior.professionConversionsMap"));
+        assertTrue(Config.SERVER_SPEC.paths().contains("village_behavior.guardsTargetEntities"));
+        assertTrue(Config.SERVER_SPEC.paths().contains("village_behavior.taxesMap"));
 
         for (String key : List.of(
                 "useModernUSANamesOnly",
@@ -136,17 +150,17 @@ class ConfigLayoutTest {
                 "structuresInRumors",
                 "professionConversionsMap",
                 "taxesMap")) {
-            assertFalse(Config.SERVER_SPEC.getValues().contains(List.of("player_customization", key)), key);
+            assertFalse(Config.SERVER_SPEC.paths().contains("player_customization." + key), key);
         }
 
-        assertTrue(Config.CLIENT_SPEC.getValues().contains(List.of("player_customization", "immersiveLibraryUrl")));
-        assertFalse(Config.CLIENT_SPEC.getValues().contains(List.of("village_behavior", "immersiveLibraryUrl")));
+        assertTrue(Config.CLIENT_SPEC.paths().contains("player_customization.immersiveLibraryUrl"));
+        assertFalse(Config.CLIENT_SPEC.paths().contains("village_behavior.immersiveLibraryUrl"));
     }
 
     @Test
     void removedHistoricalPathfindingBlacklistDoesNotReturn() {
-        assertFalse(Config.COMMON_SPEC.getValues().contains(List.of("village_behavior", "villagerPathfindingBlacklist")));
-        assertFalse(Config.SERVER_SPEC.getValues().contains(List.of("village_behavior", "villagerPathfindingBlacklist")));
+        assertFalse(Config.COMMON_SPEC.paths().contains("village_behavior.villagerPathfindingBlacklist"));
+        assertFalse(Config.SERVER_SPEC.paths().contains("village_behavior.villagerPathfindingBlacklist"));
     }
 
     @Test

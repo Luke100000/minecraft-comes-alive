@@ -37,8 +37,26 @@ class ConfigLegacyMigrationTest {
         var config = NeoForgeTestConfigLoader.pathlessServerConfig(NativeConfigDefaultsExtension.spec(ConfigScope.SERVER));
         assertThrows(IllegalStateException.class, config::getFullPath,
                 "The native loader's in-memory SERVER defaults have no filesystem path");
+        Config.SERVER_SPEC.beginRemoteSync();
+        try {
+            assertDoesNotThrow(() -> NativeConfigDefaultsExtension.BACKEND.onConfigLoad(config));
+        } finally {
+            Config.SERVER_SPEC.clearRemote();
+        }
         assertDoesNotThrow(() -> Config.migrateLegacy(Config.SERVER_SPEC,
                 Path.of("world", "serverconfig", Config.SERVER_FILE_NAME)));
+    }
+
+    @Test
+    void fileBackedLoadDoesNotSwallowConfigStateFailure() {
+        var config = NeoForgeTestConfigLoader.serverConfig(NativeConfigDefaultsExtension.spec(ConfigScope.SERVER),
+                tempDirectory.resolve(Config.SERVER_FILE_NAME));
+        Config.SERVER_SPEC.beginRemoteSync();
+        try {
+            assertThrows(IllegalStateException.class, () -> NativeConfigDefaultsExtension.BACKEND.onConfigLoad(config));
+        } finally {
+            Config.SERVER_SPEC.clearRemote();
+        }
     }
 
     @TempDir

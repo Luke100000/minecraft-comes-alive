@@ -1,14 +1,11 @@
 package net.conczin.mca.fabric.config;
 
-import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonPrimitive;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonToken;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.config.ConfigSchema;
-import net.conczin.mca.config.ConfigScope;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
@@ -20,6 +17,7 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.MinecraftServer;
 
+import java.io.IOException;
 import java.io.StringReader;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
@@ -194,95 +192,72 @@ public final class FabricConfigSync {
     public static void applyRemote(Snapshot packet) {
         if (packet.json().getBytes(StandardCharsets.UTF_8).length > MAX_BYTES)
             throw new IllegalArgumentException("Oversized SERVER configuration");
-        Map<String, JsonElement> raw = readStrict(packet.json());
-        JsonElement version = raw.get("protocolVersion");
-        if (raw.size() != 2 || version == null || !version.isJsonPrimitive()
-                || !version.getAsJsonPrimitive().isNumber()
-                || !version.getAsString().equals(Integer.toString(PROTOCOL_VERSION))) {
-            throw new IllegalArgumentException("Unknown MCA SERVER config protocol");
-        }
-        JsonElement valuesElement = raw.get("values");
-        if (valuesElement == null || !valuesElement.isJsonObject())
-            throw new IllegalArgumentException("Missing MCA SERVER settings");
-        JsonObject object = valuesElement.getAsJsonObject();
-        if (!object.keySet().equals(Config.SERVER_SPEC.paths()))
-            throw new IllegalArgumentException("Incomplete/unknown MCA SERVER setting paths");
-        Map<String, Object> candidate = new LinkedHashMap<>();
-        for (ConfigSchema.Entry<?> entry : Config.SERVER_SPEC.entries()) {
-            Object value = decode(entry.defaultValue(), object.get(entry.name()));
-            if (!entry.value().accepts(value))
-                throw new IllegalArgumentException("Invalid SERVER setting: " + entry.name());
-            candidate.put(entry.name(), value);
-        }
-        Config.SERVER_SPEC.applyRemote(candidate);
+        Config.SERVER_SPEC.applyRemote(readSnapshot(packet.json()));
     }
 
-    private static Map<String, JsonElement> readStrict(String json) {
-        try {
-            JsonReader reader = new JsonReader(new StringReader(json));
+    private static Map<String, Object> readSnapshot(String json) {
+        try (JsonReader reader = new JsonReader(new StringReader(json))) {
             reader.setLenient(false);
-            Map<String, JsonElement> parsed = new LinkedHashMap<>();
+            boolean versionRead = false;
+            Map<String, Object> values = null;
             reader.beginObject();
             while (reader.hasNext()) {
-                String key = reader.nextName();
-                if (parsed.containsKey(key)) throw new IllegalArgumentException("Duplicate top-level key");
-                if ("values".equals(key)) {
-                    // Detect duplicates before conversion to a JsonObject (which would overwrite them).
-                    JsonObject entries = new JsonObject();
-                    reader.beginObject();
-                    while (reader.hasNext()) {
-                        String name = reader.nextName();
-                        if (entries.has(name)) throw new IllegalArgumentException("Duplicate SERVER config key");
-                        entries.add(name, readValue(reader));
+                switch (reader.nextName()) {
+                    case "protocolVersion" -> {
+                        if (versionRead || reader.peek() != JsonToken.NUMBER
+                                || !new BigDecimal(reader.nextString()).toString().equals(Integer.toString(PROTOCOL_VERSION)))
+                            throw new IllegalArgumentException("Duplicate or unknown MCA SERVER config protocol");
+                        versionRead = true;
                     }
-                    reader.endObject();
-                    parsed.put(key, entries);
-                } else parsed.put(key, readValue(reader));
+                    case "values" -> {
+                        if (values != null) throw new IllegalArgumentException("Duplicate SERVER settings");
+                        values = readSettings(reader);
+                    }
+                    default -> throw new IllegalArgumentException("Unknown MCA SERVER snapshot field");
+                }
             }
             reader.endObject();
             if (reader.peek() != JsonToken.END_DOCUMENT) throw new IllegalArgumentException("Trailing JSON content");
-            return parsed;
-        } catch (Exception ex) { throw new IllegalArgumentException("Malformed MCA SERVER snapshot", ex); }
-    }
-
-    /** Read one value without Gson's object-map duplicate-key overwrites. */
-    private static JsonElement readValue(JsonReader reader) throws java.io.IOException {
-        return switch (reader.peek()) {
-            case STRING -> new JsonPrimitive(reader.nextString());
-            case BOOLEAN -> new JsonPrimitive(reader.nextBoolean());
-            case NUMBER -> new JsonPrimitive(new BigDecimal(reader.nextString()));
-            case BEGIN_ARRAY -> {
-                com.google.gson.JsonArray array = new com.google.gson.JsonArray();
-                reader.beginArray();
-                while (reader.hasNext()) array.add(readValue(reader));
-                reader.endArray();
-                yield array;
-            }
-            case NULL -> { reader.nextNull(); yield com.google.gson.JsonNull.INSTANCE; }
-            default -> throw new IllegalArgumentException("Unexpected nested SERVER config value");
-        };
-    }
-
-    private static Object decode(Object original, JsonElement element) {
-        if (element == null || element.isJsonNull()) throw new IllegalArgumentException("Missing SERVER value");
-        if (original instanceof List<?>) {
-            if (!element.isJsonArray()) throw new IllegalArgumentException("Expected string list");
-            List<String> list = new ArrayList<>();
-            for (JsonElement value : element.getAsJsonArray()) {
-                if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isString())
-                    throw new IllegalArgumentException("Expected string list entry");
-                list.add(value.getAsString());
-            }
-            return List.copyOf(list);
+            if (!versionRead || values == null) throw new IllegalArgumentException("Incomplete MCA SERVER snapshot");
+            return values;
+        } catch (IOException | IllegalStateException | ArithmeticException ex) {
+            throw new IllegalArgumentException("Malformed MCA SERVER snapshot", ex);
         }
-        if (!element.isJsonPrimitive()) throw new IllegalArgumentException("Invalid SERVER value type");
-        JsonPrimitive p = element.getAsJsonPrimitive();
-        if (original instanceof Boolean && p.isBoolean()) return p.getAsBoolean();
-        if (original instanceof String && p.isString()) return p.getAsString();
-        if (original instanceof Integer && p.isNumber())
-            return new BigDecimal(p.getAsString()).intValueExact();
-        if (original instanceof Double && p.isNumber()) {
-            double number = p.getAsDouble();
+    }
+
+    private static Map<String, Object> readSettings(JsonReader reader) throws IOException {
+        Map<String, Object> values = new LinkedHashMap<>();
+        reader.beginObject();
+        while (reader.hasNext()) {
+            String name = reader.nextName();
+            ConfigSchema.Entry<?> entry = Config.SERVER_SPEC.entry(name);
+            if (entry == null || values.containsKey(name))
+                throw new IllegalArgumentException("Unknown or duplicate SERVER setting: " + name);
+            values.put(name, readValue(reader, entry.defaultValue()));
+        }
+        reader.endObject();
+        return values;
+    }
+
+    private static Object readValue(JsonReader reader, Object original) throws IOException {
+        JsonToken token = reader.peek();
+        if (original instanceof List<?> && token == JsonToken.BEGIN_ARRAY) {
+            List<String> list = new ArrayList<>();
+            reader.beginArray();
+            while (reader.hasNext()) {
+                if (reader.peek() != JsonToken.STRING)
+                    throw new IllegalArgumentException("Expected string list entry");
+                list.add(reader.nextString());
+            }
+            reader.endArray();
+            return list;
+        }
+        if (original instanceof Boolean && token == JsonToken.BOOLEAN) return reader.nextBoolean();
+        if (original instanceof String && token == JsonToken.STRING) return reader.nextString();
+        if (original instanceof Integer && token == JsonToken.NUMBER)
+            return new BigDecimal(reader.nextString()).intValueExact();
+        if (original instanceof Double && token == JsonToken.NUMBER) {
+            double number = new BigDecimal(reader.nextString()).doubleValue();
             if (Double.isFinite(number)) return number;
         }
         throw new IllegalArgumentException("Mismatched SERVER value type");

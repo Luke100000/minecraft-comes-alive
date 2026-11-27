@@ -3,6 +3,7 @@ package net.neoforged.fml.config;
 import com.electronwill.nightconfig.core.CommentedConfig;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
+import java.nio.file.Path;
 import java.util.concurrent.locks.ReentrantLock;
 
 public final class NeoForgeTestConfigLoader {
@@ -25,8 +26,12 @@ public final class NeoForgeTestConfigLoader {
     }
 
     public static ModConfig pathlessServerConfig(ModConfigSpec spec) {
+        return serverConfig(spec, null);
+    }
+
+    public static ModConfig serverConfig(ModConfigSpec spec, Path path) {
         ModConfig config = new ModConfig(ModConfig.Type.SERVER, spec, null, "mca-server.toml", new ReentrantLock());
-        config.loadedConfig = new LoadedConfig(CommentedConfig.inMemory(), null, config);
+        config.loadedConfig = new LoadedConfig(CommentedConfig.inMemory(), path, config);
         return config;
     }
 }

@@ -189,7 +189,7 @@ class ConfigScreenSearchTest {
 
         RegistryAccess registries = new RegistryAccess.ImmutableRegistryAccess(List.of());
         Set<ResourceLocation> dimensions = Set.of(ResourceLocation.parse("minecraft:overworld"));
-        Predicate<String> nativeValidator = value -> Config.SERVER.villagerInteractionItemBlacklist.getSpec().test(List.of(value));
+        Predicate<String> nativeValidator = value -> Config.SERVER.villagerInteractionItemBlacklist.accepts(List.of(value));
 
         assertNull(listError(
                 "villagerInteractionItemBlacklist", "minecraft:bucket", nativeValidator, registries, dimensions));
@@ -204,8 +204,8 @@ class ConfigScreenSearchTest {
         SharedConstants.tryDetectVersion();
         Bootstrap.bootStrap();
 
-        Predicate<String> itemValidator = value -> Config.SERVER.villagerInteractionItemBlacklist.getSpec().test(List.of(value));
-        Predicate<String> dimensionValidator = value -> Config.SERVER.villagerDimensionBlacklist.getSpec().test(List.of(value));
+        Predicate<String> itemValidator = value -> Config.SERVER.villagerInteractionItemBlacklist.accepts(List.of(value));
+        Predicate<String> dimensionValidator = value -> Config.SERVER.villagerDimensionBlacklist.accepts(List.of(value));
 
         assertNotNull(listError(
                 "villagerInteractionItemBlacklist", "example:missing_item", itemValidator, null, null));
@@ -220,8 +220,8 @@ class ConfigScreenSearchTest {
 
         RegistryAccess registries = new RegistryAccess.ImmutableRegistryAccess(List.of(
                 new MappedRegistry<>(Registries.STRUCTURE, Lifecycle.stable())));
-        Predicate<String> destinyValidator = value -> Config.SERVER.destinySpawnLocations.getSpec().test(List.of(value));
-        Predicate<String> rumorValidator = value -> Config.SERVER.structuresInRumors.getSpec().test(List.of(value));
+        Predicate<String> destinyValidator = value -> Config.SERVER.destinySpawnLocations.accepts(List.of(value));
+        Predicate<String> rumorValidator = value -> Config.SERVER.structuresInRumors.accepts(List.of(value));
 
         assertNull(listError(
                 "destinySpawnLocations", "example:server_structure", destinyValidator, registries, Set.of()));
@@ -240,13 +240,13 @@ class ConfigScreenSearchTest {
     void draftValidationRejectsDuplicateIdsAndMapKeysWithoutRejectingValidExistingRows() {
         SharedConstants.tryDetectVersion();
         Bootstrap.bootStrap();
-        Predicate<String> itemValidator = value -> Config.SERVER.villagerInteractionItemBlacklist.getSpec().test(List.of(value));
+        Predicate<String> itemValidator = value -> Config.SERVER.villagerInteractionItemBlacklist.accepts(List.of(value));
         assertNull(ConfigScreenSearch.listEntryError("villagerInteractionItemBlacklist", "minecraft:bucket",
                 List.of("minecraft:bucket"), 0, itemValidator, null, null));
         assertEquals("Duplicate entry", ConfigScreenSearch.listEntryError("villagerInteractionItemBlacklist", "minecraft:bucket",
                 List.of("minecraft:bucket", "minecraft:bucket"), 1, itemValidator, null, null).getString());
 
-        Predicate<String> mapValidator = value -> Config.SERVER.guardsTargetEntities.getSpec().test(List.of(value));
+        Predicate<String> mapValidator = value -> Config.SERVER.guardsTargetEntities.accepts(List.of(value));
         assertEquals("Duplicate key", ConfigScreenSearch.listEntryError("guardsTargetEntities", "minecraft:zombie=1",
                 List.of("minecraft:zombie=4", "minecraft:zombie=1"), 1, mapValidator, null, null).getString());
         assertNull(ConfigScreenSearch.listEntryError("elevenlabsMaleVoices", "repeatable voice",
@@ -270,7 +270,7 @@ class ConfigScreenSearchTest {
     void invalidDraftsExplainSyntaxAndMissingRegistries() {
         SharedConstants.tryDetectVersion();
         Bootstrap.bootStrap();
-        Predicate<String> validator = value -> Config.SERVER.villagerInteractionItemBlacklist.getSpec().test(List.of(value));
+        Predicate<String> validator = value -> Config.SERVER.villagerInteractionItemBlacklist.accepts(List.of(value));
         assertEquals("Expected namespace:id", ConfigScreenSearch.listEntryError("villagerInteractionItemBlacklist",
                 "not an id", List.of("not an id"), 0, validator, null, null).getString());
         assertEquals("Not found in the current registry", ConfigScreenSearch.listEntryError("villagerInteractionItemBlacklist",

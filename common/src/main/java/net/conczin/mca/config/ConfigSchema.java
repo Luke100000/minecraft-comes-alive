@@ -39,17 +39,8 @@ public final class ConfigSchema {
     public List<Entry<?>> entries() { return List.copyOf(definitions.values()); }
     public Set<String> paths() { return Collections.unmodifiableSet(definitions.keySet()); }
     public Entry<?> entry(String key) { return definitions.get(key); }
-    public Map<String, Entry<?>> definitions() { return Collections.unmodifiableMap(definitions); }
     public Section section(List<String> path) { return sections.get(path); }
     public List<Section> sections() { return List.copyOf(sections.values()); }
-
-    // A small compatibility view for layout tests and callers that list native spec paths.
-    public ValuePaths getValues() { return new ValuePaths(entries()); }
-    public record ValuePaths(List<Entry<?>> entries) {
-        public boolean contains(List<String> path) {
-            return entries.stream().anyMatch(entry -> entry.path().equals(path));
-        }
-    }
 
     Object remoteValue(ConfigValue<?> value) {
         if (awaitingRemote)

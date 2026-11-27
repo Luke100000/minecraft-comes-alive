@@ -5,8 +5,10 @@ import net.conczin.mca.config.ConfigBackend;
 import net.conczin.mca.config.ConfigSchema;
 import net.conczin.mca.config.ConfigScope;
 import net.conczin.mca.config.ConfigValue;
+import net.neoforged.fml.config.ModConfig;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
+import java.nio.file.Path;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -25,6 +27,28 @@ public final class NeoForgeConfigBackend implements ConfigBackend {
 
     public ModConfigSpec spec(ConfigScope scope) {
         return specs.get(scope);
+    }
+
+    public void onConfigLoad(ModConfig config) {
+        for (ConfigScope scope : ConfigScope.values()) {
+            if (config.getSpec() != spec(scope)) continue;
+            Path path;
+            try {
+                path = config.getFullPath();
+            } catch (IllegalStateException pathless) {
+                // A pathless remote SERVER snapshot has no disk destination.
+                return;
+            }
+            ConfigSchema schema = Config.schema(scope);
+            boolean migrated = Config.migrateLegacy(schema, path);
+            boolean upgraded = Config.upgradeDefaultMaps(schema);
+            if (migrated || upgraded) {
+                save(scope);
+                if (migrated) Config.markLegacyImported(schema);
+            }
+            schema.markLoaded();
+            return;
+        }
     }
 
     @Override
@@ -77,6 +101,8 @@ public final class NeoForgeConfigBackend implements ConfigBackend {
             } else {
                 throw new IllegalStateException("Unsupported MCA config range type: " + value.getClass());
             }
+        } else if (value instanceof Boolean v) {
+            nativeValue = builder.define(name, v.booleanValue());
         } else {
             nativeValue = builder.define(name, () -> value, (Predicate<Object>) entry.validator());
         }

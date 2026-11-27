@@ -46,15 +46,11 @@ public final class ConfigValue<T> {
 
     public T getDefault() { return defensive(defaultValue); }
     public List<String> getPath() { return path; }
-    public ValueSpec getSpec() { return new ValueSpec(validator); }
     public boolean accepts(Object candidate) { return validator.test(candidate); }
 
     public void bind(Access<T> backend) {
         this.access = Objects.requireNonNull(backend);
     }
-
-    public void unbind() { access = null; }
-    public void resetLocal() { local = defaultValue; }
 
     @SuppressWarnings("unchecked")
     private static <T> T defensive(T value) {
@@ -62,7 +58,4 @@ public final class ConfigValue<T> {
         return value instanceof List<?> list ? (T) List.copyOf(list) : value;
     }
 
-    public record ValueSpec(Predicate<Object> validator) {
-        public boolean test(Object value) { return validator.test(value); }
-    }
 }

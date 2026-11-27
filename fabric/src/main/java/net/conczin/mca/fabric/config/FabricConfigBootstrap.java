@@ -34,13 +34,13 @@ public final class FabricConfigBootstrap {
         } else {
             standalone = new FabricTomlConfigBackend(FabricLoader.getInstance().getConfigDir());
             Config.setBackend(standalone);
-            standalone.loadGlobal(false);
+            standalone.loadGlobal();
         }
     }
 
     public static void initializeClient() {
         if (fcp) FabricFcpConfigClient.initialize();
-        else standalone.loadGlobal(true);
+        else standalone.loadClient();
     }
 
     public static void startWorld(MinecraftServer server) {

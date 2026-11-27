@@ -8,7 +8,7 @@ import org.junit.jupiter.api.extension.BeforeAllCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
 
 public final class NativeConfigDefaultsExtension implements BeforeAllCallback {
-    private static final NeoForgeConfigBackend BACKEND = new NeoForgeConfigBackend();
+    static final NeoForgeConfigBackend BACKEND = new NeoForgeConfigBackend();
 
     public static ModConfigSpec spec(ConfigScope scope) {
         return BACKEND.spec(scope);

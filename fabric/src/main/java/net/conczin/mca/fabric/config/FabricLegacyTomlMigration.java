@@ -2,7 +2,6 @@ package net.conczin.mca.fabric.config;
 
 import com.electronwill.nightconfig.core.CommentedConfig;
 import com.electronwill.nightconfig.toml.TomlParser;
-import com.electronwill.nightconfig.toml.TomlWriter;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.config.ConfigSchema;
@@ -10,11 +9,9 @@ import net.conczin.mca.config.ConfigScope;
 
 import java.io.IOException;
 import java.io.Reader;
-import java.io.Writer;
-import java.nio.file.AtomicMoveNotSupportedException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.EnumSet;
@@ -27,10 +24,6 @@ public final class FabricLegacyTomlMigration {
 
     private record LocatedValue(ConfigScope source, String path, String leaf, Object value, String comment) {}
     private record Destination(ConfigScope scope, ConfigSchema.Entry<?> entry) {}
-
-    public static void migrate(Path configDirectory) {
-        migrate(configDirectory, true);
-    }
 
     /** Dedicated servers must not read, parse, or rewrite physical-client configuration. */
     public static void migrate(Path configDirectory, boolean physicalClient) {
@@ -112,10 +105,14 @@ public final class FabricLegacyTomlMigration {
                 }
                 Files.copy(path, backup);
             }
-            for (ConfigScope scope : changed) write(files.get(scope), documents.get(scope));
+            // Cross-scope aliases only originate in COMMON. Persist both destinations
+            // before removing those aliases from the source so a retry can recover.
+            for (ConfigScope scope : List.of(ConfigScope.SERVER, ConfigScope.CLIENT, ConfigScope.COMMON)) {
+                if (changed.contains(scope)) FabricTomlFile.write(files.get(scope), documents.get(scope));
+            }
         } catch (IOException ex) {
-            MCA.LOGGER.error("Cannot migrate MCA TOML (existing backups retained; error type {})",
-                    ex.getClass().getSimpleName());
+            // Native config correction would otherwise discard the remaining aliases.
+            throw new UncheckedIOException("Cannot migrate MCA TOML. Check config file permissions and retry; existing backups retained.", ex);
         }
     }
 
@@ -145,13 +142,4 @@ public final class FabricLegacyTomlMigration {
         }
     }
 
-    private static void write(Path path, CommentedConfig config) throws IOException {
-        Files.createDirectories(path.getParent());
-        Path temporary = Files.createTempFile(path.getParent(), ".mca-migrate-", ".tmp");
-        try {
-            try (Writer writer = Files.newBufferedWriter(temporary)) { new TomlWriter().write(config, writer); }
-            try { Files.move(temporary, path, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING); }
-            catch (AtomicMoveNotSupportedException ex) { throw new IOException("Atomic migration unavailable: " + path, ex); }
-        } finally { Files.deleteIfExists(temporary); }
-    }
 }

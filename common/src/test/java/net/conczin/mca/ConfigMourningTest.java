@@ -8,6 +8,6 @@ class ConfigMourningTest {
     @Test
     void mourningDefaultsEnabledAndAcceptsDisable() {
         assertTrue(Config.SERVER.enableMourning.getDefault());
-        assertTrue(Config.SERVER.enableMourning.getSpec().test(false));
+        assertTrue(Config.SERVER.enableMourning.accepts(false));
     }
 }

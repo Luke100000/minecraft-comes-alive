@@ -42,7 +42,6 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.event.config.ModConfigEvent;
-import net.neoforged.neoforge.common.ModConfigSpec;
 import net.neoforged.neoforge.event.AddReloadListenerEvent;
 import net.neoforged.neoforge.event.OnDatapackSyncEvent;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
@@ -83,22 +82,7 @@ public final class CommonNeoForge {
     }
 
     private static void onConfigLoad(ModConfigEvent.Loading event) {
-        ModConfig config = event.getConfig();
-        for (ConfigScope scope : ConfigScope.values()) {
-            if (config.getSpec() != configBackend.spec(scope)) continue;
-            try {
-                var path = config.getFullPath();
-                boolean migrated = Config.migrateLegacy(Config.schema(scope), path);
-                boolean upgraded = Config.upgradeDefaultMaps(Config.schema(scope));
-                if (migrated || upgraded) {
-                    configBackend.save(scope);
-                    if (migrated) Config.markLegacyImported(Config.schema(scope));
-                }
-                Config.schema(scope).markLoaded();
-            } catch (IllegalStateException pathless) {
-                // SERVER defaults can be an in-memory network/server snapshot.
-            }
-        }
+        configBackend.onConfigLoad(event.getConfig());
     }
 
     private static void onConfigReload(ModConfigEvent.Reloading event) {

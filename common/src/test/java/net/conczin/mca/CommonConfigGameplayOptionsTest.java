@@ -18,9 +18,9 @@ class CommonConfigGameplayOptionsTest {
 
     @Test
     void gameplaySafetyOptionsAcceptServerOverrides() {
-        assertTrue(Config.SERVER.archerArrowsIgnoreVillagers.getSpec().test(false));
-        assertTrue(Config.SERVER.villagersInteractWithFenceGates.getSpec().test(false));
-        assertTrue(Config.SERVER.villagersInteractWithAnyDoor.getSpec().test(true));
+        assertTrue(Config.SERVER.archerArrowsIgnoreVillagers.accepts(false));
+        assertTrue(Config.SERVER.villagersInteractWithFenceGates.accepts(false));
+        assertTrue(Config.SERVER.villagersInteractWithAnyDoor.accepts(true));
     }
 
     @Test
@@ -33,9 +33,9 @@ class CommonConfigGameplayOptionsTest {
 
     @Test
     void destinyDiscoveryAndBlacklistsAcceptServerOverrides() {
-        assertTrue(Config.SERVER.autoDiscoverDestinyLocations.getSpec().test(false));
-        assertTrue(Config.SERVER.destinySpawnLocationBlacklist.getSpec().test(List.of("ctov:*", "othermod:*large*")));
-        assertTrue(Config.SERVER.destinyOverworldOnly.getSpec().test(true));
-        assertTrue(Config.SERVER.destinyDimensionBlacklist.getSpec().test(List.of("minecraft:the_nether", "some_mod:*")));
+        assertTrue(Config.SERVER.autoDiscoverDestinyLocations.accepts(false));
+        assertTrue(Config.SERVER.destinySpawnLocationBlacklist.accepts(List.of("ctov:*", "othermod:*large*")));
+        assertTrue(Config.SERVER.destinyOverworldOnly.accepts(true));
+        assertTrue(Config.SERVER.destinyDimensionBlacklist.accepts(List.of("minecraft:the_nether", "some_mod:*")));
     }
 }

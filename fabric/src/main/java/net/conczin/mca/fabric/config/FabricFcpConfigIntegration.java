@@ -18,22 +18,7 @@ public final class FabricFcpConfigIntegration {
     public static void initialize() {
         backend = new NeoForgeConfigBackend();
         Config.setBackend(backend);
-        NeoForgeModConfigEvents.loading(MCA.MOD_ID).register(config -> {
-            for (ConfigScope scope : ConfigScope.values()) {
-                if (config.getSpec() != backend.spec(scope)) continue;
-                try {
-                    boolean migrated = Config.migrateLegacy(Config.schema(scope), config.getFullPath());
-                    boolean upgraded = Config.upgradeDefaultMaps(Config.schema(scope));
-                    if (migrated || upgraded) {
-                        backend.save(scope);
-                        if (migrated) Config.markLegacyImported(Config.schema(scope));
-                    }
-                    Config.schema(scope).markLoaded();
-                } catch (IllegalStateException pathless) {
-                    // A pathless remote SERVER snapshot has no disk destination.
-                }
-            }
-        });
+        NeoForgeModConfigEvents.loading(MCA.MOD_ID).register(backend::onConfigLoad);
         NeoForgeModConfigEvents.reloading(MCA.MOD_ID).register(config -> {
             if (config.getSpec() == backend.spec(ConfigScope.SERVER)) {
                 MCA.getServer().ifPresent(server -> server.execute(() -> {

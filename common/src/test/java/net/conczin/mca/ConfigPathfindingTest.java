@@ -12,10 +12,10 @@ class ConfigPathfindingTest {
         assertEquals(160, Config.SERVER.villagerPathfindingDistance.getDefault());
         assertEquals(48, Config.SERVER.villagerFollowRange.getDefault());
 
-        assertTrue(Config.SERVER.villagerPathfindingDistance.getSpec().test(16));
-        assertTrue(Config.SERVER.villagerPathfindingDistance.getSpec().test(256));
-        assertFalse(Config.SERVER.villagerPathfindingDistance.getSpec().test(257));
-        assertTrue(Config.SERVER.villagerFollowRange.getSpec().test(64));
-        assertFalse(Config.SERVER.villagerFollowRange.getSpec().test(65));
+        assertTrue(Config.SERVER.villagerPathfindingDistance.accepts(16));
+        assertTrue(Config.SERVER.villagerPathfindingDistance.accepts(256));
+        assertFalse(Config.SERVER.villagerPathfindingDistance.accepts(257));
+        assertTrue(Config.SERVER.villagerFollowRange.accepts(64));
+        assertFalse(Config.SERVER.villagerFollowRange.accepts(65));
     }
 }
