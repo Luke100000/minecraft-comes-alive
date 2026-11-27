@@ -296,17 +296,22 @@ public class Village implements Iterable<Building> {
     boolean publishFloorRefresh(Structure refreshed,
                                 int floorId,
                                 Collection<Building> replacementRooms) {
+        return publishFloorRefresh(refreshed, floorId, replacementRooms, false);
+    }
+
+    boolean publishFloorRefresh(Structure refreshed,
+                                int floorId,
+                                Collection<Building> replacementRooms,
+                                boolean inBatch) {
         if (refreshed == null || replacementRooms == null) return false;
         Structure current = structures.get(refreshed.getId());
         if (current == null || current.getLogicalBuildingId() != refreshed.getLogicalBuildingId()) return false;
         StructureFloor refreshedFloor = refreshed.getFloor(floorId).orElse(null);
         if (refreshedFloor == null) return false;
 
-        List<Building> currentFloorRooms = getRooms()
+        Set<Integer> currentFloorRoomIds = getRooms()
                 .filter(room -> room.getStructureId() == refreshed.getId())
                 .filter(room -> room.getFloorId() == floorId)
-                .toList();
-        Set<Integer> currentFloorRoomIds = currentFloorRooms.stream()
                 .map(Building::getId)
                 .collect(Collectors.toSet());
         List<Building> replacements = List.copyOf(replacementRooms);
@@ -335,15 +340,16 @@ public class Village implements Iterable<Building> {
             return false;
         }
 
-        Map<Integer, Building> nextBuildings = new HashMap<>(buildings);
-        currentFloorRoomIds.forEach(nextBuildings::remove);
-        for (Building room : replacements) nextBuildings.put(room.getId(), room);
-
-        publishBuildingMutation(() -> {
+        Runnable replaceFloor = () -> {
             structures.put(refreshed.getId(), refreshed);
-            buildings.clear();
-            buildings.putAll(nextBuildings);
-        });
+            removeRooms(currentFloorRoomIds);
+            for (Building room : replacements) buildings.put(room.getId(), room);
+        };
+        if (inBatch) {
+            applyBuildingMutation(replaceFloor);
+        } else {
+            publishBuildingMutation(replaceFloor);
+        }
         return true;
     }
 
@@ -361,14 +367,18 @@ public class Village implements Iterable<Building> {
     void publishBuildingMutation(Runnable mutation) {
         BuildingStateSnapshot snapshot = snapshotBuildingState();
         try {
-            mutation.run();
-            refreshLogicalBuildings();
-            calculateDimensions();
+            applyBuildingMutation(mutation);
             markDirty();
         } catch (RuntimeException exception) {
             restoreBuildingState(snapshot);
             throw exception;
         }
+    }
+
+    private void applyBuildingMutation(Runnable mutation) {
+        mutation.run();
+        refreshLogicalBuildings();
+        calculateDimensions();
     }
 
     void restoreBuildingState(BuildingStateSnapshot snapshot) {
@@ -591,13 +601,15 @@ public class Village implements Iterable<Building> {
     }
 
     public List<String> getResidents(int building) {
-        return getBuilding(building).map(value -> residentHomes.entrySet().stream().filter(entry -> {
-            BlockPos homePos = BlockPos.of(entry.getValue());
-            if (value.isFunctionalRoom()) {
-                return findPhysicalRoomAt(homePos).map(room -> room.getId() == value.getId()).orElse(false);
-            }
-            return value.containsPos(homePos);
-        }).map(entry -> residentNames.getOrDefault(entry.getKey(), "Unknown")).collect(Collectors.toList())).orElseGet(List::of);
+        return getBuilding(building).map(value -> residentHomes.entrySet().stream()
+                .filter(entry -> residentNames.containsKey(entry.getKey()))
+                .filter(entry -> {
+                    BlockPos homePos = BlockPos.of(entry.getValue());
+                    if (value.isFunctionalRoom()) {
+                        return findPhysicalRoomAt(homePos).map(room -> room.getId() == value.getId()).orElse(false);
+                    }
+                    return value.containsPos(homePos);
+                }).map(entry -> residentNames.get(entry.getKey())).collect(Collectors.toList())).orElseGet(List::of);
     }
 
     public float getTaxes() { return taxes; }
@@ -1408,17 +1420,7 @@ public class Village implements Iterable<Building> {
         if (home.isPresent() && home.get().dimension() == world.dimension()) {
             long homePosition = home.get().pos().asLong();
             if (authoritativeHomeClaim) {
-                // A replaced bed has a fresh POI ticket. Retire the previous loaded owner's
-                // derived state before the new claimant can sleep, without releasing its ticket.
-                for (Map.Entry<UUID, Long> assignment : residentHomes.entrySet()) {
-                    if (!assignment.getKey().equals(resident) && assignment.getValue() == homePosition) {
-                        if (world.getEntity(assignment.getKey()) instanceof VillagerEntityMCA displaced) {
-                            displaced.getResidency().invalidateHome(home.get());
-                        }
-                        markDirty();
-                    }
-                }
-                ResidentHomeAssignments.claimAuthoritatively(residentHomes, resident, homePosition);
+                recordHomeClaim(resident, home.get());
             } else if (!ResidentHomeAssignments.claim(residentHomes, resident, homePosition)) {
                 accepted = false;
                 // Reconciliation rejects this memory. Retire its old index entry,
@@ -1433,6 +1435,31 @@ public class Village implements Iterable<Building> {
             markDirty();
         }
         return accepted;
+    }
+
+    public void clearGuestHomeClaim(UUID guest) {
+        if (!residentNames.containsKey(guest) && residentHomes.remove(guest) != null) {
+            markDirty();
+        }
+    }
+
+    /** Records a successful POI claim without changing village membership. */
+    public void recordHomeClaim(UUID claimant, GlobalPos home) {
+        long homePosition = home.pos().asLong();
+        // A replaced bed has a fresh POI ticket. Retire the previous loaded owner's
+        // derived state before the new claimant can sleep, without releasing its ticket.
+        for (Map.Entry<UUID, Long> assignment : residentHomes.entrySet()) {
+            if (!assignment.getKey().equals(claimant) && assignment.getValue() == homePosition) {
+                if (world.getEntity(assignment.getKey()) instanceof VillagerEntityMCA displaced) {
+                    displaced.getResidency().invalidateHome(home);
+                }
+                markDirty();
+            }
+        }
+        if (!ownsResidentHome(claimant, home.pos())) {
+            markDirty();
+        }
+        ResidentHomeAssignments.claimAuthoritatively(residentHomes, claimant, homePosition);
     }
 
     public boolean isResidentHomeCurrent(VillagerEntityMCA resident) {

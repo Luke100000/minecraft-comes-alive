@@ -21,6 +21,7 @@ import net.minecraft.world.level.levelgen.structure.StructureStart;
 import net.minecraft.world.level.levelgen.structure.placement.ConcentricRingsStructurePlacement;
 import net.minecraft.world.level.levelgen.structure.placement.RandomSpreadStructurePlacement;
 import net.minecraft.world.level.levelgen.structure.placement.StructurePlacement;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 import java.util.concurrent.*;
@@ -34,7 +35,7 @@ public final class AsyncStructureLocator implements AutoCloseable {
     private final MinecraftServer server;
     private final ExecutorService executor;
     private final Semaphore concurrencyPermits = new Semaphore(MAX_CONCURRENT_SEARCHES);
-    private final ConcurrentHashMap<UUID, Request> requests = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<SearchOwner, Request> requests = new ConcurrentHashMap<>();
     private volatile boolean closed;
 
     public AsyncStructureLocator(MinecraftServer server) {
@@ -55,7 +56,17 @@ public final class AsyncStructureLocator implements AutoCloseable {
         return locate(owner, level, origin, structures, radius, false);
     }
 
+    public CompletableFuture<Optional<BlockPos>> locateRumor(UUID villager, UUID player, ServerLevel level,
+            BlockPos origin, HolderSet<Structure> structures, int radius) {
+        return locate(new SearchOwner(player, villager), level, origin, structures, radius, false);
+    }
+
     public CompletableFuture<Optional<BlockPos>> locate(UUID owner, ServerLevel level,
+            BlockPos origin, HolderSet<Structure> structures, int radius, boolean loadDestinationChunk) {
+        return locate(new SearchOwner(owner, null), level, origin, structures, radius, loadDestinationChunk);
+    }
+
+    private CompletableFuture<Optional<BlockPos>> locate(SearchOwner owner, ServerLevel level,
             BlockPos origin, HolderSet<Structure> structures, int radius, boolean loadDestinationChunk) {
         ensureServerThread();
         cancel(owner);
@@ -107,7 +118,7 @@ public final class AsyncStructureLocator implements AutoCloseable {
         return request.result;
     }
 
-    private void runSearch(UUID owner, Request request, ServerLevel level, ServerChunkCache chunks,
+    private void runSearch(SearchOwner owner, Request request, ServerLevel level, ServerChunkCache chunks,
             ChunkGeneratorStructureState state, StructureCheck check,
             Map<StructurePlacement, List<Holder<Structure>>> placements, BlockPos searchOrigin,
             int radius, long seed, boolean loadDestinationChunk) {
@@ -147,7 +158,7 @@ public final class AsyncStructureLocator implements AutoCloseable {
         }
     }
 
-    private void deliver(UUID owner, Request request, Optional<BlockPos> result) {
+    private void deliver(SearchOwner owner, Request request, Optional<BlockPos> result) {
         if (closed) {
             return;
         }
@@ -164,6 +175,10 @@ public final class AsyncStructureLocator implements AutoCloseable {
     }
 
     public void cancel(UUID owner) {
+        cancel(new SearchOwner(owner, null));
+    }
+
+    private void cancel(SearchOwner owner) {
         ensureServerThread();
         Request request = requests.remove(owner);
         if (request != null) {
@@ -187,7 +202,7 @@ public final class AsyncStructureLocator implements AutoCloseable {
 
     public void cancelAll() {
         ensureServerThread();
-        for (UUID owner : List.copyOf(requests.keySet())) {
+        for (SearchOwner owner : List.copyOf(requests.keySet())) {
             cancel(owner);
         }
     }
@@ -404,6 +419,9 @@ public final class AsyncStructureLocator implements AutoCloseable {
             }
         }
         return Optional.empty();
+    }
+
+    private record SearchOwner(UUID player, @Nullable UUID villager) {
     }
 
     private static final class Request {

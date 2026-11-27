@@ -17,6 +17,7 @@
 
 * Improved building, floor, and room detection for multi-floor and irregular builds, including stairs, doorways, porches, and slab floors.
 * Improved rescanning performance and made room and floor edits more reliable.
+* MCA protects unreadable village save data from being overwritten and warns players when village changes cannot be saved.
 * Added a **Remove Floor** action and improved Main Room selection and requirement sharing.
 * Expanded the **Blueprint Map** with panning, zooming, improved room information, floor controls and map display options.
 
@@ -25,6 +26,7 @@
 * Improved villager pathfinding and recovery around stairs, ladders, doors, gates, partial blocks, and obstacles.
 * Villagers can use fence gates and support for Dramatic Doors. `villagersInteractWithFenceGates` and `villagersInteractWithAnyDoor` control door and gate interactions.
 * Improved home, bed, workplace, and resident assignment, including support for more modded beds. **Set Home** now checks that the villager can reach the bed.
+* Temporary inn guests free their beds when their stay ends. Datapacks can customize the inn's wandering-trader visitor pool with the `mca:spawn_at_inn` entity type tag.
 * Added `villagersChangeProfession` to control profession changes when assigning workplaces.
 * Homeless villagers find and share nearby shelter more naturally at night.
 * Reworked mourning so smaller groups visit graves without interrupting important activities. Added `enableMourning` to control it.
@@ -37,6 +39,7 @@
 * Improved archer aiming, movement, positioning, and target selection, including against moving enemies and difficult terrain.
 * Crossbow archers fire sooner after loading. Quick Charge still speeds up loading.
 * Guards respond to threats more reliably and can keep fighting while following a player.
+* Village iron golems can target hostile outlaws and alert nearby guards when attacked.
 * MCA archer arrows can pass through villagers and iron golems. This is controlled by `archerArrowsIgnoreVillagers`.
 
 ## Family Tree, ChatAI, Destiny, and villager tools
@@ -46,9 +49,9 @@
 * Villager interaction memories survive infection and curing. Revived villagers can also regain their previous mood and marriage.
 * Improved baby creation and placement, including inventory checks for twins and safer placement from baby items.
 * Improved the Villager Editor, Tracker, whistle, and gift interactions. Added `whistleCallMakesVillagersFollow`.
-* Gifts can now be given using Enter or numpad Enter, as well as right-click.
+* Gifts can now be given using Enter or numpad Enter, as well as right-click. Each key press gives one gift.
 * Fixed the family whistle listing divorced ex-partners through shared children.
-* Destiny can discover vanilla and modded villages across dimensions. New settings control discovery and allowed destinations.
+* Destiny can discover vanilla and modded villages across dimensions. New settings control discovery and allowed destinations. Character creation can finish without teleporting when no destination is available.
 * Destiny no longer repeatedly reopens its screen over other mods' menus when joining a world.
 * Destiny and villager structure lookups no longer block normal server work.
 
@@ -62,7 +65,7 @@
 ## Music and voices
 
 * Villagers can play **Immersive Melodies** instruments while socialising, with nearby villagers joining in. `immersiveMelodiesChance` and `immersiveMelodiesNamespace` control the behaviour.
-* Fixed overlapping villager voice lines and outdated text-to-speech responses.
+* Fixed overlapping villager voice lines and outdated text-to-speech responses. Interrupted downloads can be retried without keeping incomplete audio in the cache.
 
 ## Other fixes
 
@@ -71,7 +74,7 @@
 * Improved clothing and player-model compatibility defaults, including support for existing config files.
 * Restored intended MCA drops and fixed the root and bouquet advancements on 1.21.1.
 * Fixed several baby and crib issues, including carried hitboxes, ageing, and zombie villager conversion.
-* Fixed villager voice pitch, size, eye height, name tags, and hitboxes during growth and other transitions.
+* Fixed villager voice pitch, size, eye height, name tags, and hitboxes during growth, after loading saved villagers, and during other transitions.
 * Fixed Villager Tracker locations and saved letters not always being preserved.
 * Vanilla villagers now release their bed claims when converted to MCA villagers.
 * Custom clothing and skin changes now refresh cached textures and face icons.

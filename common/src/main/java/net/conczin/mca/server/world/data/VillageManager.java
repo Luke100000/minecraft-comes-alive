@@ -77,7 +77,14 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         lastVillageId = nbt.getInt("lastVillageId");
         reapers = nbt.contains("reapers", Tag.TAG_COMPOUND)
                 ? new ReaperSpawner(this, nbt.getCompound("reapers")) : new ReaperSpawner(this);
-        ListTag villageList = nbt.getList("villages", Tag.TAG_COMPOUND);
+        Tag savedVillages = nbt.get("villages");
+        if (!(savedVillages instanceof ListTag villageList)
+                || (!villageList.isEmpty() && villageList.getElementType() != Tag.TAG_COMPOUND)) {
+            unreadableSavedData = true;
+            setDirty(false);
+            MCA.LOGGER.error("Invalid village collection in mca_villages.dat. Refusing to overwrite the original save.");
+            return;
+        }
         try {
             for (int i = 0; i < villageList.size(); i++) {
                 CompoundTag villageTag = villageList.getCompound(i);
@@ -273,8 +280,9 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 .stream()
                 .filter(entry -> entry.getValue().retryAt() <= time)
                 .min(Comparator
-                        .comparingInt((Map.Entry<OriginGeometryRefreshKey, OriginGeometryRefreshRetry> entry) ->
-                                entry.getKey().villageId())
+                        .comparingLong((Map.Entry<OriginGeometryRefreshKey, OriginGeometryRefreshRetry> entry) ->
+                                entry.getValue().retryAt())
+                        .thenComparingInt(entry -> entry.getKey().villageId())
                         .thenComparingInt(entry -> entry.getKey().structureId()))
                 .orElse(null);
         if (due == null) return;
@@ -710,6 +718,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
     public Building.validationResult fullScan(Village village) {
         if (village == null) return Building.validationResult.NOT_IN_BUILDING;
+        // Floors see preceding updates. Only the completed batch schedules a save.
         Village.BuildingStateSnapshot snapshot = village.snapshotBuildingState();
 
         try {
@@ -722,7 +731,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                         village.restoreBuildingState(snapshot);
                         return update.result();
                     }
-                    if (!village.publishFloorRefresh(update.refreshedStructure(), floorId, update.replacementRooms())) {
+                    if (!village.publishFloorRefresh(update.refreshedStructure(), floorId, update.replacementRooms(), true)) {
                         village.restoreBuildingState(snapshot);
                         return Building.validationResult.OVERLAP;
                     }

@@ -28,6 +28,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BooleanSupplier;
 
 import static net.conczin.mca.client.gui.immersive_library.Api.request;
 
@@ -154,6 +155,16 @@ public class SkinCache {
                     requested.remove(contentid);
                 }
             });
+        }
+    }
+
+    public static synchronized void updateAfterUpload(int contentId, Content content, BooleanSupplier isCurrentAccount) {
+        // The account can change while the upload is waiting for another cache write.
+        if (!isCurrentAccount.getAsBoolean()) return;
+        if (content == null) {
+            enforceSync(contentId);
+        } else {
+            store(content);
         }
     }
 
