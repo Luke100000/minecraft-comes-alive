@@ -14,6 +14,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.ChestBlock;
@@ -50,7 +51,9 @@ public final class FloorScannerGameTests {
         buildClosedRoom(helper, roomMin, 3, 2);
         BlockPos seed = roomMin.offset(1, 0, 1);
         long loadedAt = helper.getLevel().getGameTime();
-        VillageManager manager = originMigratedManager(helper, roomMin, seed);
+        ListTag villages = new ListTag();
+        villages.add(originVillageTag(1, 7, roomMin, seed));
+        VillageManager manager = originMigratedManager(helper, villages);
         Village village = manager.getOrEmpty(1).orElseThrow();
         Structure before = village.getStructure(7).orElseThrow();
         Set<BlockPos> staleCells = before.getFloor(0).orElseThrow().geometry().cells().stream()
@@ -82,10 +85,42 @@ public final class FloorScannerGameTests {
         helper.succeed();
     }
 
-    private static VillageManager originMigratedManager(
-            GameTestHelper helper, BlockPos legacyMin, BlockPos seed) {
+    @GameTest(batch = "mca_origin_geometry_refresh_fairness", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void originRefreshPrefersEarlierDueWorkOverUnloadedRetries(GameTestHelper helper) {
+        BlockPos roomMin = helper.absolutePos(new BlockPos(4, 2, 4));
+        buildClosedRoom(helper, roomMin, 3, 2);
+        BlockPos remote = helper.absolutePos(new BlockPos(1_000_000, 2, 1_000_000));
+        int retryDelay = Math.toIntExact(VillageManager.ORIGIN_GEOMETRY_REFRESH_INITIAL_DELAY);
+        int loadedRoomId = retryDelay + 1;
         ListTag villages = new ListTag();
-        villages.add(originVillageTag(1, 7, legacyMin, seed));
+        for (int villageId = 1; villageId <= retryDelay; villageId++) {
+            BlockPos remoteMin = remote.east(16 * villageId);
+            BlockPos remoteSeed = remoteMin.offset(1, 0, 1);
+            ChunkPos remoteChunk = new ChunkPos(remoteSeed);
+            helper.assertTrue(!helper.getLevel().hasChunk(remoteChunk.x, remoteChunk.z),
+                    "remote room fixture is already loaded");
+            villages.add(originVillageTag(villageId, villageId, remoteMin, remoteSeed));
+        }
+        villages.add(originVillageTag(loadedRoomId, loadedRoomId, roomMin, roomMin.offset(1, 0, 1)));
+
+        long firstDueAt = helper.getLevel().getGameTime() + retryDelay;
+        VillageManager manager = originMigratedManager(helper, villages);
+        Village loadedVillage = manager.getOrEmpty(loadedRoomId).orElseThrow();
+        for (long time = firstDueAt; time < firstDueAt + retryDelay; time++) {
+            manager.tickOriginGeometryRefresh(time);
+        }
+        helper.assertTrue(loadedVillage.getStructure(loadedRoomId).orElseThrow().hasOriginGeometryApproximation(),
+                "loaded room refreshed before the earlier villages with the same deadline had their turn");
+
+        // The first unloaded room is due again just as the loaded room reaches the front of the queue.
+        manager.tickOriginGeometryRefresh(firstDueAt + retryDelay);
+        helper.assertTrue(!loadedVillage.getStructure(loadedRoomId).orElseThrow().hasOriginGeometryApproximation(),
+                "an unloaded retry took the turn of a loaded room that had been due longer");
+        helper.succeed();
+    }
+
+    private static VillageManager originMigratedManager(GameTestHelper helper, ListTag villages) {
         CompoundTag manager = new CompoundTag();
         manager.put("villages", villages);
         return new VillageManager(helper.getLevel(), manager);
