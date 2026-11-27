@@ -1071,7 +1071,7 @@ public final class ShelterDistributionGameTests {
         BlockPos center = arena(helper, 32);
         BlockPos first = house(helper.getLevel(), center);
         addRoom(helper.getLevel(), center);
-        house(helper.getLevel(), center.east(16));
+        BlockPos alternative = house(helper.getLevel(), center.east(16));
         fill(helper, center, 6);
         var incoming = spawn(helper, center.east(2).south(9));
         helper.runAfterDelay(10, () -> {
@@ -1088,8 +1088,16 @@ public final class ShelterDistributionGameTests {
                 var before = village.save();
                 var house = manager.getIndoorRooms().resolveHouse(first).orElseThrow();
                 helper.assertTrue(!house.membershipKnown(), "stale registered house imposed a guessed partial cap");
+                helper.assertTrue(manager.getIndoorRooms().resolveHouse(alternative).orElseThrow().membershipKnown(),
+                        "alternative did not have confirmed capacity");
                 choose(helper, incoming);
-                helper.assertTrue(selected(incoming).equals(first), "unknown capacity refused the known reachable room");
+                helper.assertTrue(selected(incoming).equals(alternative),
+                        "unknown capacity beat a reachable house with confirmed space");
+                fill(helper, center.east(16), 6);
+                var fallback = spawn(helper, center.east(3).south(9));
+                choose(helper, fallback);
+                helper.assertTrue(selected(fallback).equals(first),
+                        "unknown capacity was rejected after the confirmed house filled");
                 helper.assertTrue(before.equals(village.save()), "discovery rewrote persisted geometry");
             }).thenSucceed();
         });

@@ -5,6 +5,7 @@ import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.Mourning;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
+import net.conczin.mca.entity.ai.navigation.PathNodeGeometry;
 import net.conczin.mca.server.world.data.Village;
 import net.conczin.mca.server.world.data.VillageManager;
 import net.minecraft.core.BlockPos;
@@ -15,7 +16,6 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.Vec3;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -101,8 +101,12 @@ public class EnterGraveyardTask extends Behavior<VillagerEntityMCA> {
     }
 
     private static void setMourningPosition(VillagerEntityMCA villager, GlobalPos position) {
+        villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_POSITION)
+                .ifPresent(previous -> {
+                    ExtendedWalkTowardsTask.retractOwnedMovement(villager, MemoryModuleTypeMCA.MOURNING_POSITION);
+                    WalkTargetFailureMemory.clearForProducer(villager, MemoryModuleTypeMCA.MOURNING_POSITION, previous);
+                });
         villager.getBrain().setMemory(MemoryModuleTypeMCA.MOURNING_POSITION, position);
-        WalkTargetFailureMemory.clear(villager);
     }
 
     public static boolean isAtMourningSite(VillagerEntityMCA villager) {
@@ -158,12 +162,13 @@ public class EnterGraveyardTask extends Behavior<VillagerEntityMCA> {
 
         // Keep the established preference when usable. Search the alternatives
         // together so an enclosed stand cannot monopolize an accessible grave.
-        Path preferredPath = villager.getNavigation().createPath(Set.of(preferred), 0);
+        var navigation = villager.getNavigation();
+        Path preferredPath = MCAGroundPathNavigation.probePath(navigation, Set.of(preferred), 0);
         if (preferredPath != null && preferredPath.canReach()) {
             return Optional.of(preferred);
         }
         positions.remove(preferred);
-        Path alternativePath = villager.getNavigation().createPath(positions, 0);
+        Path alternativePath = MCAGroundPathNavigation.probePath(navigation, positions, 0);
         if (alternativePath != null && alternativePath.canReach()) {
             return Optional.of(alternativePath.getTarget());
         }
@@ -215,6 +220,7 @@ public class EnterGraveyardTask extends Behavior<VillagerEntityMCA> {
 
     private static boolean isGoodWalkTarget(ServerLevel level, VillagerEntityMCA villager, BlockPos position) {
         return villager.getNavigation().isStableDestination(position)
-                && level.noCollision(villager, villager.getBoundingBox().move(Vec3.atBottomCenterOf(position).subtract(villager.position())));
+                && level.noCollision(villager, villager.getBoundingBox().move(
+                        PathNodeGeometry.walkingPosition(level, position, villager).subtract(villager.position())));
     }
 }

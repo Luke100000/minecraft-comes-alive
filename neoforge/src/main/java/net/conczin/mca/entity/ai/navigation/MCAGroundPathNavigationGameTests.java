@@ -50,6 +50,7 @@ import java.util.function.BooleanSupplier;
 
 import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatArea;
 import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatPath;
+import static net.conczin.mca.gametest.GameTestTerrain.whenSkyLightBlocked;
 @PrefixGameTestTemplate(false)
 public final class MCAGroundPathNavigationGameTests {
     private static final Set<ChunkPos> PROGRESSIVE_FORCED_CHUNKS = new HashSet<>();
@@ -1821,7 +1822,7 @@ public final class MCAGroundPathNavigationGameTests {
         prepareStrollRoom(helper, start);
 
         var stroll = LocalInsideBrownianWalk.create(0.5F);
-        helper.runAfterDelay(5, () -> {
+        helper.runAfterDelay(5, () -> whenSkyLightBlocked(helper, start, 55, () -> {
             try {
                 long gameTime = helper.getLevel().getGameTime();
                 helper.assertTrue(!helper.getLevel().canSeeSky(villager.blockPosition()),
@@ -1852,7 +1853,7 @@ public final class MCAGroundPathNavigationGameTests {
             } finally {
                 villager.discard();
             }
-        });
+        }));
     }
 
     @GameTest(batch = "mca_navigation_local_brownian_rejected", templateNamespace = "minecraft",

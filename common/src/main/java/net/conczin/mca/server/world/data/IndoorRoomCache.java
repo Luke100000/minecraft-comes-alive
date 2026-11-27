@@ -1,37 +1,32 @@
 package net.conczin.mca.server.world.data;
 
-import net.conczin.mca.MCA;
-import net.conczin.mca.entity.ai.BedDebugLog;
 import net.conczin.mca.entity.ai.BedPoiCompatibility;
+import net.conczin.mca.util.MaxSizeHashMap;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.ChunkPos;
-import net.minecraft.world.level.block.*;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.material.FluidState;
 
 import java.util.*;
 
-/** Transient, server-thread floor discovery shared by villagers in one level. */
+/** Village-first O(1) room lookup with a small bounded TTL cache for unregistered shelter beds. */
 public final class IndoorRoomCache {
-    private static final int MAX_ENTRIES = 128;
+    static final long TTL_TICKS = 100L;
+    private static final long VALIDATION_TICKS = 40L;
+    private static final int MAX_UNREGISTERED_ENTRIES = 64;
     private static final int MAX_SCAN_CELLS = 512;
     private static final int MAX_SCAN_RADIUS = 16;
     private static final int RETRY_SCAN_RADIUS = 32;
-    private static final int MAX_OBSERVED_BLOCKS = 8192;
-    private static final int MAX_TOTAL_OBSERVED_BLOCKS = 65536;
     private static final int MAX_HOUSE_FLOORS = 8;
-    private static final int MAX_DISCOVERY_SCANS = 20;
-    private static final long IDLE_TICKS = 1200L;
-    private static final long FAILED_RETRY_TICKS = 200L;
-    private static final long VALIDATION_TICKS = 40L;
+    private static final int MAX_DISCOVERY_SCANS = 16;
 
     private final ServerLevel level;
-    private final LinkedHashMap<BlockPos, Entry> entries = new LinkedHashMap<>(16, 0.75F, true);
+    private final Map<BlockPos, CachedUnregistered> unregistered = new MaxSizeHashMap<>(MAX_UNREGISTERED_ENTRIES);
+    private final Map<Integer, CachedRegisteredRoom> registeredRooms = new HashMap<>();
+    private final Map<RegisteredHouse, RegisteredValidation> registeredValidations = new HashMap<>();
 
     IndoorRoomCache(ServerLevel level) {
         this.level = level;
@@ -41,64 +36,94 @@ public final class IndoorRoomCache {
         return resolveRoom(bed, bed);
     }
 
-    /** Resolve the occupant's actual room on a bed's discovered floor, including bedless subrooms. */
     public Optional<Room> resolveRoom(BlockPos bed, BlockPos occupant) {
         if (!isLoaded(bed) || !BedPoiCompatibility.isHomePoiState(level.getBlockState(bed))) {
-            entries.remove(bed);
+            invalidate(bed);
             return Optional.empty();
         }
-        Entry entry = resolveFloor(bed, new ScanBudget());
+        for (Village village : VillageManager.get(level)) {
+            Building bedRoom = village.findPhysicalRoomAt(bed).orElse(null);
+            if (bedRoom == null) continue;
+            if (occupant.equals(bed) || bedRoom.ownsFloorCell(occupant)) {
+                return Optional.of(registeredRoomView(bedRoom));
+            }
+            int buildingId = village.getLogicalBuildingId(bedRoom.getStructureId());
+            return village.findPhysicalRoomAt(occupant)
+                    .filter(room -> village.getLogicalBuildingId(room.getStructureId()) == buildingId)
+                    .map(this::registeredRoomView);
+        }
+
+        CachedUnregistered entry = resolveUnregistered(bed, new int[]{MAX_DISCOVERY_SCANS});
         return entry == null || entry.rooms.stream().noneMatch(room -> room.floorCells().contains(bed))
-                ? Optional.empty() : entry.rooms.stream()
-                .filter(room -> room.floorCells().contains(occupant)).findFirst();
+                ? Optional.empty()
+                : entry.rooms.stream().filter(room -> room.floorCells().contains(occupant)).findFirst();
     }
 
     public Optional<House> resolveHouse(BlockPos bed) {
-        return resolveHouse(bed, new ScanBudget());
+        if (!isLoaded(bed) || !BedPoiCompatibility.isHomePoiState(level.getBlockState(bed))) {
+            return Optional.empty();
+        }
+        return resolveHouseValidBed(bed, new int[]{MAX_DISCOVERY_SCANS});
     }
 
-    /** One discovery budget for an admission attempt; beds are grouped before the house limit. */
     public List<House> resolveHouses(List<BlockPos> beds, int limit) {
-        ScanBudget budget = new ScanBudget();
+        int[] budget = {MAX_DISCOVERY_SCANS};
         List<House> houses = new ArrayList<>();
         for (BlockPos bed : beds) {
-            RegisteredHouse registered = registeredHouse(bed).orElse(null);
-            if (houses.stream().anyMatch(house -> house.floorCells().contains(bed)
-                    || registered != null && registered.equals(house.registered))) continue;
             if (houses.size() >= limit) break;
-            resolveHouse(bed, budget).ifPresent(houses::add);
+            if (!isLoaded(bed) || !BedPoiCompatibility.isHomePoiState(level.getBlockState(bed))) continue;
+            if (houses.stream().anyMatch(house -> house.floorCells().contains(bed))) continue;
+            resolveHouseValidBed(bed, budget).ifPresent(house -> {
+                if (house.registered == null || houses.stream().noneMatch(h -> house.registered.equals(h.registered))) {
+                    houses.add(house);
+                }
+            });
         }
         return List.copyOf(houses);
     }
 
-    private Optional<House> resolveHouse(BlockPos bed, ScanBudget budget) {
-        if (!isLoaded(bed) || !BedPoiCompatibility.isHomePoiState(level.getBlockState(bed))) return Optional.empty();
-        Entry initial = resolveFloor(bed, budget);
-        if (initial == null || initial.rooms.stream().noneMatch(room -> room.floorCells().contains(bed))) return Optional.empty();
+    public Optional<House> resolveHouseValidBed(BlockPos bed, int[] budget) {
+        for (Village village : VillageManager.get(level)) {
+            Building bedRoom = village.findPhysicalRoomAt(bed).orElse(null);
+            if (bedRoom == null) continue;
+            int buildingId = village.getLogicalBuildingId(bedRoom.getStructureId());
+            if (buildingId < 0) continue;
 
-        RegisteredHouse registered = registeredHouse(bed).orElse(null);
-        ArrayDeque<BlockPos> pending = new ArrayDeque<>();
-        Set<BlockPos> required = new HashSet<>();
-        pending.add(bed);
-        if (registered != null) {
-            Village village = VillageManager.get(level).getOrEmpty(registered.village).orElseThrow();
-            for (Structure structure : village.getStructures().values()) {
-                if (village.getLogicalBuildingId(structure.getId()) != registered.building) continue;
+            RegisteredHouse key = new RegisteredHouse(village.getId(), buildingId);
+            List<FloorGeometry> geometry = new ArrayList<>();
+            Set<BlockPos> floorCells = new HashSet<>();
+            List<Map.Entry<Structure, StructureFloor>> persistedFloors = new ArrayList<>();
+            for (Structure structure : village.getBuildingStructures(buildingId)) {
                 for (StructureFloor floor : structure.getFloors()) {
-                    floor.geometry().cells().forEach(cell -> required.add(cell.feet()));
-                    pending.add(floor.geometry().cells().stream().map(FloorGeometry.Cell::feet)
-                            .min(java.util.Comparator.comparingDouble(pos -> pos.distSqr(structure.getSource()))).orElseThrow());
+                    persistedFloors.add(Map.entry(structure, floor));
+                    geometry.add(floor.geometry());
+                    floor.geometry().cells().forEach(cell -> floorCells.add(cell.feet()));
                 }
             }
-            village.getRooms().filter(room -> village.getLogicalBuildingId(room.getStructureId()) == registered.building)
-                    .forEach(room -> pending.add(room.getSourceBlock()));
+            Set<Room> rooms = new HashSet<>();
+            village.getRooms()
+                    .filter(room -> village.getLogicalBuildingId(room.getStructureId()) == buildingId)
+                    .forEach(room -> rooms.add(registeredRoomView(room)));
+            Set<BlockPos> bedHeads = new HashSet<>();
+            boolean complete = collectLoadedBeds(floorCells, bedHeads)
+                    && validateRegisteredHouse(key, persistedFloors, floorCells, bedHeads, budget);
+            return Optional.of(new House(bed, key, bedHeads, floorCells, geometry, rooms, complete));
         }
 
+        CachedUnregistered initial = resolveUnregistered(bed, budget);
+        if (initial == null || initial.floor == null
+                || initial.rooms.stream().noneMatch(room -> room.floorCells().contains(bed))) {
+            return Optional.empty();
+        }
+
+        ArrayDeque<BlockPos> pending = new ArrayDeque<>();
+        pending.add(bed);
         List<FloorGeometry> geometry = new ArrayList<>();
         Set<Room> rooms = new HashSet<>();
         Set<BlockPos> floorCells = new HashSet<>();
         Set<BlockPos> visited = new HashSet<>();
         boolean complete = true;
+
         while (!pending.isEmpty()) {
             BlockPos seed = pending.removeFirst();
             if (!visited.add(seed) || floorCells.contains(seed)) continue;
@@ -106,61 +131,47 @@ public final class IndoorRoomCache {
                 complete = false;
                 break;
             }
-            Entry entry = seed.equals(bed) ? initial : resolveFloor(seed, budget);
+            CachedUnregistered entry = seed.equals(bed) ? initial : resolveUnregistered(seed, budget);
             if (entry == null) {
                 complete = false;
                 continue;
             }
-            if (entry.rooms.isEmpty()) {
+            if (entry.rooms.isEmpty() || entry.floor == null) {
                 // Exterior connector exits are not another floor of the house.
                 if (entry.failure != Building.validationResult.NOT_IN_BUILDING) complete = false;
                 continue;
             }
             rooms.addAll(entry.rooms);
-            if (entry.scan == null) {
-                complete = false;
-                entry.rooms.forEach(room -> floorCells.addAll(room.floorCells()));
-                continue;
-            }
-            FloorGeometry floor = entry.scan.floor();
-            if (geometry.contains(floor)) continue;
-            geometry.add(floor);
-            floor.cells().forEach(cell -> floorCells.add(cell.feet()));
-            pending.addAll(entry.scan.adjacentFloorSeeds());
-            LoadedBlocks blocks = new LoadedBlocks();
+            if (geometry.contains(entry.floor)) continue;
+            geometry.add(entry.floor);
+            entry.floor.cells().forEach(cell -> floorCells.add(cell.feet()));
+            pending.addAll(entry.adjacentFloorSeeds);
+
+            NonLoadingBlocks blocks = nonLoadingBlocks();
             FloorCeilingResolver ceilings = new FloorCeilingResolver(blocks);
-            for (FloorConnector.Marker connector : floor.connectorMarkers()) {
-                if (connector.type().vertical()) {
-                    if (!isLoaded(connector.pos())) {
+            for (FloorConnector.Marker connector : entry.floor.connectorMarkers()) {
+                if (!connector.type().vertical()) continue;
+                if (!isLoaded(connector.pos())) {
+                    complete = false;
+                    continue;
+                }
+                for (BlockPos candidate : StructureConnector.verticalHandoffCandidates(blocks, connector.pos())) {
+                    if (!isLoaded(candidate)) {
                         complete = false;
-                        continue;
-                    }
-                    for (BlockPos candidate : StructureConnector.verticalHandoffCandidates(blocks, connector.pos())) {
-                        if (!isLoaded(candidate)) {
-                            complete = false;
-                        } else if (floor.physicalCellAt(candidate.getX(), candidate.getY(), candidate.getZ()).isEmpty()
-                                && SelectedFloorScanner.inspectSurfaceCell(blocks, candidate, ceilings).isPresent()) {
-                            pending.add(candidate);
-                        }
+                    } else if (entry.floor.physicalCellAt(candidate.getX(), candidate.getY(), candidate.getZ()).isEmpty()
+                            && SelectedFloorScanner.inspectSurfaceCell(blocks, candidate, ceilings).isPresent()) {
+                        pending.add(candidate);
                     }
                 }
             }
-            if (blocks.firstMissingBlock != null) complete = false;
+            if (blocks.missingColumn) complete = false;
         }
-        if (!floorCells.containsAll(required)) complete = false;
-        Set<BlockPos> beds = new HashSet<>();
-        for (BlockPos cell : floorCells) {
-            if (!isLoaded(cell)) {
-                complete = false;
-                continue;
-            }
-            if (BedPoiCompatibility.isHomePoiState(level.getBlockState(cell))) {
-                beds.add(cell);
-                RegisteredHouse other = registeredHouse(cell).orElse(null);
-                if (registered != null && other != null && !registered.equals(other)) complete = false;
-            }
+
+        Set<BlockPos> bedHeads = new HashSet<>();
+        if (!collectLoadedBeds(floorCells, bedHeads)) {
+            complete = false;
         }
-        return Optional.of(new House(bed, registered, beds, floorCells, geometry, rooms, complete));
+        return Optional.of(new House(bed, null, bedHeads, floorCells, geometry, rooms, complete));
     }
 
     private Optional<RegisteredHouse> registeredHouse(BlockPos pos) {
@@ -174,242 +185,210 @@ public final class IndoorRoomCache {
         return Optional.empty();
     }
 
-    private Entry resolveFloor(BlockPos source, ScanBudget budget) {
-        long now = level.getGameTime();
-        if (!isLoaded(source)) return null;
-        Entry entry = entries.get(source);
-        if (entry != null && entry.isCurrent(now)) {
-            entry.lastUsed = now;
-            return entry;
-        }
-        entries.remove(source);
-        for (var iterator = entries.values().iterator(); iterator.hasNext();) {
-            Entry candidate = iterator.next();
-            boolean contains = candidate.scan != null && candidate.scan.floor().cellAt(source).isPresent()
-                    || candidate.rooms.stream().anyMatch(room -> room.floorCells().contains(source));
-            if (!contains) continue;
-            if (!candidate.isCurrent(now)) {
-                iterator.remove();
-                continue;
+    private boolean validateRegisteredHouse(RegisteredHouse key,
+                                            List<Map.Entry<Structure, StructureFloor>> persistedFloors,
+                                            Set<BlockPos> floorCells,
+                                            Set<BlockPos> bedHeads,
+                                            int[] budget) {
+        for (BlockPos head : bedHeads) {
+            RegisteredHouse other = registeredHouse(head).orElse(null);
+            if (other != null && !key.equals(other)) {
+                return false;
             }
-            candidate.lastUsed = now;
-            // Return immediately after changing access order; do not advance this iterator again.
-            entries.get(candidate.source);
-            return candidate;
         }
-        if (budget.remaining-- <= 0) {
-            budget.remaining = 0;
-            return null;
+        long now = level.getGameTime();
+        RegisteredValidation cached = registeredValidations.get(key);
+        if (cached != null && now < cached.expiresAt && cached.floorCells.equals(floorCells)) {
+            return cached.valid;
         }
-        entry = discover(source, now, budget);
-        if (entry == null) return null;
-        int observedCount = entries.values().stream().mapToInt(Entry::observedCount).sum();
-        while (!entries.isEmpty() && (entries.size() >= MAX_ENTRIES
-                || observedCount + entry.observedCount() > MAX_TOTAL_OBSERVED_BLOCKS)) {
-            observedCount -= entries.pollFirstEntry().getValue().observedCount();
+        if (budget[0] < persistedFloors.size()) {
+            return false;
         }
-        entries.put(source.immutable(), entry);
-        return entry;
+        boolean valid = !persistedFloors.isEmpty();
+        for (var entry : persistedFloors) {
+            Structure structure = entry.getKey();
+            FloorGeometry expected = entry.getValue().geometry();
+            BlockPos seed = expected.cells().stream()
+                    .map(FloorGeometry.Cell::feet)
+                    .min(Comparator.comparingDouble(pos -> pos.distSqr(structure.getSource())))
+                    .orElse(null);
+            if (seed == null || !isLoaded(seed)) {
+                valid = false;
+                break;
+            }
+            if (budget[0] <= 0) return false;
+            budget[0]--;
+            NonLoadingBlocks blocks = nonLoadingBlocks();
+            SelectedFloorScanner.Result scan = SelectedFloorScanner.scan(blocks, seed, MAX_SCAN_CELLS, MAX_SCAN_RADIUS);
+            if (scan.result() == Building.validationResult.SIZE_LIMIT && !blocks.missingColumn) {
+                if (budget[0] <= 0) return false;
+                budget[0]--;
+                scan = SelectedFloorScanner.scan(blocks, seed, MAX_SCAN_CELLS, RETRY_SCAN_RADIUS);
+            }
+            if (blocks.missingColumn || scan.result() != Building.validationResult.SUCCESS || scan.floor() == null) {
+                valid = false;
+                break;
+            }
+            for (FloorGeometry.Cell cell : expected.cells()) {
+                if (scan.floor().cellAt(cell.feet()).isEmpty()) {
+                    valid = false;
+                    break;
+                }
+            }
+            if (!valid) break;
+        }
+        registeredValidations.put(key, new RegisteredValidation(Set.copyOf(floorCells), valid, now + VALIDATION_TICKS));
+        return valid;
+    }
+
+    public void invalidate(BlockPos pos) {
+        if (pos == null) {
+            unregistered.clear();
+            registeredValidations.clear();
+            return;
+        }
+        unregistered.remove(pos);
+        unregistered.entrySet().removeIf(entry ->
+                entry.getValue().floor != null && entry.getValue().floor.cellAt(pos).isPresent());
+        registeredValidations.entrySet().removeIf(entry -> entry.getValue().floorCells.contains(pos));
     }
 
     void tick(long now) {
-        if (now % FAILED_RETRY_TICKS == 0) {
-            entries.values().removeIf(entry -> now - entry.lastUsed >= IDLE_TICKS || !isLoaded(entry.source));
-        }
-    }
-
-    private Entry discover(BlockPos source, long now, ScanBudget budget) {
-        LoadedBlocks blocks = new LoadedBlocks(true);
-        int scanRadius = MAX_SCAN_RADIUS;
-        SelectedFloorScanner.Result scan = SelectedFloorScanner.scan(blocks, source, MAX_SCAN_CELLS, scanRadius);
-        if (scan.result() == Building.validationResult.SIZE_LIMIT && blocks.firstMissingBlock == null) {
-            // A stable traversal anchor can be near a room's edge. Retry radius failures
-            // once, keeping the cell/dependency caps and charging the shared admission budget.
-            if (budget.remaining == 0) return null;
-            budget.remaining--;
-            scanRadius = RETRY_SCAN_RADIUS;
-            scan = SelectedFloorScanner.scan(blocks, source, MAX_SCAN_CELLS, scanRadius);
-        }
-        if (blocks.firstMissingBlock != null) return failed(source, now, Building.validationResult.BLOCK_LIMIT,
-                "FLOOR_SCAN", blocks.firstMissingBlock, 0, scanRadius);
-        if (scan.result() != Building.validationResult.SUCCESS || scan.floor() == null) {
-            return failed(source, now, scan.result(), "FLOOR_SCAN", null, 0, scanRadius);
-        }
-        List<RoomPartitioner.Component> components = BuildingRoomScanner.components(blocks, scan).stream()
-                .filter(room -> room.area() >= RoomPartitioner.MIN_ROOM_AREA).toList();
-        if (blocks.firstMissingBlock != null) return failed(source, now, Building.validationResult.BLOCK_LIMIT,
-                "ROOM_PARTITION", blocks.firstMissingBlock, 0, scanRadius);
-        List<Room> rooms = components.stream().map(room -> new Room(room.floorCells())).toList();
-        Map<BlockPos, BlockState> observed = new HashMap<>();
-        if (observe(scan.floor().cells(), observed, blocks)) {
-            return new Entry(source, scan, rooms, observed, blocks, now, Building.validationResult.SUCCESS);
-        }
-
-        // Keep the existing room-sized shelter access if a larger floor exceeds observation limits.
-        RoomPartitioner.Component selected = RoomPartitioner.select(source, scan.floor(), components);
-        if (selected != null) {
-            observed.clear();
-            blocks.firstMissingBlock = null;
-            if (observe(selected.cells(), observed, blocks)) {
-                return new Entry(source, null, List.of(new Room(selected.floorCells())),
-                        observed, blocks, now, Building.validationResult.SUCCESS);
+        if (now % TTL_TICKS == 0) {
+            unregistered.entrySet().removeIf(entry -> now >= entry.getValue().expiresAt || !isLoaded(entry.getKey()));
+            registeredValidations.entrySet().removeIf(entry -> now >= entry.getValue().expiresAt);
+            if (registeredRooms.size() > MAX_UNREGISTERED_ENTRIES) {
+                registeredRooms.clear();
             }
         }
-        return failed(source, now, Building.validationResult.BLOCK_LIMIT, "OBSERVATION",
-                blocks.firstMissingBlock, observed.size(), scanRadius);
     }
 
-    private Entry failed(BlockPos source, long now, Building.validationResult result,
-                         String phase, BlockPos missingBlock, int observedBlocks, int scanRadius) {
-        if (BedDebugLog.SHELTER_ENABLED) {
-            String reason = missingBlock != null ? "UNLOADED_CHUNK"
-                    : result == Building.validationResult.BLOCK_LIMIT
-                    ? (phase.equals("OBSERVATION") ? "OBSERVED_BLOCK_LIMIT" : "FLOOR_CELL_LIMIT") : result.name();
-            MCA.LOGGER.info("[MCA-SHELTER][discovery] gameTime={} source={} result={} reason={} phase={} firstMissingBlock={} missingChunk={} observedBlocks={} maxObservedBlocks={} maxFloorCells={} maxScanRadius={} retryAfterTicks={}",
-                    now, source, result, reason, phase, missingBlock,
-                    missingBlock == null ? null : new ChunkPos(missingBlock),
-                    observedBlocks, MAX_OBSERVED_BLOCKS, MAX_SCAN_CELLS, scanRadius, FAILED_RETRY_TICKS);
+    private Room registeredRoomView(Building room) {
+        Set<BlockPos> cells = room.getFloorCells();
+        CachedRegisteredRoom cached = registeredRooms.get(room.getId());
+        if (cached != null && cached.sourceCells == cells) {
+            return cached.room;
         }
-        return new Entry(source, null, List.of(), Map.of(), null, now, result);
+        Room created = new Room(cells);
+        registeredRooms.put(room.getId(), new CachedRegisteredRoom(cells, created));
+        return created;
     }
 
-    private boolean observe(Collection<FloorGeometry.Cell> cells, Map<BlockPos, BlockState> observed,
-                            LoadedBlocks blocks) {
-        for (FloorGeometry.Cell cell : cells) {
-            for (int y = cell.feet().getY() - 1; y <= cell.ceilingY(); y++) {
-                BlockPos pos = new BlockPos(cell.feet().getX(), y, cell.feet().getZ());
-                if (!observeBlock(observed, pos, blocks)) return false;
-                for (Direction direction : Direction.Plane.HORIZONTAL) {
-                    if (!observeBlock(observed, pos.relative(direction), blocks)) return false;
-                }
+    private CachedUnregistered resolveUnregistered(BlockPos source, int[] budget) {
+        long now = level.getGameTime();
+        CachedUnregistered direct = unregistered.get(source);
+        if (direct != null) {
+            if (now < direct.expiresAt && isLoaded(source)) return direct;
+            unregistered.remove(source);
+        }
+        for (var iterator = unregistered.entrySet().iterator(); iterator.hasNext(); ) {
+            var candidateEntry = iterator.next();
+            CachedUnregistered candidate = candidateEntry.getValue();
+            if (now >= candidate.expiresAt || !isLoaded(candidateEntry.getKey())) {
+                iterator.remove();
+                continue;
+            }
+            if (candidate.floor != null && candidate.floor.cellAt(source).isPresent()) {
+                return candidate;
             }
         }
-        return true;
+        if (budget[0]-- <= 0) {
+            budget[0] = 0;
+            return null;
+        }
+        CachedUnregistered discovered = discoverUnregistered(source, now, budget);
+        unregistered.put(source.immutable(), discovered);
+        return discovered;
     }
 
-    private boolean observeBlock(Map<BlockPos, BlockState> observed, BlockPos pos, LoadedBlocks blocks) {
-        if (!isLoaded(pos)) {
-            blocks.markMissing(pos);
-            return false;
+    private CachedUnregistered discoverUnregistered(BlockPos source, long now, int[] budget) {
+        NonLoadingBlocks blocks = nonLoadingBlocks();
+        SelectedFloorScanner.Result scan = SelectedFloorScanner.scan(blocks, source, MAX_SCAN_CELLS, MAX_SCAN_RADIUS);
+        if (scan.result() == Building.validationResult.SIZE_LIMIT && !blocks.missingColumn && budget[0] > 0) {
+            budget[0]--;
+            scan = SelectedFloorScanner.scan(blocks, source, MAX_SCAN_CELLS, RETRY_SCAN_RADIUS);
         }
-        observed.putIfAbsent(pos, structuralState(level.getBlockState(pos)));
-        return observed.size() <= MAX_OBSERVED_BLOCKS;
+        if (blocks.missingColumn || scan.result() != Building.validationResult.SUCCESS || scan.floor() == null) {
+            Building.validationResult failure = blocks.missingColumn
+                    ? Building.validationResult.BLOCK_LIMIT : scan.result();
+            return new CachedUnregistered(null, Set.of(), List.of(), failure, now + TTL_TICKS);
+        }
+        List<Room> rooms = StructureScanner.components(blocks, scan).stream()
+                .filter(component -> component.area() >= RoomPartitioner.MIN_ROOM_AREA)
+                .map(component -> new Room(component.floorCells()))
+                .toList();
+        if (blocks.missingColumn) {
+            return new CachedUnregistered(null, Set.of(), List.of(),
+                    Building.validationResult.BLOCK_LIMIT, now + TTL_TICKS);
+        }
+        return new CachedUnregistered(scan.floor(), scan.adjacentFloorSeeds(), rooms,
+                Building.validationResult.SUCCESS, now + TTL_TICKS);
+    }
+
+    private boolean collectLoadedBeds(Set<BlockPos> floorCells, Set<BlockPos> bedHeads) {
+        boolean complete = true;
+        for (BlockPos cell : floorCells) {
+            if (!isLoaded(cell)) {
+                complete = false;
+                continue;
+            }
+            if (BedPoiCompatibility.isHomePoiState(level.getBlockState(cell))) {
+                bedHeads.add(cell);
+            }
+        }
+        return complete;
     }
 
     private boolean isLoaded(BlockPos pos) {
         return level.getChunkSource().getChunkNow(pos.getX() >> 4, pos.getZ() >> 4) != null;
     }
 
-    /** Operation-local read view: never load chunks, and never accept missing evidence as air. */
-    private final class LoadedBlocks implements SelectedFloorScanner.LoadedColumns, FloorCeilingResolver.ColumnHeight {
-        private BlockPos firstMissingBlock;
-        private final Map<BlockPos, BlockState> observed = new HashMap<>();
-        private final Map<Long, Boolean> columns = new HashMap<>();
-        private final Map<Long, Integer> ceilingHeights = new HashMap<>();
-        private final Set<BlockPos> collisionStates = new HashSet<>();
-        private boolean complete;
+    NonLoadingBlocks nonLoadingBlocks() {
+        return new NonLoadingBlocks();
+    }
 
-        private LoadedBlocks() {
-            this(false);
-        }
-
-        private LoadedBlocks(boolean captureDependencies) {
-            complete = captureDependencies;
-        }
-
-        private void boundDependencies() {
-            if (observed.size() + columns.size() + ceilingHeights.size() + collisionStates.size() <= MAX_OBSERVED_BLOCKS) return;
-            // Geometry is valid now, but a truncated proof cannot certify future cache hits.
-            complete = false;
-            observed.clear();
-            columns.clear();
-            ceilingHeights.clear();
-            collisionStates.clear();
-        }
-
-        private void observeColumn(BlockPos pos, boolean loaded) {
-            if (!complete) return;
-            columns.putIfAbsent(ChunkPos.asLong(pos.getX() >> 4, pos.getZ() >> 4), loaded);
-            boundDependencies();
-        }
+    final class NonLoadingBlocks implements SelectedFloorScanner.LoadedColumns, FloorCeilingResolver.ColumnHeight {
+        private boolean missingColumn;
 
         @Override
         public boolean hasColumn(BlockPos pos) {
-            boolean loaded = isLoaded(pos);
-            observeColumn(pos, loaded);
-            return loaded;
+            return isLoaded(pos);
         }
 
         @Override
         public void recordUnknownBoundary(BlockPos pos) {
-            markMissing(pos);
+            missingColumn = true;
         }
 
         @Override
         public int highestBlockY(BlockPos pos) {
             var chunk = level.getChunkSource().getChunkNow(pos.getX() >> 4, pos.getZ() >> 4);
-            observeColumn(pos, chunk != null);
             if (chunk == null) {
-                markMissing(pos);
+                missingColumn = true;
                 return level.getMinBuildHeight() - 1;
             }
-            int height = chunk.getHeight(Heightmap.Types.WORLD_SURFACE, pos.getX() & 15, pos.getZ() & 15);
-            if (complete) {
-                ceilingHeights.putIfAbsent(ChunkPos.asLong(pos.getX(), pos.getZ()), height);
-                boundDependencies();
-            }
-            return height;
-        }
-
-        @Override
-        public void observeFrameState(BlockPos pos, Direction face) {
-            BlockState observedState = observed.get(pos);
-            if (!complete || observedState == null
-                    || !(observedState.getBlock() instanceof TrapDoorBlock
-                    || observedState.getBlock() instanceof FenceGateBlock)) return;
-            BlockState raw = getBlockState(pos);
-            if (!complete) return;
-            // Only retain OPEN when it changes the face used by this proof.
-            // Ordinary gates/hatches still use the structural-state normalization.
-            BlockState toggled = raw.cycle(BlockStateProperties.OPEN);
-            if (Block.isFaceFull(raw.getCollisionShape(this, pos), face)
-                    == Block.isFaceFull(toggled.getCollisionShape(this, pos), face)) return;
-            collisionStates.add(pos.immutable());
-            observed.put(pos.immutable(), raw);
-            boundDependencies();
-        }
-
-        private void markMissing(BlockPos pos) {
-            if (firstMissingBlock == null) firstMissingBlock = pos.immutable();
+            return chunk.getHeight(Heightmap.Types.WORLD_SURFACE, pos.getX() & 15, pos.getZ() & 15);
         }
 
         @Override
         public BlockState getBlockState(BlockPos pos) {
             if (level.isOutsideBuildHeight(pos)) return Blocks.VOID_AIR.defaultBlockState();
             var chunk = level.getChunkSource().getChunkNow(pos.getX() >> 4, pos.getZ() >> 4);
-            observeColumn(pos, chunk != null);
             if (chunk == null) {
-                markMissing(pos);
+                missingColumn = true;
                 return Blocks.AIR.defaultBlockState();
             }
-            BlockState state = chunk.getBlockState(pos);
-            if (complete) {
-                observed.putIfAbsent(pos.immutable(), structuralState(state));
-                boundDependencies();
-            }
-            return state;
+            return chunk.getBlockState(pos);
         }
 
         @Override
-        public FluidState getFluidState(BlockPos pos) {
-            return getBlockState(pos).getFluidState();
-        }
+        public FluidState getFluidState(BlockPos pos) { return getBlockState(pos).getFluidState(); }
 
         @Override
         public BlockEntity getBlockEntity(BlockPos pos) {
             var chunk = level.getChunkSource().getChunkNow(pos.getX() >> 4, pos.getZ() >> 4);
             if (chunk == null) {
-                markMissing(pos);
+                missingColumn = true;
                 return null;
             }
             return chunk.getBlockEntity(pos);
@@ -422,23 +401,12 @@ public final class IndoorRoomCache {
         public int getMinBuildHeight() { return level.getMinBuildHeight(); }
     }
 
-    static BlockState structuralState(BlockState state) {
-        if (BedPoiCompatibility.isCompatibleBedState(state)) return state.setValue(BedBlock.OCCUPIED, false);
-        if (state.getBlock() instanceof DoorBlock
-                || state.getBlock() instanceof TrapDoorBlock
-                || state.getBlock() instanceof FenceGateBlock) {
-            return state.setValue(BlockStateProperties.OPEN, false);
-        }
-        return state;
-    }
-
     public record Room(Set<BlockPos> floorCells) {
         public Room {
             floorCells = Set.copyOf(floorCells);
         }
     }
 
-    /** Immutable admission view; room-local wandering still uses resolve(bed). */
     public static final class House {
         private final BlockPos anchor;
         private final RegisteredHouse registered;
@@ -468,7 +436,7 @@ public final class IndoorRoomCache {
         public BlockPos anchorFor(BlockPos endpoint) {
             return rooms.stream().filter(room -> room.floorCells().contains(endpoint))
                     .flatMap(room -> bedHeads.stream().filter(room.floorCells()::contains))
-                    .min(java.util.Comparator.comparingDouble(bed -> bed.distSqr(endpoint))).orElse(anchor);
+                    .min(Comparator.comparingDouble(bed -> bed.distSqr(endpoint))).orElse(anchor);
         }
 
         public boolean contains(BlockPos position) {
@@ -478,74 +446,8 @@ public final class IndoorRoomCache {
     }
 
     private record RegisteredHouse(int village, int building) { }
-
-    private static final class ScanBudget {
-        private int remaining = MAX_DISCOVERY_SCANS;
-    }
-
-    private final class Entry {
-        private final BlockPos source;
-        private final SelectedFloorScanner.Result scan;
-        private final List<Room> rooms;
-        private final Map<BlockPos, BlockState> observed;
-        private final Map<Long, Boolean> columns;
-        private final Map<Long, Integer> ceilingHeights;
-        private final Set<BlockPos> collisionStates;
-        private final boolean completeDependencies;
-        private final Building.validationResult failure;
-        private final long created;
-        private long lastUsed;
-        private long nextValidation;
-
-        private Entry(BlockPos source, SelectedFloorScanner.Result scan, List<Room> rooms,
-                      Map<BlockPos, BlockState> observed, LoadedBlocks blocks,
-                      long now, Building.validationResult failure) {
-            this.source = source.immutable();
-            this.scan = scan;
-            this.rooms = List.copyOf(rooms);
-            Map<BlockPos, BlockState> dependencies = new HashMap<>(observed);
-            if (blocks != null && blocks.complete) dependencies.putAll(blocks.observed);
-            completeDependencies = blocks != null && blocks.complete
-                    && dependencies.size() + blocks.columns.size() + blocks.ceilingHeights.size()
-                    + blocks.collisionStates.size() <= MAX_OBSERVED_BLOCKS;
-            this.observed = completeDependencies ? Map.copyOf(dependencies) : Map.of();
-            this.columns = completeDependencies ? Map.copyOf(blocks.columns) : Map.of();
-            this.ceilingHeights = completeDependencies ? Map.copyOf(blocks.ceilingHeights) : Map.of();
-            this.collisionStates = completeDependencies ? Set.copyOf(blocks.collisionStates) : Set.of();
-            this.failure = failure;
-            this.created = now;
-            this.lastUsed = now;
-            this.nextValidation = now + VALIDATION_TICKS;
-        }
-
-        private int observedCount() {
-            return observed.size() + columns.size() + ceilingHeights.size() + collisionStates.size();
-        }
-
-        private boolean isCurrent(long now) {
-            if (now - lastUsed >= IDLE_TICKS || !isLoaded(source)) return false;
-            if (rooms.isEmpty()) return now - created < FAILED_RETRY_TICKS;
-            if (now < nextValidation) return true;
-            if (!completeDependencies) return false;
-            for (var column : columns.entrySet()) {
-                long key = column.getKey();
-                boolean loaded = level.getChunkSource().getChunkNow(ChunkPos.getX(key), ChunkPos.getZ(key)) != null;
-                if (loaded != column.getValue()) return false;
-            }
-            for (var column : ceilingHeights.entrySet()) {
-                int x = ChunkPos.getX(column.getKey()), z = ChunkPos.getZ(column.getKey());
-                var chunk = level.getChunkSource().getChunkNow(x >> 4, z >> 4);
-                if (chunk == null || chunk.getHeight(Heightmap.Types.WORLD_SURFACE, x & 15, z & 15)
-                        != column.getValue()) return false;
-            }
-            for (var block : observed.entrySet()) {
-                if (!isLoaded(block.getKey())) return false;
-                BlockState current = level.getBlockState(block.getKey());
-                if (!(collisionStates.contains(block.getKey()) ? current : structuralState(current))
-                        .equals(block.getValue())) return false;
-            }
-            nextValidation = now + VALIDATION_TICKS;
-            return true;
-        }
-    }
+    private record RegisteredValidation(Set<BlockPos> floorCells, boolean valid, long expiresAt) { }
+    private record CachedRegisteredRoom(Set<BlockPos> sourceCells, Room room) { }
+    private record CachedUnregistered(FloorGeometry floor, Set<BlockPos> adjacentFloorSeeds,
+                                      List<Room> rooms, Building.validationResult failure, long expiresAt) { }
 }

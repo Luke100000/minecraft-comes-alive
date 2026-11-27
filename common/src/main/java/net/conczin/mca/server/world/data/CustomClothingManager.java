@@ -7,12 +7,17 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.resources.data.skin.Clothing;
 import net.conczin.mca.resources.data.skin.Hair;
 import net.conczin.mca.resources.data.skin.SkinListEntry;
+import net.conczin.mca.util.WorldUtils;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.storage.DimensionDataStorage;
+import net.minecraft.world.level.storage.LevelResource;
 
+import java.io.File;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -33,8 +38,8 @@ public class CustomClothingManager {
     }
 
     public static Storage<Clothing> getClothing(MinecraftServer server) {
-        return server.overworld().getDataStorage()
-                .computeIfAbsent(new SavedData.Factory<>(Storage::new, (nbt, provider) -> new Storage<>(nbt, Clothing::new), null), "immersive_library_clothing");
+        return loadSafely(server.overworld().getDataStorage(), server.getWorldPath(LevelResource.ROOT).resolve("data"),
+                "immersive_library_clothing", Clothing::new);
     }
 
     public static Storage<Hair> getHair() {
@@ -43,12 +48,29 @@ public class CustomClothingManager {
     }
 
     public static Storage<Hair> getHair(MinecraftServer server) {
-        return server.overworld().getDataStorage()
-                .computeIfAbsent(new SavedData.Factory<>(Storage::new, (nbt, provider) -> new Storage<>(nbt, Hair::new), null), "immersive_library_hair");
+        return loadSafely(server.overworld().getDataStorage(), server.getWorldPath(LevelResource.ROOT).resolve("data"),
+                "immersive_library_hair", Hair::new);
+    }
+
+    static <T extends SkinListEntry> Storage<T> loadSafely(DimensionDataStorage storage, Path dataFolder,
+                                                              String dataId,
+                                                              BiFunction<String, JsonObject, T> entryFromNbt) {
+        return WorldUtils.loadDataSafely(
+                storage,
+                dataFolder,
+                dataId,
+                Storage::new,
+                (nbt, provider) -> new Storage<>(nbt, entryFromNbt),
+                data -> {
+                    data.unreadableSavedData = true;
+                    MCA.LOGGER.error("MCA custom skin data {} could not be loaded. Original save will not be overwritten.", dataId);
+                }
+        );
     }
 
     public static class Storage<T extends SkinListEntry> extends SavedData {
         final Map<String, T> entries = new HashMap<>();
+        private boolean unreadableSavedData;
 
         public Storage() {
         }
@@ -58,6 +80,18 @@ public class CustomClothingManager {
             for (String identifier : nbt.getAllKeys()) {
                 entries.put(identifier, entryFromNbt.apply(identifier, gson.fromJson(nbt.getString(identifier), JsonObject.class)));
             }
+        }
+
+        @Override
+        public void save(File file, HolderLookup.Provider provider) {
+            if (unreadableSavedData) {
+                if (isDirty()) {
+                    MCA.LOGGER.error("Refusing to overwrite unreadable MCA custom skin data at {}", file);
+                    setDirty(false);
+                }
+                return;
+            }
+            super.save(file, provider);
         }
 
         @Override

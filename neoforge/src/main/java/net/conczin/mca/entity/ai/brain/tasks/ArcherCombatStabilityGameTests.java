@@ -261,10 +261,12 @@ public final class ArcherCombatStabilityGameTests {
         Fixture f = fixture(helper, false);
         for (int x = -8; x <= 8; x++) {
             for (int z = -8; z <= 8; z++) {
-                if (x < 0 || z < 0) helper.getLevel().setBlock(f.start().offset(x, 0, z), Blocks.GRASS_BLOCK.defaultBlockState(), 3);
+                // Leave the starting cell low: every escape route must use the
+                // one-block step instead of an equally valid flat route.
+                if (x != 0 || z != 0) helper.getLevel().setBlock(f.start().offset(x, 0, z), Blocks.GRASS_BLOCK.defaultBlockState(), 3);
             }
         }
-        f.target().absMoveTo(f.archer().getX() + 3, f.archer().getY(), f.archer().getZ() + 3);
+        f.target().absMoveTo(f.archer().getX() + 3, f.archer().getY() + 1, f.archer().getZ() + 3);
         f.target().setTarget(f.archer());
         f.archer().getAttribute(Attributes.MAX_HEALTH).setBaseValue(100);
         f.archer().setHealth(20);
@@ -314,7 +316,14 @@ public final class ArcherCombatStabilityGameTests {
         helper.assertTrue(f.archer().hasLineOfSight(f.target()), "pillar fixture must expose the unreachable enemy");
         helper.runAfterDelay(260, () -> {
             helper.assertTrue(f.archer().getBrain().getMemory(MemoryModuleType.ATTACK_TARGET).orElse(null) == reachable,
-                    "unreachable elevated enemy monopolized combat instead of the reachable enemy");
+                    "unreachable elevated enemy monopolized combat instead of the reachable enemy"
+                            + ", selected=" + f.archer().getBrain().getMemory(MemoryModuleType.ATTACK_TARGET)
+                            + ", blocked=" + net.conczin.mca.entity.ai.brain.UnreachableCombatTargets.contains(f.archer(), f.target())
+                            + ", unreachableHealth=" + f.target().getHealth()
+                            + ", reachableAlive=" + reachable.isAlive()
+                            + ", reachableHealth=" + reachable.getHealth()
+                            + ", archerPos=" + f.archer().position()
+                            + ", archerActivity=" + f.archer().getBrain().getActiveNonCoreActivity());
             helper.succeed();
         });
     }

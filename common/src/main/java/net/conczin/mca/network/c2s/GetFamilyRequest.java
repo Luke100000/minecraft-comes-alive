@@ -5,7 +5,6 @@ import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.network.HandleablePayload;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.s2c.GetFamilyResponse;
-import net.conczin.mca.server.world.data.FamilyTreeNode;
 import net.conczin.mca.server.world.data.PlayerSaveData;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.FriendlyByteBuf;
@@ -14,7 +13,6 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Mob;
 
-import java.util.stream.Stream;
 
 public record GetFamilyRequest() implements HandleablePayload {
     public static final CustomPacketPayload.Type<GetFamilyRequest> TYPE = new CustomPacketPayload.Type<>(MCA.locate("get_family_request"));
@@ -24,13 +22,9 @@ public record GetFamilyRequest() implements HandleablePayload {
     public void handleServer(ServerPlayer player) {
         CompoundTag familyData = new CompoundTag();
         PlayerSaveData playerData = PlayerSaveData.get(player);
-        FamilyTreeNode familyEntry = playerData.getFamilyEntry();
-        Stream.concat(
-                        familyEntry.getAllRelatives(4).filter(familyEntry::isRelative),
-                        playerData.getPartnerUUID().stream()
-                ).distinct()
+        playerData.getCallableFamilyIds().stream()
                 .map(uuid -> player.serverLevel().getEntity(uuid))
-                .filter(e -> e instanceof VillagerLike<?>)
+                .filter(e -> e instanceof VillagerLike<?> && e.isAlive())
                 .limit(100)
                 .forEach(e -> {
                     CompoundTag nbt = new CompoundTag();

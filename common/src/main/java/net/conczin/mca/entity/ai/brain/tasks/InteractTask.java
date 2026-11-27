@@ -3,6 +3,7 @@ package net.conczin.mca.entity.ai.brain.tasks;
 import com.google.common.collect.ImmutableMap;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.Chore;
+import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.ai.Brain;
 import net.minecraft.world.entity.ai.behavior.Behavior;
@@ -12,7 +13,9 @@ import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
 
 public class InteractTask extends Behavior<VillagerEntityMCA> {
+    private static final long FAILED_PATH_RETRY_TICKS = 20L;
     private final float speedModifier;
+    private long nextWalkAttemptTime;
 
     public InteractTask(float speedModifier) {
         super(ImmutableMap.of(
@@ -43,7 +46,8 @@ public class InteractTask extends Behavior<VillagerEntityMCA> {
 
     @Override
     protected void start(ServerLevel world, VillagerEntityMCA villager, long time) {
-        this.followPlayer(villager);
+        nextWalkAttemptTime = time;
+        this.followPlayer(villager, time);
     }
 
     @Override
@@ -55,7 +59,7 @@ public class InteractTask extends Behavior<VillagerEntityMCA> {
 
     @Override
     protected void tick(ServerLevel world, VillagerEntityMCA villager, long time) {
-        this.followPlayer(villager);
+        this.followPlayer(villager, time);
     }
 
     @Override
@@ -63,12 +67,20 @@ public class InteractTask extends Behavior<VillagerEntityMCA> {
         return false;
     }
 
-    private void followPlayer(VillagerEntityMCA villager) {
+    private void followPlayer(VillagerEntityMCA villager, long time) {
         Brain<?> brain = villager.getBrain();
 
         villager.getInteractions().getInteractingPlayer().ifPresentOrElse(player -> {
-            brain.setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(player, this.speedModifier, 2));
             brain.setMemory(MemoryModuleType.LOOK_TARGET, new EntityTracker(player, true));
+            // The sink abandons failed approaches. Keep facing the player without
+            // immediately recreating the same exhausted partial path every tick.
+            if (!brain.hasMemoryValue(MemoryModuleType.WALK_TARGET)
+                    && WalkTargetFailureMemory.hasFailureFor(villager, player.blockPosition())
+                    && time < nextWalkAttemptTime) {
+                return;
+            }
+            brain.setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(player, this.speedModifier, 2));
+            nextWalkAttemptTime = time + FAILED_PATH_RETRY_TICKS;
         }, () -> {
             brain.eraseMemory(MemoryModuleType.WALK_TARGET);
             brain.eraseMemory(MemoryModuleType.LOOK_TARGET);

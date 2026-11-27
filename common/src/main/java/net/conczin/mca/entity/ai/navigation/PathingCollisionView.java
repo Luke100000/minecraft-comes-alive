@@ -38,10 +38,39 @@ final class PathingCollisionView implements CollisionGetter {
         this.bodyHeight = Mth.ceil(mob.getBbHeight());
     }
 
+    PathingCollisionView(CollisionGetter level, BlockPos node, Mob mob) {
+        this.level = level;
+        this.first = node;
+        this.second = node;
+        this.bodyHeight = Math.max(
+                Mth.ceil(mob.getBbHeight()),
+                Mth.ceil(mob.getType().getDimensions().height())
+        );
+    }
+
     @Override
     public BlockState getBlockState(BlockPos pos) {
         BlockState state = this.level.getBlockState(pos);
-        if (!state.hasProperty(BlockStateProperties.OPEN) || state.getBlock() instanceof TrapDoorBlock) return state;
+        if (state.getBlock() instanceof TrapDoorBlock) {
+            if (!PathingBlockInteraction.isHandOpenableTrapDoor(state)) return state;
+            if (this.first.getX() == this.second.getX()
+                    && this.first.getZ() == this.second.getZ()
+                    && this.first.getY() != this.second.getY()
+                    && pos.getX() == this.first.getX() && pos.getZ() == this.first.getZ()
+                    && pos.getY() > Math.min(this.first.getY(), this.second.getY())
+                    && pos.getY() < Math.max(this.first.getY(), this.second.getY())) {
+                // A hatch is part of the route only for a same-column descent/ascent.
+                return state.setValue(TrapDoorBlock.OPEN, true);
+            }
+            if ((pos.equals(this.first)
+                    && PathingBlockInteraction.canFoldUprightTrapdoor(state, this.first, this.second))
+                    || (pos.equals(this.second)
+                    && PathingBlockInteraction.canFoldUprightTrapdoor(state, this.second, this.first))) {
+                return state.setValue(TrapDoorBlock.OPEN, false);
+            }
+            return state;
+        }
+        if (!state.hasProperty(BlockStateProperties.OPEN)) return state;
 
         boolean operable;
         if (PathingBlockInteraction.canInteractWithDoor(state)) {

@@ -45,10 +45,12 @@ import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BlockSetType;
+import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.level.block.state.properties.EnumProperty;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.pathfinder.Node;
 import net.minecraft.world.level.pathfinder.PathType;
+import net.minecraft.world.level.pathfinder.PathComputationType;
 import net.minecraft.world.level.block.state.properties.DoorHingeSide;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.level.pathfinder.Path;
@@ -73,6 +75,7 @@ public final class StairDoorNavigationGameTests {
     private static final List<Villager> ACTORS = new ArrayList<>();
     private static final Set<ChunkPos> FORCED_CHUNKS = new HashSet<>();
     private static TallDoorProxy tallDoor;
+    private static Block thinTopPlatform;
 
     private StairDoorNavigationGameTests() { }
 
@@ -84,7 +87,131 @@ public final class StairDoorNavigationGameTests {
                         tallDoor = new TallDoorProxy();
                         return tallDoor;
                     });
+            event.register(Registries.BLOCK,
+                    ResourceLocation.fromNamespaceAndPath(MCA.MOD_ID, "gametest_thin_top_platform"), () -> {
+                        thinTopPlatform = new ThinTopPlatform();
+                        return thinTopPlatform;
+                    });
         }
+    }
+
+    /** The physical shape of a modded upper stair platform, with Block's default LAND pathfinding. */
+    private static final class ThinTopPlatform extends Block {
+        private static final BooleanProperty FULL_SUPPORT = BooleanProperty.create("full_support");
+        private static final VoxelShape SHAPE = Block.box(0, 13, 0, 16, 16, 16);
+        private static final VoxelShape NARROW = Block.box(7, 13, 7, 9, 16, 9);
+
+        private ThinTopPlatform() {
+            super(BlockBehaviour.Properties.of().strength(1.0F).noOcclusion());
+            registerDefaultState(stateDefinition.any().setValue(FULL_SUPPORT, true));
+        }
+
+        @Override
+        protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
+            builder.add(FULL_SUPPORT);
+        }
+
+        @Override
+        public VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
+            return state.getValue(FULL_SUPPORT) ? SHAPE : NARROW;
+        }
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void standalonePathTypeQueryHandlesThinPlatform(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(40, 4, 40));
+        prepareArea(helper, start, 3, 6);
+        helper.assertTrue(thinTopPlatform != null, "generic thin platform was not registered");
+        helper.getLevel().setBlock(start.below(), thinTopPlatform.defaultBlockState(), 3);
+        VillagerEntityMCA actor = spawnProbe(helper, Vec3.atBottomCenterOf(start));
+        var evaluator = actor.getNavigation().getNodeEvaluator();
+        helper.assertTrue(evaluator != null, "the actor must have a navigation evaluator");
+        // Combat positioning asks this outside a prepared A* search.
+        PathType type = evaluator.getPathType(actor, start);
+        helper.assertTrue(type == PathType.WALKABLE,
+                "standalone lookup must recognize full top support, got " + type);
+        helper.getLevel().setBlock(start.below(),
+                thinTopPlatform.defaultBlockState().setValue(ThinTopPlatform.FULL_SUPPORT, false), 3);
+        PathType narrowType = evaluator.getPathType(actor, start);
+        helper.assertTrue(narrowType == PathType.OPEN,
+                "standalone lookup must not treat narrow support as a floor, got " + narrowType);
+        helper.succeed();
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void thinTopPlatformRetainsNearbyHazards(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(40, 4, 40));
+        prepareArea(helper, start, 3, 6);
+        helper.assertTrue(thinTopPlatform != null, "generic thin platform was not registered");
+        helper.getLevel().setBlock(start.below(), thinTopPlatform.defaultBlockState(), 3);
+        helper.getLevel().setBlock(start.east(), Blocks.LAVA.defaultBlockState(), 3);
+        VillagerEntityMCA actor = spawnProbe(helper, Vec3.atBottomCenterOf(start));
+        var evaluator = actor.getNavigation().getNodeEvaluator();
+        helper.assertTrue(evaluator != null, "the actor must have a navigation evaluator");
+        PathType type = evaluator.getPathType(actor, start);
+        helper.assertTrue(type == PathType.DANGER_FIRE,
+                "supported top plate must preserve adjacent lava danger, got " + type);
+        helper.succeed();
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 180)
+    public static void thinTopPlateCrossingRejectsNarrowSupport(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(40, 4, 40));
+        prepareArea(helper, start.east(2), 9, 8);
+        var level = helper.getLevel();
+        BlockPos platform = start.east(2).below();
+        for (int x = -1; x <= 5; x++) {
+            for (int y = 0; y <= 4; y++) {
+                level.setBlock(start.offset(x, y, -1), Blocks.STONE.defaultBlockState(), 3);
+                level.setBlock(start.offset(x, y, 1), Blocks.STONE.defaultBlockState(), 3);
+            }
+            if (x >= 0 && x <= 4) {
+                level.setBlock(start.offset(x, -1, 0), Blocks.SPRUCE_PLANKS.defaultBlockState(), 3);
+                level.setBlock(start.offset(x, 3, 0), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        for (int z = -1; z <= 1; z++) {
+            for (int y = 0; y <= 4; y++) {
+                level.setBlock(start.offset(-1, y, z), Blocks.STONE.defaultBlockState(), 3);
+                level.setBlock(start.offset(5, y, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        helper.assertTrue(thinTopPlatform != null, "generic thin platform was not registered");
+        level.setBlock(platform, thinTopPlatform.defaultBlockState(), 3);
+        var actor = spawnProbe(helper, Vec3.atBottomCenterOf(start));
+        var state = level.getBlockState(platform);
+        helper.assertTrue(state.isPathfindable(PathComputationType.LAND)
+                        && state.getCollisionShape(level, platform).max(Direction.Axis.Y) == 1.0D,
+                "fixture must have a full-footprint top surface and default LAND pathfindability");
+        helper.assertTrue(WalkNodeEvaluator.getPathTypeStatic(actor, platform.above()) == PathType.OPEN,
+                "fixture should expose vanilla's OPEN-above-top-plate classification");
+        BlockPos goal = start.east(4);
+        level.setBlock(platform, state.setValue(ThinTopPlatform.FULL_SUPPORT, false), 3);
+        Path overNarrowTop = actor.getNavigation().createPath(goal, 0);
+        helper.assertTrue(overNarrowTop == null || !overNarrowTop.canReach(),
+                "a narrow pathfindable top was treated as a full-width floor: " + describe(overNarrowTop));
+        level.setBlock(platform, state, 3);
+        Path path = actor.getNavigation().createPath(goal, 0);
+        helper.assertTrue(path != null && path.canReach(),
+                "no route across physical top plate: " + describe(path));
+        boolean usesPlatform = false;
+        for (int i = 0; i < path.getNodeCount(); i++) {
+            usesPlatform |= path.getNodePos(i).equals(platform.above());
+        }
+        helper.assertTrue(usesPlatform, "route bypasses top plate: " + describe(path));
+        startWalking(helper, actor, goal, true);
+        boolean[] crossed = {false};
+        helper.onEachTick(() -> {
+            crossed[0] |= actor.getBlockX() == platform.getX()
+                    && actor.getY() >= platform.getY() + 0.95D;
+            if (actor.distanceToSqr(Vec3.atBottomCenterOf(goal)) < 0.64D && actor.onGround()) {
+                helper.assertTrue(crossed[0], "villager did not physically cross top plate");
+                helper.succeed();
+            } else if (helper.getTick() >= 150) {
+                helper.fail("top-plate traverse stalled: " + actor.position() + ", path="
+                        + describe(actor.getNavigation().getPath()));
+            }
+        });
     }
 
     /** Optional integration proxy: Dramatic Doors 1.21.1's third property and linked setOpen contract. */
@@ -275,6 +402,160 @@ public final class StairDoorNavigationGameTests {
         startWalking(helper, actor, target, true);
         helper.succeedWhen(() -> helper.assertTrue(actor.distanceToSqr(Vec3.atBottomCenterOf(target)) < 0.64D
                         && actor.onGround(), "villager failed the raised doorway jump: " + actor.position()));
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 180)
+    public static void fourLayerSnowUnderTwoBlockEaveRejectsImpossibleJumpAndTakesOpenDetour(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos snow = helper.absolutePos(new BlockPos(40, 3, 40));
+        prepareArea(helper, snow, 8, 6);
+        for (int x = -1; x <= 2; x++) {
+            for (int y = 0; y < 4; y++) {
+                level.setBlock(snow.offset(x, y, -1), Blocks.STONE.defaultBlockState(), 3);
+                level.setBlock(snow.offset(x, y, 1), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        level.setBlock(snow, Blocks.SNOW.defaultBlockState().setValue(BlockStateProperties.LAYERS, 4), 3);
+        level.setBlock(snow.above(3), Blocks.SPRUCE_SLAB.defaultBlockState()
+                .setValue(BlockStateProperties.SLAB_TYPE, net.minecraft.world.level.block.state.properties.SlabType.TOP), 3);
+        level.setBlock(snow.east(), Blocks.SNOW_BLOCK.defaultBlockState(), 3);
+        level.setBlock(snow.east().above(3), Blocks.SPRUCE_PLANKS.defaultBlockState(), 3);
+        level.setBlock(snow.east(2), Blocks.SNOW_BLOCK.defaultBlockState(), 3);
+        // Seal the west end behind the approach cell so snow -> snow_block is evaluated as a mid-path edge.
+        for (int y = 0; y < 4; y++) {
+            level.setBlock(snow.offset(-2, y, 0), Blocks.STONE.defaultBlockState(), 3);
+        }
+        VillagerEntityMCA actor = spawnProbe(helper, Vec3.atBottomCenterOf(snow.west()));
+        actor.getGenetics().setGene(Genetics.SIZE, 0.65F);
+        actor.getGenetics().setGene(Genetics.WIDTH, 0.55F);
+        actor.refreshDimensions();
+        helper.assertTrue(actor.getBbHeight() > 1.88F,
+                "fixture requires a tall villager whose jump overshoots a 2-block eave: " + actor.getBbHeight());
+        BlockPos target = snow.east(2).above();
+        Path sealed = actor.getNavigation().createPath(target, 0);
+        helper.assertTrue(sealed == null || !sealed.canReach(),
+                "evaluator admitted a physically impossible mid-path 4-layer snow jump under a 2-block eave: "
+                        + describe(sealed));
+        // Now open a clean detour around the north wall and verify the villager completes it physically.
+        for (int y = 0; y < 4; y++) {
+            level.setBlock(snow.offset(-2, y, 0), Blocks.AIR.defaultBlockState(), 3);
+        }
+        level.setBlock(snow.offset(3, 0, -1), Blocks.SNOW_BLOCK.defaultBlockState(), 3);
+        level.setBlock(snow.offset(3, 0, 0), Blocks.SNOW_BLOCK.defaultBlockState(), 3);
+        Path detour = actor.getNavigation().createPath(target, 0);
+        helper.assertTrue(detour != null && detour.canReach(),
+                "detour around impossible snow-eave jump must remain reachable: " + describe(detour));
+        startWalking(helper, actor, target, true);
+        helper.succeedWhen(() -> helper.assertTrue(actor.distanceToSqr(Vec3.atBottomCenterOf(target)) < 0.64D
+                && actor.onGround(), "villager stalled instead of taking open detour: " + actor.position()
+                + ", path=" + describe(actor.getNavigation().getPath())));
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 180)
+    public static void threeLayerSnowUnderTwoBlockEaveCompletesDirectJump(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos snow = helper.absolutePos(new BlockPos(40, 3, 40));
+        prepareArea(helper, snow, 8, 6);
+        for (int x = -1; x <= 2; x++) {
+            for (int y = 0; y < 4; y++) {
+                level.setBlock(snow.offset(x, y, -1), Blocks.STONE.defaultBlockState(), 3);
+                level.setBlock(snow.offset(x, y, 1), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        for (int y = 0; y < 4; y++) {
+            level.setBlock(snow.offset(-2, y, 0), Blocks.STONE.defaultBlockState(), 3);
+        }
+        level.setBlock(snow, Blocks.SNOW.defaultBlockState().setValue(BlockStateProperties.LAYERS, 3), 3);
+        level.setBlock(snow.above(3), Blocks.SPRUCE_SLAB.defaultBlockState()
+                .setValue(BlockStateProperties.SLAB_TYPE, net.minecraft.world.level.block.state.properties.SlabType.TOP), 3);
+        level.setBlock(snow.east(), Blocks.SNOW_BLOCK.defaultBlockState(), 3);
+        level.setBlock(snow.east().above(3), Blocks.SPRUCE_PLANKS.defaultBlockState(), 3);
+        level.setBlock(snow.east(2), Blocks.SNOW_BLOCK.defaultBlockState(), 3);
+        VillagerEntityMCA actor = spawnProbe(helper, Vec3.atBottomCenterOf(snow.west()));
+        actor.getGenetics().setGene(Genetics.SIZE, 0.65F);
+        actor.getGenetics().setGene(Genetics.WIDTH, 0.55F);
+        actor.refreshDimensions();
+        helper.assertTrue(actor.getBbHeight() > 1.88F,
+                "fixture requires a tall villager to exercise 3-layer snow jump clearance: " + actor.getBbHeight());
+        BlockPos target = snow.east(2).above();
+        Path direct = actor.getNavigation().createPath(target, 0);
+        helper.assertTrue(direct != null && direct.canReach(),
+                "3-layer snow jump under a 2-block eave must remain admitted: " + describe(direct));
+        startWalking(helper, actor, target, true);
+        helper.succeedWhen(() -> helper.assertTrue(actor.distanceToSqr(Vec3.atBottomCenterOf(target)) < 0.64D
+                && actor.onGround(), "villager failed physically valid 3-layer snow jump under eave: "
+                + actor.position() + ", path=" + describe(actor.getNavigation().getPath())));
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 180)
+    public static void fourLayerSnowOntoEastStairUnderTwoBlockEaveCompletesDirectWalk(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos snow = helper.absolutePos(new BlockPos(40, 3, 40));
+        prepareArea(helper, snow, 8, 6);
+        for (int x = -1; x <= 2; x++) {
+            for (int y = 0; y < 4; y++) {
+                level.setBlock(snow.offset(x, y, -1), Blocks.STONE.defaultBlockState(), 3);
+                level.setBlock(snow.offset(x, y, 1), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        for (int y = 0; y < 4; y++) {
+            level.setBlock(snow.offset(-2, y, 0), Blocks.STONE.defaultBlockState(), 3);
+        }
+        level.setBlock(snow, Blocks.SNOW.defaultBlockState().setValue(BlockStateProperties.LAYERS, 4), 3);
+        level.setBlock(snow.above(3), Blocks.SPRUCE_SLAB.defaultBlockState()
+                .setValue(BlockStateProperties.SLAB_TYPE, net.minecraft.world.level.block.state.properties.SlabType.TOP), 3);
+        level.setBlock(snow.east(), Blocks.COBBLESTONE_STAIRS.defaultBlockState()
+                .setValue(StairBlock.FACING, Direction.EAST), 3);
+        level.setBlock(snow.east().above(3), Blocks.SPRUCE_PLANKS.defaultBlockState(), 3);
+        level.setBlock(snow.east(2), Blocks.SNOW_BLOCK.defaultBlockState(), 3);
+        VillagerEntityMCA actor = spawnProbe(helper, Vec3.atBottomCenterOf(snow.west()));
+        actor.getGenetics().setGene(Genetics.SIZE, 0.65F);
+        actor.getGenetics().setGene(Genetics.WIDTH, 0.55F);
+        actor.refreshDimensions();
+        helper.assertTrue(actor.getBbHeight() > 1.88F,
+                "fixture requires a tall villager to exercise stair step-up under a 2-block eave: " + actor.getBbHeight());
+        BlockPos target = snow.east(2).above();
+        Path direct = actor.getNavigation().createPath(target, 0);
+        helper.assertTrue(direct != null && direct.canReach(),
+                "4-layer snow onto east-facing stair under a 2-block eave must remain admitted: " + describe(direct));
+        startWalking(helper, actor, target, true);
+        helper.succeedWhen(() -> helper.assertTrue(actor.distanceToSqr(Vec3.atBottomCenterOf(target)) < 0.64D
+                && actor.onGround(), "villager failed physically valid 4-layer snow stair climb under eave: "
+                + actor.position() + ", path=" + describe(actor.getNavigation().getPath())));
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 180)
+    public static void zeroJumpStrengthRejectsSheerStepButClimbsEastStair(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos snow = helper.absolutePos(new BlockPos(40, 3, 40));
+        prepareArea(helper, snow, 8, 6);
+        for (int x = -1; x <= 2; x++) {
+            for (int y = 0; y < 4; y++) {
+                level.setBlock(snow.offset(x, y, -1), Blocks.STONE.defaultBlockState(), 3);
+                level.setBlock(snow.offset(x, y, 1), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        for (int y = 0; y < 4; y++) {
+            level.setBlock(snow.offset(-2, y, 0), Blocks.STONE.defaultBlockState(), 3);
+        }
+        level.setBlock(snow, Blocks.SNOW.defaultBlockState().setValue(BlockStateProperties.LAYERS, 3), 3);
+        level.setBlock(snow.east(), Blocks.SNOW_BLOCK.defaultBlockState(), 3);
+        level.setBlock(snow.east(2), Blocks.SNOW_BLOCK.defaultBlockState(), 3);
+        VillagerEntityMCA actor = spawnProbe(helper, Vec3.atBottomCenterOf(snow.west()));
+        actor.getAttribute(Attributes.JUMP_STRENGTH).setBaseValue(0.0D);
+        BlockPos target = snow.east(2).above();
+        Path sheer = actor.getNavigation().createPath(target, 0);
+        helper.assertTrue(sheer == null || !sheer.canReach(),
+                "zero-jump actor must not admit a sheer step taller than maxUpStep: " + describe(sheer));
+        level.setBlock(snow.east(), Blocks.COBBLESTONE_STAIRS.defaultBlockState()
+                .setValue(StairBlock.FACING, Direction.EAST), 3);
+        Path stair = actor.getNavigation().createPath(target, 0);
+        helper.assertTrue(stair != null && stair.canReach(),
+                "zero-jump actor must still admit an east-facing stair: " + describe(stair));
+        startWalking(helper, actor, target, true);
+        helper.succeedWhen(() -> helper.assertTrue(actor.distanceToSqr(Vec3.atBottomCenterOf(target)) < 0.64D
+                && actor.onGround(), "zero-jump actor failed to walk up east-facing stair: "
+                + actor.position() + ", path=" + describe(actor.getNavigation().getPath())));
     }
 
     @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 100)

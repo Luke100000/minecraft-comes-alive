@@ -71,12 +71,12 @@ class RoomWorkflowTest {
     @Test
     void ambiguousAddBuildingDefersCommitAndConfirmationReusesSameWorkflow() throws Exception {
         BlockPos source = new BlockPos(4, 8, 12);
-        StubManager manager = new StubManager(new BuildingScanResult(
+        StubManager manager = new StubManager(new RoomWorkflow.Addition(
                 Building.validationResult.SUCCESS,
                 source,
                 new Building(source),
                 List.of("library", "music_store"),
-                null, RoomScanPlan.addBuilding(source)));
+                null, null, RoomWorkflow.Plan.addBuilding(source)));
 
         RoomWorkflow workflow = new RoomWorkflow(manager, null);
 
@@ -160,27 +160,27 @@ class RoomWorkflowTest {
         assertEquals(-1, outcome.expectedTargetId());
     }
 
-    private static BuildingScanResult scan(BlockPos source, List<String> types) {
-        return new BuildingScanResult(
+    private static RoomWorkflow.Addition scan(BlockPos source, List<String> types) {
+        return new RoomWorkflow.Addition(
                 Building.validationResult.SUCCESS,
                 source,
                 new Building(source),
                 types,
-                null, RoomScanPlan.addBuilding(source));
+                null, null, RoomWorkflow.Plan.addBuilding(source));
     }
 
     private static final class StubManager extends VillageManager {
-        private final BuildingScanResult scan;
+        private final RoomWorkflow.Addition scan;
         private int commitCalls;
         private String lastForcedType;
 
-        private StubManager(BuildingScanResult scan) {
+        private StubManager(RoomWorkflow.Addition scan) {
             super(null);
             this.scan = scan;
         }
 
         @Override
-        public Building.validationResult commitRoomAddition(BuildingScanResult scan, String forcedType) {
+        Building.validationResult commitRoomAddition(RoomWorkflow.Addition scan, String forcedType) {
             commitCalls++;
             lastForcedType = forcedType;
             return Building.validationResult.SUCCESS;
@@ -202,7 +202,7 @@ class RoomWorkflowTest {
         }
 
         @Override
-        public Building.validationResult commitRegisteredRoomUpdate(RegisteredRoomUpdate update, String forcedType) {
+        Building.validationResult commitRegisteredRoomUpdate(RoomWorkflow.RoomUpdate update, String forcedType) {
             updateCommits++;
             return Building.validationResult.SUCCESS;
         }

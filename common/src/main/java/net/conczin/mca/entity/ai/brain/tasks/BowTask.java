@@ -140,15 +140,21 @@ public class BowTask<E extends VillagerEntityMCA> extends Behavior<E> {
             int pullTime = entity.getTicksUsingItem();
             if (pullTime >= DRAW_TICKS) {
                 boolean inRange = distanceSquared <= attackRangeSquared;
-                boolean clear = visible && inRange && RangedWeaponHelper.canShootBowFrom(entity, entity.position(), target);
                 boolean aligned = isAlignedForMovingShot(entity, target);
-                if (clear && aligned && entity.tryPerformBowAttack(target, BowItem.getPowerForTime(pullTime))) {
+                // The final attack validates the real projectile trajectory. Avoid solving it
+                // again immediately beforehand on every successful release.
+                if (visible && inRange && aligned
+                        && entity.tryPerformBowAttack(target, BowItem.getPowerForTime(pullTime))) {
                     entity.stopUsingItem();
                     this.blockedReleaseTicks = 0;
                     this.attackCooldown = this.fireInterval;
                     logAction(entity, target, visible, distanceSquared, "release", "draw_complete");
                 } else {
                     if (this.blockedReleaseTicks++ == 0) {
+                        // Keep the original distinction between a blocked trajectory and
+                        // a failed projectile spawn without repeating the check every tick.
+                        boolean clear = visible && inRange && aligned
+                                && RangedWeaponHelper.canShootBowFrom(entity, entity.position(), target);
                         logAction(entity, target, visible, distanceSquared, "hold_draw",
                                 !visible ? "eye_los_lost" : !inRange ? "release_out_of_range"
                                         : !aligned ? "aim_settling" : clear ? "release_failed" : "trajectory_blocked");
@@ -200,7 +206,7 @@ public class BowTask<E extends VillagerEntityMCA> extends Behavior<E> {
     }
 
     private void logAction(E entity, LivingEntity target, boolean visible, double distanceSquared, String action, String reason) {
-        if (!MCA.platformHelper.isDevelopmentEnvironment()) {
+        if (!ArcherMovementTask.DEBUG_LOGGING || !MCA.platformHelper.isDevelopmentEnvironment()) {
             return;
         }
 

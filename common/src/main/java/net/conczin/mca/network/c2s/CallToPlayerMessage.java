@@ -5,6 +5,8 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.MoveState;
 import net.conczin.mca.network.HandleablePayload;
+import net.conczin.mca.registry.ItemsMCA;
+import net.conczin.mca.server.world.data.PlayerSaveData;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
@@ -23,14 +25,18 @@ public record CallToPlayerMessage(UUID uuid) implements HandleablePayload {
 
     @Override
     public void handleServer(ServerPlayer player) {
+        if (!player.getMainHandItem().is(ItemsMCA.WHISTLE) && !player.getOffhandItem().is(ItemsMCA.WHISTLE)) {
+            return;
+        }
         Entity e = player.serverLevel().getEntity(uuid);
-        if (e instanceof VillagerEntityMCA v) {
+        if (e instanceof VillagerEntityMCA v && v.isAlive()
+                && PlayerSaveData.get(player).getCallableFamilyIds().contains(v.getUUID())) {
             if (v.isSleeping()) {
                 v.stopSleeping();
             }
             v.stopRiding();
             v.setPos(player.getX(), player.getY(), player.getZ());
-            if (Config.getServerConfig().whistleCallMakesVillagersFollow) {
+            if (Config.getInstance().whistleCallMakesVillagersFollow) {
                 v.getVillagerBrain().setMoveState(MoveState.FOLLOW, player);
             }
         }

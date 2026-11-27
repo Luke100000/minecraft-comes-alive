@@ -357,16 +357,29 @@ final class BlueprintTerrainRenderer {
 
     private static void releaseTexture(TerrainTile tile) {
         if (tile.terrainTextureLocation != null) {
-            Minecraft.getInstance().getTextureManager().release(tile.terrainTextureLocation);
+            Minecraft mc = Minecraft.getInstance();
+            if (mc != null && mc.getTextureManager() != null) {
+                mc.getTextureManager().release(tile.terrainTextureLocation);
+            } else if (tile.terrainTexture != null) {
+                tile.terrainTexture.close();
+            }
             tile.terrainTextureLocation = null;
+            tile.terrainTexture = null;
+        } else if (tile.terrainTexture != null) {
+            tile.terrainTexture.close();
             tile.terrainTexture = null;
         }
     }
 
-    static void onClientLevelChanged(Object levelIdentity) {
-        if (cacheLevelIdentity == levelIdentity) return;
+    private static void clearCache() {
         tiles.values().forEach(BlueprintTerrainRenderer::releaseTexture);
         tiles.clear();
+        cacheLevelIdentity = null;
+    }
+
+    static void onClientLevelChanged(Object levelIdentity) {
+        if (cacheLevelIdentity == levelIdentity) return;
+        clearCache();
         cacheLevelIdentity = levelIdentity;
     }
 

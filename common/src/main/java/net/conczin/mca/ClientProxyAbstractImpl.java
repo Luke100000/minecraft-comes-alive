@@ -19,4 +19,9 @@ public abstract class ClientProxyAbstractImpl extends ClientProxy.Impl {
     public Optional<VillagerLike<?>> getPlayerData(UUID uuid) {
         return MCAClient.getPlayerData(uuid);
     }
+
+    @Override
+    public Optional<Float> getGeneticsPassengerScale(UUID playerId) {
+        return MCAClient.getRenderedGeneticsPlayerData(playerId).map(VillagerLike::getVisualVerticalScaleFactor);
+    }
 }

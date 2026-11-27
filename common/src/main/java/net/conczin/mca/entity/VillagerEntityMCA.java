@@ -1,10 +1,9 @@
 package net.conczin.mca.entity;
 
 import com.mojang.serialization.Dynamic;
+import net.conczin.mca.ClientProxy;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
-import net.conczin.mca.MCAClient;
-import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.datafix.McaDataFixers;
 import net.conczin.mca.entity.ai.*;
 import net.conczin.mca.entity.ai.brain.VillagerBrain;
@@ -39,6 +38,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtOps;
+import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -138,7 +138,6 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     private MCAFishingBobberEntity fishingBobber;
     private int despawnDelay;
     private int burned;
-    private boolean loggedArcherPanic;
     private long lastHit = 0;
     private int prevGrowthAmount;
     private boolean interactedWith;
@@ -149,6 +148,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     private int recoveryFoodSlot = -1;
     private ItemStack recoveryFoodSource = ItemStack.EMPTY;
     private BooleanSupplier melodyTick;
+    private long nextMelodyPerformanceTime;
     private final Map<UUID, String> nicknames = new HashMap<>();
 
     public VillagerEntityMCA(EntityType<VillagerEntityMCA> type, Level w, Gender gender) {
@@ -160,6 +160,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         this.setPathfindingMalus(PathType.TRAPDOOR, 8.0F);
         this.setPathfindingMalus(PathType.DANGER_TRAPDOOR, 8.0F);
         this.setPathfindingMalus(PathType.WATER, 16.0F);
+        refreshDimensions();
     }
 
     public static <E extends Entity> CDataManager.Builder<E> createTrackedData(Class<E> type) {
@@ -215,6 +216,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     public static AttributeSupplier.Builder createAttributes() {
         return Villager.createAttributes()
+                .add(Attributes.LUCK)
                 .add(Attributes.WATER_MOVEMENT_EFFICIENCY, 1.0D)
                 .add(Attributes.ATTACK_DAMAGE, 3.0f)
                 .add(Attributes.ATTACK_KNOCKBACK, 1.0f)
@@ -371,12 +373,6 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         if (previous != ProfessionsMCA.ARCHER && profession == ProfessionsMCA.ARCHER
                 && world.getEntity(getId()) == this) {
             GuardEnemiesSensor.refreshNearbyEntities(world, this);
-            if (MCA.platformHelper.isDevelopmentEnvironment()) {
-                MCA.LOGGER.info("[MCA Archer Startup] entity={} name=\"{}\" tick={} action=profession_change previous={} nearestEnemy={}",
-                        getStringUUID(), getName().getString(), tickCount, previous,
-                        getBrain().getMemoryInternal(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY)
-                                .map(Entity::getStringUUID).orElse("none"));
-            }
         }
     }
 
@@ -453,7 +449,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
                 && !hasIgnitedCreeperThreat() && super.canAttack(target);
     }
 
-    private boolean hasIgnitedCreeperThreat() {
+    public boolean hasIgnitedCreeperThreat() {
         return getBrain().getMemoryInternal(MemoryModuleTypeMCA.NEAREST_IGNITED_CREEPER)
                 .filter(threat -> threat instanceof Creeper creeper && creeper.isIgnited()
                         && threat.isAlive() && !threat.isRemoved() && threat.level() == level()
@@ -462,6 +458,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     protected void customServerAiStep() {
+        mcaBrain.selectAssignedChoreActivity();
         super.customServerAiStep();
         if (hasIgnitedCreeperThreat()) {
             if (isSleeping()) {
@@ -704,55 +701,56 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
         Entity attacker = source.getEntity();
 
-        // Notify the surrounding guards when a villager is attacked. Yoinks!
-        if (!level().isClientSide && attacker instanceof LivingEntity livingEntity && !isHostile() && !isFriend(attacker.getType())) {
-            int victimBountyBeforeHit = getSmallBounty();
-
-            // remember the specific attacker
-            getBrain().setMemory(MemoryModuleTypeMCA.HIT_BY_PLAYER, Optional.of(livingEntity));
-            getBrain().setMemory(MemoryModuleTypeMCA.SMALL_BOUNTY, victimBountyBeforeHit + 1);
-
-            Vec3 pos = position();
-            level().getEntitiesOfClass(VillagerEntityMCA.class, new AABB(pos, pos).inflate(32)).forEach(v -> {
-                if (this.distanceToSqr(v) <= (v.getTarget() == null ? 1024 : 64)) {
-                    if (attacker instanceof Player player) {
-                        int bounty = v == this ? victimBountyBeforeHit : v.getSmallBounty();
-                        if (v.isGuard()) {
-                            int maxWarning = v.getMaxWarnings(player);
-                            if (bounty > maxWarning) {
-                                // ok, that was enough
-                                v.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, livingEntity);
-                            } else if (bounty == 0 || bounty == maxWarning) {
-                                // just a warning
-                                v.getBrain().eraseMemory(MemoryModuleType.ATTACK_TARGET);
-                                v.sendChatMessage(player, "villager.warning");
-                            }
-                            v.getBrain().setMemory(MemoryModuleTypeMCA.SMALL_BOUNTY, bounty + 1);
-                        }
-                    } else if (v.isGuard()) {
-                        // non players get attacked straight away
-                        VillagerTasksMCA.respondToGuardAlarm(v, this, livingEntity);
-                    }
-                }
-            });
+        // Notify the surrounding guards when a villager is attacked.
+        if (attacker instanceof LivingEntity livingEntity) {
+            notifyNearbyGuards(this, livingEntity);
         }
 
         // Iron Golem got his revenge, now chill
-        if (attacker instanceof IronGolem golem) {
+        if (attacker instanceof IronGolem golem && !isHostile()) {
             golem.stopBeingAngry();
             damageAmount *= 0.0f;
         }
 
-        if (!level().isClientSide && MCA.platformHelper.isDevelopmentEnvironment() && getProfession() == ProfessionsMCA.ARCHER) {
-            Vec3 before = getDeltaMovement();
-            float healthBefore = getHealth();
-            boolean accepted = super.hurt(source, damageAmount);
-            MCA.LOGGER.info("[MCA Archer Damage] entity={} name=\"{}\" tick={} source={} accepted={} healthBefore={} healthAfter={} velocityBefore={} velocityAfter={} onGround={} pos={}",
-                    getStringUUID(), getName().getString(), tickCount, source.typeHolder().unwrapKey(), accepted,
-                    healthBefore, getHealth(), before, getDeltaMovement(), onGround(), position());
-            return accepted;
-        }
         return super.hurt(source, damageAmount);
+    }
+
+    public static void notifyNearbyGuards(LivingEntity victim, LivingEntity attacker) {
+        if (victim.level().isClientSide || isVillageFriendly(attacker)) {
+            return;
+        }
+        int victimBountyBeforeHit = 0;
+        if (victim instanceof VillagerEntityMCA villager) {
+            if (villager.isHostile()) {
+                return;
+            }
+            victimBountyBeforeHit = villager.getSmallBounty();
+            villager.getBrain().setMemory(MemoryModuleTypeMCA.HIT_BY_PLAYER, Optional.of(attacker));
+            villager.getBrain().setMemory(MemoryModuleTypeMCA.SMALL_BOUNTY, victimBountyBeforeHit + 1);
+        }
+
+        Vec3 pos = victim.position();
+        for (VillagerEntityMCA guard : victim.level().getEntitiesOfClass(VillagerEntityMCA.class, new AABB(pos, pos).inflate(32))) {
+            if (!guard.isGuard() || victim.distanceToSqr(guard) >
+                    (guard.getBrain().getMemory(MemoryModuleType.ATTACK_TARGET).isEmpty() ? 1024 : 64)) {
+                continue;
+            }
+            if (attacker instanceof Player player) {
+                int bounty = guard == victim ? victimBountyBeforeHit : guard.getSmallBounty();
+                int maxWarning = guard.getMaxWarnings(player);
+                if (bounty > maxWarning) {
+                    guard.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, attacker);
+                } else if (bounty == 0 || bounty == maxWarning) {
+                    if (guard.getBrain().isMemoryValue(MemoryModuleType.ATTACK_TARGET, player)) {
+                        guard.getBrain().eraseMemory(MemoryModuleType.ATTACK_TARGET);
+                    }
+                    guard.sendChatMessage(player, "villager.warning");
+                }
+                guard.getBrain().setMemory(MemoryModuleTypeMCA.SMALL_BOUNTY, bounty + 1);
+            } else {
+                VillagerTasksMCA.respondToGuardAlarm(guard, victim, attacker);
+            }
+        }
     }
 
     private boolean requestCooldown() {
@@ -800,18 +798,6 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         }
 
         if (!level().isClientSide) {
-            if (MCA.platformHelper.isDevelopmentEnvironment() && getProfession() == ProfessionsMCA.ARCHER) {
-                boolean panic = getBrain().isActive(Activity.PANIC);
-                if (panic != loggedArcherPanic || panic && tickCount % 20 == 0) {
-                    loggedArcherPanic = panic;
-                    var walk = getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
-                    var path = getNavigation().getPath();
-                    MCA.LOGGER.info("[MCA Archer Panic] entity={} name=\"{}\" tick={} panic={} health={} pos={} velocity={} onGround={} collision={} walkTracker={} walkDestination={} navDone={} pathReachable={}",
-                            getStringUUID(), getName().getString(), tickCount, panic, getHealth(), position(), getDeltaMovement(), onGround(), horizontalCollision,
-                            walk == null ? "none" : walk.getTarget().getClass().getSimpleName(),
-                            walk == null ? null : walk.getTarget().currentPosition(), getNavigation().isDone(), path == null ? null : path.canReach());
-                }
-            }
             tickRecoveryFoodUse();
 
             if (melodyTick != null && !melodyTick.getAsBoolean()) {
@@ -878,16 +864,6 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     @Override
     public void setItemSlot(EquipmentSlot slot, ItemStack stack) {
         ItemStack previous = super.getItemBySlot(slot);
-        if (!level().isClientSide && MCA.platformHelper.isDevelopmentEnvironment()
-                && slot.getType() == EquipmentSlot.Type.HAND && previous != stack
-                && (previous.getItem() instanceof ProjectileWeaponItem || stack.getItem() instanceof ProjectileWeaponItem)) {
-            String callers = StackWalker.getInstance().walk(frames -> frames.skip(1).limit(5)
-                    .map(StackWalker.StackFrame::toString).collect(java.util.stream.Collectors.joining(" <- ")));
-            MCA.LOGGER.info("[MCA Archer Hand] entity={} name=\"{}\" tick={} slot={} old={} new={} using={} useTicks={} activity={} attackTarget={} callers={}",
-                    getStringUUID(), getName().getString(), tickCount, slot, previous, stack,
-                    isUsingItem(), getTicksUsingItem(), getBrain().getActiveNonCoreActivity(),
-                    getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).map(Entity::getStringUUID).orElse("none"), callers);
-        }
         boolean borrowed = borrowedEquipment != null && borrowedEquipment.remove(slot);
         if (inventory != null && !stack.isEmpty() && InventoryUtils.containsReference(inventory, stack)) {
             borrowedEquipment.add(slot);
@@ -930,6 +906,14 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     public void setMelodyTick(BooleanSupplier tick) {
         melodyTick = tick;
+    }
+
+    public long getNextMelodyPerformanceTime() {
+        return nextMelodyPerformanceTime;
+    }
+
+    public void setNextMelodyPerformanceTime(long nextMelodyPerformanceTime) {
+        this.nextMelodyPerformanceTime = nextMelodyPerformanceTime;
     }
 
     public boolean isUsingRecoveryFood() {
@@ -1290,11 +1274,14 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             this.setPos(pos.x() + offset.x(), pos.y() + offset.y(), pos.z() + offset.z());
 
             // Player genetics rendering is client-only. Preserve its original visual adjustment without moving the physical box.
-            if (isClientSide() && MCAClient.useGeneticsRenderer(vehicle.getUUID())) {
-                float height = CommonVillagerModel.getVillager(vehicle).getVisualVerticalScaleFactor();
-                offset = offset.multiply(1.0f, height, 1.0f);
-                offset = offset.add(0, (height - 1) * 1.5 - 0.7, 0);
-                this.setPosRaw(pos.x() + offset.x(), pos.y() + offset.y(), pos.z() + offset.z());
+            if (isClientSide()) {
+                Optional<Float> passengerScale = ClientProxy.getGeneticsPassengerScale(player.getUUID());
+                if (passengerScale.isPresent()) {
+                    float height = passengerScale.get();
+                    offset = offset.multiply(1.0f, height, 1.0f);
+                    offset = offset.add(0, (height - 1) * 1.5 - 0.7, 0);
+                    this.setPosRaw(pos.x() + offset.x(), pos.y() + offset.y(), pos.z() + offset.z());
+                }
             }
 
             if (vehicle.isShiftKeyDown()) {
@@ -1667,11 +1654,31 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public void onSyncedDataUpdated(EntityDataAccessor<?> par) {
-        if (getTypeDataManager().isParam(AGE_STATE, par) || getTypeDataManager().isParam(Genetics.SIZE.getParam(), par) || getTypeDataManager().isParam(Genetics.WIDTH.getParam(), par)) {
+        if (affectsDimensions(par)) {
             refreshDimensions();
         }
 
         super.onSyncedDataUpdated(par);
+    }
+
+    @Override
+    public void onSyncedDataUpdated(List<SynchedEntityData.DataValue<?>> values) {
+        super.onSyncedDataUpdated(values);
+        // Age and scale inputs are synchronized before GROWTH_AMOUNT; refresh from the completed snapshot.
+        boolean hasDimensionInput = false;
+        boolean hasGrowthAmount = false;
+        CDataManager<?> data = getTypeDataManager();
+        for (SynchedEntityData.DataValue<?> value : values) {
+            if (!hasDimensionInput && affectsDimensions(value)) {
+                hasDimensionInput = true;
+            } else if (!hasGrowthAmount && data.isParam(GROWTH_AMOUNT, value)) {
+                hasGrowthAmount = true;
+            }
+            if (hasDimensionInput && hasGrowthAmount) {
+                refreshDimensions();
+                return;
+            }
+        }
     }
 
     @Override
@@ -1813,7 +1820,6 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         super.readAdditionalSaveData(data);
 
         if (!level().isClientSide && isSleeping()) {
-            BedDebugLog.lifecycle(this, "load-sleeper", getSleepingPos().orElse(null));
             boolean sleepingAtHome = getBrain().getMemory(MemoryModuleType.HOME)
                     .filter(home -> home.dimension().equals(level().dimension()))
                     .map(home -> home.pos())
@@ -1826,8 +1832,10 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         }
 
         getTypeDataManager().load(this, data);
+        restoreGenderAfterLoad();
+        restoreAgeAfterLoad(data);
         getGenetics().finishEyeExpression(EyeGenetics.seed(getUUID(), 0));
-        relations.cancelInterruptedProcreationAfterLoad();
+        relations.clearProcreation();
         relations.readFromNbt(data);
         longTermMemory.readFromNbt(data);
         readNicknames(data);
@@ -1848,17 +1856,15 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             this.interactedWith = data.getBoolean("InteractedWith");
         }
 
+        restoreMissingAppearance(data);
         validateAppearance();
 
         if (getVillagerBrain().getPersonality() == Personality.UNASSIGNED) {
             getVillagerBrain().randomize();
         }
 
-        ItemStack mourningFlower = getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_FLOWER)
-                .orElse(ItemStack.EMPTY);
-        boolean restoreMourningFlower = !mourningFlower.isEmpty()
-                && getBrain().hasMemoryValue(MemoryModuleTypeMCA.MOURNING_PREVIOUS_MAIN_HAND)
-                && (getMainHandItem().isEmpty() || ItemStack.matches(getMainHandItem(), mourningFlower));
+        ItemStack mourningFlower = Mourning.getReloadableFlower(this);
+        boolean restoreMourningFlower = !mourningFlower.isEmpty();
 
         // Older saves kept the displaced mourning item only in Brain memory.
         // Migrate it into the inventory that now owns real equipment.
@@ -1890,9 +1896,22 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         // Rebuild equipment from inventory; the setter preserves equipment-only real items.
         clearEquipment();
         if (restoreMourningFlower) {
-            ItemStack flower = InventoryUtils.temporary(mourningFlower.copy());
-            getBrain().setMemory(MemoryModuleTypeMCA.MOURNING_FLOWER, flower.copy());
-            setItemInHand(InteractionHand.MAIN_HAND, flower);
+            Mourning.restoreLoadedFlower(this, mourningFlower);
+        }
+        refreshDimensions();
+    }
+
+    private void restoreAgeAfterLoad(CompoundTag data) {
+        int age = Mth.clamp(data.getInt("Age"), -AgeState.getMaxAge(), 0);
+        if (data.getInt("Age") < age) {
+            super.setAge(age);
+        }
+        AgeState vanillaStage = AgeState.byCurrentAge(age);
+        if (getAgeState() == AgeState.UNASSIGNED) {
+            setTrackedValue(AGE_STATE, vanillaStage);
+        }
+        if (!data.contains("GrowthAmount", Tag.TAG_ANY_NUMERIC)) {
+            setTrackedValue(GROWTH_AMOUNT, getAgeState() == vanillaStage ? age : getAgeState().toAge());
         }
     }
 
@@ -1975,9 +1994,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         return getProfession() == ProfessionsMCA.OUTLAW;
     }
 
-    //friends will not get slapped in revenge
-    public boolean isFriend(EntityType<?> type) {
-        return type == EntityType.IRON_GOLEM || type == EntitiesMCA.FEMALE_VILLAGER || type == EntitiesMCA.MALE_VILLAGER;
+    public static boolean isVillageFriendly(Entity entity) {
+        return entity instanceof IronGolem
+                || entity instanceof Villager && (!(entity instanceof VillagerEntityMCA villager) || !villager.isHostile());
     }
 
     @Override
@@ -2017,8 +2036,8 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
                     this,
                     weaponHand,
                     weaponStack,
-                    1.75F,
-                    14 - this.level().getDifficulty().getId() * 4,
+                    RangedWeaponHelper.CROSSBOW_PROJECTILE_SPEED,
+                    RangedWeaponHelper.crossbowInaccuracy(this.level().getDifficulty()),
                     target
             );
             this.onCrossbowAttackPerformed();
@@ -2049,8 +2068,19 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
                 return false;
             }
             direction = solution.get().direction();
+        } else if (projectile.isNoGravity()) {
+            direction = target.position().add(0.0D, target.getBbHeight() * 0.5D, 0.0D).subtract(projectile.position());
         } else {
-            direction = RangedWeaponHelper.calculateBowShotVector(projectile.position(), target.position(), target.getBbHeight());
+            direction = RangedWeaponHelper.solveBowShot(projectile.position(), target.position(),
+                            target.getBbHeight(), Vec3.ZERO)
+                    .map(RangedWeaponHelper.BowShot::direction)
+                    .orElseGet(() -> {
+                        double dx = target.getX() - projectile.getX();
+                        double dy = target.getY(1.0D / 3.0D) - projectile.getY();
+                        double dz = target.getZ() - projectile.getZ();
+                        double horizontal = Math.sqrt(dx * dx + dz * dz);
+                        return new Vec3(dx, dy + horizontal * 0.2D, dz);
+                    });
         }
         projectile.shoot(direction.x, direction.y, direction.z,
                 RangedWeaponHelper.BOW_PROJECTILE_SPEED, RangedWeaponHelper.BOW_INACCURACY);
@@ -2071,28 +2101,6 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         } else {
             return ItemStack.EMPTY;
         }
-    }
-
-    @Override
-    public void startSleeping(BlockPos bed) {
-        super.startSleeping(bed);
-        BedDebugLog.lifecycle(this, "sleep-start", bed);
-    }
-
-    @Override
-    public void stopSleeping() {
-        BlockPos bed = getSleepingPos().orElse(null);
-        BedDebugLog.lifecycle(this, "wake-before", bed);
-        super.stopSleeping();
-        BedDebugLog.lifecycle(this, "wake-after", bed);
-    }
-
-    @Override
-    public void remove(RemovalReason reason) {
-        if (isSleeping()) {
-            BedDebugLog.lifecycle(this, "remove-sleeper/" + reason, getSleepingPos().orElse(null));
-        }
-        super.remove(reason);
     }
 
     private void tickDespawnDelay() {

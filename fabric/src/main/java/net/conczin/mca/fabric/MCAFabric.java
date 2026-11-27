@@ -169,6 +169,9 @@ public final class MCAFabric implements ModInitializer {
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) ->
                 ServerInteractionManager.getInstance().onPlayerJoin(handler.player)
         );
+        ServerPlayConnectionEvents.DISCONNECT.register((handler, server) ->
+                ServerInteractionManager.getInstance().clearDestinySession(handler.player.getUUID())
+        );
 
         ServerPlayerEvents.AFTER_RESPAWN.register((oldPlayer, newPlayer, alive) ->
                 ServerInteractionManager.getInstance().onPlayerRespawn(newPlayer)
@@ -186,4 +189,3 @@ public final class MCAFabric implements ModInitializer {
         }
     }
 }
-

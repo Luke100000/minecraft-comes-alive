@@ -2,7 +2,9 @@ package net.conczin.mca.entity.ai;
 
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
+import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.conczin.mca.entity.ai.brain.tasks.ExtendedWalkTowardsTask;
+import net.conczin.mca.entity.ai.brain.tasks.WanderOrTeleportToTargetTask;
 import net.conczin.mca.entity.ai.navigation.BedApproachTarget;
 import net.conczin.mca.gametest.GameTestTerrain;
 import net.conczin.mca.server.world.data.Building;
@@ -299,6 +301,76 @@ public final class ResidencySetHomeGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "mca_replaced_sleeping_home", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void displacedHomeOutsideVillageCannotPinReplacementTicket(GameTestHelper helper) {
+        placeFloor(helper, 1, 10, 3, 8);
+        BlockPos foot = helper.absolutePos(new BlockPos(7, 1, 5));
+        BlockPos head = placeBed(helper, foot, Direction.EAST);
+        helper.assertTrue(VillageManager.get(helper.getLevel())
+                        .findNearestVillage(head, net.conczin.mca.server.world.data.Village.BORDER_MARGIN).isEmpty(),
+                "fixture bed was inside a registered MCA village");
+
+        VillagerEntityMCA formerOwner = spawnVillager(helper, helper.absolutePos(new BlockPos(2, 1, 5)));
+        REPLACEMENT_VILLAGERS.add(formerOwner);
+        helper.assertTrue(formerOwner.getResidency().trySetHome(helper.getLevel(), foot), "original claim failed");
+        replaceBed(helper, foot, head);
+
+        helper.startSequence().thenIdle(2).thenExecute(() -> {
+            helper.assertTrue(helper.getLevel().getPoiManager().getFreeTickets(head) == 1,
+                    "replaced bed did not create a fresh HOME ticket");
+            VillagerEntityMCA claimant = spawnVillager(helper, head.north(3));
+            REPLACEMENT_VILLAGERS.add(claimant);
+            helper.assertTrue(claimant.getResidency().trySetHome(helper.getLevel(), foot),
+                    "replacement villager did not claim the new HOME ticket");
+            helper.assertTrue(helper.getLevel().getPoiManager().getFreeTickets(head) == 0,
+                    "replacement ticket was not claimed");
+            helper.assertTrue(!formerOwner.getResidency().trySetHome(helper.getLevel(), foot),
+                    "displaced HOME succeeded despite the replacement ticket belonging to another villager");
+            helper.assertTrue(helper.getLevel().getPoiManager().getFreeTickets(head) == 0,
+                    "displaced HOME released the replacement ticket");
+        }).thenSucceed();
+    }
+
+    @GameTest(batch = "mca_replaced_sleeping_home", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void occupiedBedValidationOutsideVillageKeepsReplacementTicket(GameTestHelper helper) {
+        placeFloor(helper, 1, 10, 3, 8);
+        BlockPos foot = helper.absolutePos(new BlockPos(7, 1, 5));
+        BlockPos head = placeBed(helper, foot, Direction.EAST);
+        helper.assertTrue(VillageManager.get(helper.getLevel())
+                        .findNearestVillage(head, net.conczin.mca.server.world.data.Village.BORDER_MARGIN).isEmpty(),
+                "fixture bed was inside a registered MCA village");
+
+        VillagerEntityMCA formerOwner = spawnVillager(helper, helper.absolutePos(new BlockPos(2, 1, 5)));
+        REPLACEMENT_VILLAGERS.add(formerOwner);
+        helper.assertTrue(formerOwner.getResidency().trySetHome(helper.getLevel(), foot), "original claim failed");
+        replaceBed(helper, foot, head);
+
+        helper.startSequence().thenIdle(2).thenExecute(() -> {
+            helper.assertTrue(helper.getLevel().getPoiManager().getFreeTickets(head) == 1,
+                    "replaced bed did not create a fresh HOME ticket");
+            VillagerEntityMCA claimant = spawnVillager(helper, head.north(3));
+            REPLACEMENT_VILLAGERS.add(claimant);
+            helper.assertTrue(claimant.getResidency().trySetHome(helper.getLevel(), foot),
+                    "replacement villager did not claim the new HOME ticket");
+            helper.assertTrue(!claimant.isSleeping(), "replacement claimant unexpectedly slept");
+            helper.assertTrue(helper.getLevel().getPoiManager().getFreeTickets(head) == 0,
+                    "replacement ticket was not claimed");
+
+            BlockState state = helper.getLevel().getBlockState(head);
+            helper.getLevel().setBlock(head, state.setValue(BedBlock.OCCUPIED, true), 3);
+            var validator = ValidateNearbyPoi.create(poi -> poi.is(PoiTypes.HOME), MemoryModuleType.HOME);
+            helper.assertTrue(validator.tryStart(helper.getLevel(), formerOwner, helper.getLevel().getGameTime()),
+                    "former owner's HOME validator did not run");
+            helper.assertTrue(formerOwner.getResidency().getHome().isEmpty(),
+                    "validator retained stale HOME for occupied replacement bed");
+            helper.assertTrue(helper.getLevel().getPoiManager().getFreeTickets(head) == 0,
+                    "stale HOME validation released another villager's replacement ticket");
+            helper.assertTrue(claimant.getResidency().getHome()
+                            .filter(home -> home.pos().equals(head)).isPresent(),
+                    "replacement claimant lost HOME memory");
+        }).thenSucceed();
+    }
+
     @GameTest(batch = "mca_home_claim_handoff", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
     public static void staleHomeGiveUpCannotReleaseCanonicalTicket(GameTestHelper helper) {
         prepareClaimVillage(helper);
@@ -315,7 +387,7 @@ public final class ResidencySetHomeGameTests {
         long now = helper.getLevel().getGameTime();
         walk.tryStart(helper.getLevel(), duplicate, now);
         duplicate.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
-        duplicate.getBrain().setMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE, now - 200L);
+        WalkTargetFailureMemory.record(duplicate, head, now - 200L);
         walk.tryStart(helper.getLevel(), duplicate, now + 1L);
 
         helper.assertTrue(duplicate.getBrain().getMemoryInternal(MemoryModuleType.HOME).isEmpty(),
@@ -568,8 +640,15 @@ public final class ResidencySetHomeGameTests {
                 "HOME movement producer did not run");
         helper.assertTrue(owner.getBrain().hasMemoryValue(MemoryModuleType.WALK_TARGET),
                 "HOME movement producer did not assign movement");
-        helper.assertTrue(owner.getNavigation().moveTo(head.getX(), head.getY(), head.getZ(), 0.5D),
-                "fixture could not start HOME navigation");
+        var homeCommand = owner.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElseThrow();
+        var sink = new WanderOrTeleportToTargetTask();
+        helper.assertTrue(sink.tryStart(helper.getLevel(), owner, helper.getLevel().getGameTime()),
+                "fixture could not admit HOME navigation through its movement sink");
+        var homePath = owner.getNavigation().getPath();
+        helper.assertTrue(homePath != null && !owner.getNavigation().isDone()
+                        && owner.getBrain().getMemory(MemoryModuleType.PATH).filter(path -> path == homePath).isPresent()
+                        && owner.getBrain().getMemory(MemoryModuleType.WALK_TARGET).filter(command -> command == homeCommand).isPresent(),
+                "fixture did not establish the admitted HOME command and path");
         replaceBed(helper, foot, head);
         VillagerEntityMCA claimant = spawnVillager(helper, head.north(3));
 

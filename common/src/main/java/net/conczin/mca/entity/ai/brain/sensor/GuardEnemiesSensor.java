@@ -31,11 +31,11 @@ import java.util.*;
  * Villager nearby-entity sensor with dedicated long-range guard enemy acquisition.
  * <p>
  * Non-combat villagers keep vanilla's 16-block query. Guards, followed-player defenders, and villagers already
- * in combat query once at guard range, then derive the normal 16-block nearby memories from that same result.
+ * in combat query once or twice at guard range, then derive the normal 16-block nearby memories from that result.
  */
 public class GuardEnemiesSensor extends Sensor<LivingEntity> {
     private static final double VANILLA_NEARBY_RANGE = 16.0;
-    private static final double GUARD_ENEMY_RANGE = 30.0;
+    private static final double GUARD_ENEMY_RANGE = 32.0;
     private static final double GUARD_ENEMY_RANGE_SQR = GUARD_ENEMY_RANGE * GUARD_ENEMY_RANGE;
     // LivingEntity.hasLineOfSight stops checking targets beyond 128 blocks.
     private static final double MAX_FOLLOWED_PLAYER_SCAN_DISTANCE_SQR = (128.0 + GUARD_ENEMY_RANGE)
@@ -77,15 +77,17 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
                 || villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).isPresent();
 
         AABB vanillaBounds = villager.getBoundingBox().inflate(VANILLA_NEARBY_RANGE);
-        AABB scanBounds = shouldScan ? getGuardScanBounds(villager, followedPlayer) : vanillaBounds;
+        AABB guardBounds = shouldScan ? villager.getBoundingBox().inflate(GUARD_ENEMY_RANGE) : vanillaBounds;
+        Optional<AABB> followedPlayerBounds = followedPlayer.map(player -> player.getBoundingBox().inflate(GUARD_ENEMY_RANGE));
+        AABB scanBounds = shouldScan ? getGuardScanBounds(guardBounds, followedPlayerBounds) : vanillaBounds;
         List<LivingEntity> candidates = world.getEntitiesOfClass(
                 LivingEntity.class,
                 scanBounds,
                 target -> target != villager && target.isAlive()
         );
-        if (followedPlayer.isPresent()
+        if (followedPlayerBounds.isPresent()
                 && villager.distanceToSqr(followedPlayer.orElseThrow()) <= MAX_FOLLOWED_PLAYER_SCAN_DISTANCE_SQR) {
-            AABB playerBounds = followedPlayer.orElseThrow().getBoundingBox().inflate(GUARD_ENEMY_RANGE);
+            AABB playerBounds = followedPlayerBounds.orElseThrow();
             if (!scanBounds.minmax(playerBounds).equals(scanBounds)) {
                 // A distant player must not expand one world query across the empty
                 // space between them and the guard. Still scan their defense area
@@ -99,10 +101,13 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
             }
         }
 
-        List<LivingEntity> nearbyEntities = new ArrayList<>();
-        for (LivingEntity candidate : candidates) {
-            if (vanillaBounds.intersects(candidate.getBoundingBox())) {
-                nearbyEntities.add(candidate);
+        List<LivingEntity> nearbyEntities = candidates;
+        if (shouldScan) {
+            nearbyEntities = new ArrayList<>();
+            for (LivingEntity candidate : candidates) {
+                if (vanillaBounds.intersects(candidate.getBoundingBox())) {
+                    nearbyEntities.add(candidate);
+                }
             }
         }
         nearbyEntities.sort(Comparator.comparingDouble(villager::distanceToSqr));
@@ -210,17 +215,16 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
         return creeper.getTarget() instanceof Villager;
     }
 
-    private static AABB getGuardScanBounds(VillagerEntityMCA guard, Optional<Player> followedPlayer) {
-        AABB bounds = guard.getBoundingBox().inflate(GUARD_ENEMY_RANGE);
-        if (followedPlayer.isPresent()) {
-            AABB combined = bounds.minmax(followedPlayer.get().getBoundingBox().inflate(GUARD_ENEMY_RANGE));
-            double maxVolume = bounds.getXsize() * bounds.getYsize() * bounds.getZsize()
+    private static AABB getGuardScanBounds(AABB guardBounds, Optional<AABB> followedPlayerBounds) {
+        if (followedPlayerBounds.isPresent()) {
+            AABB combined = guardBounds.minmax(followedPlayerBounds.get());
+            double maxVolume = guardBounds.getXsize() * guardBounds.getYsize() * guardBounds.getZsize()
                     * MAX_COMBINED_SCAN_VOLUME_FACTOR;
             if (combined.getXsize() * combined.getYsize() * combined.getZsize() <= maxVolume) {
                 return combined;
             }
         }
-        return bounds;
+        return guardBounds;
     }
 
     private static boolean isWithinGuardEnemyRange(

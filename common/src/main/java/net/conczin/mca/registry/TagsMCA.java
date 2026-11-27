@@ -3,10 +3,15 @@ package net.conczin.mca.registry;
 import net.conczin.mca.MCA;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.tags.TagKey;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
 
 public interface TagsMCA {
+    interface EntityTypes {
+        TagKey<EntityType<?>> SPAWN_AT_INN = TagKey.create(Registries.ENTITY_TYPE, MCA.locate("spawn_at_inn"));
+    }
+
     interface Blocks {
         TagKey<Block> TOMBSTONES = register("tombstones");
 

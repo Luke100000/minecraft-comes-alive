@@ -9,6 +9,8 @@ import net.conczin.mca.util.network.datasync.CDataParameter;
 import net.conczin.mca.util.network.datasync.CParameter;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.syncher.EntityDataAccessor;
+import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
@@ -72,6 +74,14 @@ public class Traits {
 
     public static <E extends Entity> CDataManager.Builder<E> createTrackedData(CDataManager.Builder<E> builder) {
         return builder.addAll(TRAITS);
+    }
+
+    public static boolean affectsDimensions(CDataManager<?> data, EntityDataAccessor<?> accessor) {
+        return data.isParam(TRAITS, accessor);
+    }
+
+    public static boolean affectsDimensions(CDataManager<?> data, SynchedEntityData.DataValue<?> value) {
+        return data.isParam(TRAITS, value);
     }
 
     public Set<Trait> getTraits() {

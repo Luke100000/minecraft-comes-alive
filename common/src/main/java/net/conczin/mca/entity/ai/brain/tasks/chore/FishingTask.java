@@ -14,6 +14,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -95,7 +96,7 @@ public class FishingTask extends AbstractChoreTask {
 
         if (villager.isUsingRecoveryFood()) {
             if (bobber != null) {
-                MCA.LOGGER.info(
+                MCA.LOGGER.debug(
                         "[MCA Fishing Debug] recovery-pause villager={} bobber={} held={} inventoryRods={}",
                         villager.getUUID(), bobber.getId(), villager.getItemInHand(villager.getDominantHand()),
                         villager.getInventory().countItem(Items.FISHING_ROD)
@@ -175,7 +176,7 @@ public class FishingTask extends AbstractChoreTask {
                 failedTicks = FAILED_COOLDOWN;
                 return;
             }
-            villager.moveTowardsPersistent(currentSite.standingPos(), 0.5F, 0);
+            moveTowardsChorePosition(currentSite.standingPos(), 0.5F, 0);
             fishingWalkTarget = villager.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null);
             return;
         }
@@ -214,7 +215,7 @@ public class FishingTask extends AbstractChoreTask {
                         MIN_BITE_REACTION_TICKS,
                         MAX_BITE_REACTION_TICKS
                 );
-                MCA.LOGGER.info(
+                MCA.LOGGER.debug(
                         "[MCA Fishing Debug] bite-reaction-start villager={} bobber={} delayTicks={}",
                         villager.getUUID(), bobber.getId(), biteReactionTicksRemaining
                 );
@@ -226,7 +227,7 @@ public class FishingTask extends AbstractChoreTask {
 
             biteAttempted = true;
             boolean catchSucceeded = shouldReelBite(villager);
-            MCA.LOGGER.info(
+            MCA.LOGGER.debug(
                     "[MCA Fishing Debug] bite-observed villager={} bobber={} result={} held={} inventoryRods={}",
                     villager.getUUID(), bobber.getId(), catchSucceeded ? "CATCH" : "MISS",
                     villager.getItemInHand(villager.getDominantHand()), villager.getInventory().countItem(Items.FISHING_ROD)
@@ -299,9 +300,6 @@ public class FishingTask extends AbstractChoreTask {
             }
 
             ItemEntity item = new ItemEntity(world, reelOrigin.x, reelOrigin.y, reelOrigin.z, stack);
-            item.setThrower(villager);
-            item.setTarget(villager.getUUID());
-            item.setNeverPickUp();
             item.setDeltaMovement(
                     dx * 0.1,
                     dy * 0.1 + Math.sqrt(Math.sqrt(distanceSqr)) * 0.08,
@@ -309,10 +307,6 @@ public class FishingTask extends AbstractChoreTask {
             );
             world.addFreshEntity(item);
             reelItems.add(item);
-            MCA.LOGGER.info(
-                    "[MCA Fishing Debug] reel-start villager={} bobber={} item={} itemEntity={} inventoryRods={}",
-                    villager.getUUID(), bobber.getId(), stack, item.getId(), villager.getInventory().countItem(Items.FISHING_ROD)
-            );
         }
         reelTicks = 0;
 
@@ -334,7 +328,7 @@ public class FishingTask extends AbstractChoreTask {
         );
         for (int i = reelItems.size() - 1; i >= 0; i--) {
             ItemEntity item = reelItems.get(i);
-            if (item.isRemoved()) {
+            if (item.isRemoved() || item.getItem().isEmpty()) {
                 reelItems.remove(i);
                 continue;
             }
@@ -362,56 +356,22 @@ public class FishingTask extends AbstractChoreTask {
     }
 
     private void finishReelItem(VillagerEntityMCA villager, ItemEntity item) {
-        if (item.isRemoved()) {
+        if (item.isRemoved() || item.getItem().isEmpty()) {
             return;
         }
 
         ItemStack remainder = villager.getInventory().addItem(item.getItem());
         if (remainder.isEmpty()) {
-            MCA.LOGGER.info(
-                    "[MCA Fishing Debug] reel-delivered villager={} itemEntity={} inventoryRods={}",
-                    villager.getUUID(), item.getId(), villager.getInventory().countItem(Items.FISHING_ROD)
-            );
             item.discard();
         } else {
             item.setItem(remainder);
-            releasePickupProtection(item);
-            MCA.LOGGER.info(
-                    "[MCA Fishing Debug] reel-remainder villager={} itemEntity={} remainder={} inventoryRods={}",
-                    villager.getUUID(), item.getId(), remainder, villager.getInventory().countItem(Items.FISHING_ROD)
-            );
         }
-    }
-
-    private void finishReelItems(VillagerEntityMCA villager) {
-        for (ItemEntity item : reelItems) {
-            finishReelItem(villager, item);
-        }
-        clearReelItems();
-    }
-
-    private void releaseReelItems() {
-        for (ItemEntity item : reelItems) {
-            if (!item.isRemoved()) {
-                releasePickupProtection(item);
-            }
-        }
-        clearReelItems();
-    }
-
-    private static void releasePickupProtection(ItemEntity item) {
-        item.setTarget(null);
-        item.setNoPickUpDelay();
-    }
-
-    private void clearReelItems() {
-        reelItems.clear();
-        reelTicks = 0;
     }
 
     private boolean equipFishingRod(VillagerEntityMCA villager) {
         ItemStack heldStack = villager.getItemInHand(villager.getDominantHand());
         if (Chore.FISH.matchesTool(heldStack)) {
+            rememberChoreHand(heldStack);
             return true;
         }
 
@@ -421,8 +381,10 @@ public class FishingTask extends AbstractChoreTask {
             return false;
         }
 
-        villager.setItemInHand(villager.getDominantHand(), villager.getInventory().getItem(slot));
-        MCA.LOGGER.info(
+        ItemStack rod = villager.getInventory().getItem(slot);
+        villager.setItemInHand(villager.getDominantHand(), rod);
+        rememberChoreHand(rod);
+        MCA.LOGGER.debug(
                 "[MCA Fishing Debug] rod-equipped villager={} slot={} held={} inventoryRods={}",
                 villager.getUUID(), slot, villager.getItemInHand(villager.getDominantHand()),
                 villager.getInventory().countItem(Items.FISHING_ROD)
@@ -442,7 +404,8 @@ public class FishingTask extends AbstractChoreTask {
                 .withParameter(LootContextParams.ORIGIN, bobber.position())
                 .withParameter(LootContextParams.TOOL, fishingRod)
                 .withParameter(LootContextParams.THIS_ENTITY, bobber)
-                .withLuck(EnchantmentHelper.getFishingLuckBonus(world, fishingRod, villager));
+                .withLuck(EnchantmentHelper.getFishingLuckBonus(world, fishingRod, villager)
+                        + (float) villager.getAttributeValue(Attributes.LUCK));
         return lootTable.getRandomItems(builder.create(LootContextParamSets.FISHING));
     }
 
@@ -459,13 +422,13 @@ public class FishingTask extends AbstractChoreTask {
 
     @Override
     protected void stop(ServerLevel world, VillagerEntityMCA villager, long time) {
-        if (!reelItems.isEmpty()) {
-            if (villager.isAlive() && !villager.isRemoved()) {
-                finishReelItems(villager);
-            } else {
-                releaseReelItems();
+        if (villager.isAlive() && !villager.isRemoved()) {
+            for (ItemEntity item : reelItems) {
+                finishReelItem(villager, item);
             }
         }
+        reelItems.clear();
+        reelTicks = 0;
 
         discardBobber(villager);
         clearFishingMovement(villager);
@@ -477,9 +440,6 @@ public class FishingTask extends AbstractChoreTask {
             villager.stopUsingItem();
         }
 
-        ItemStack stack = villager.getItemInHand(villager.getDominantHand());
-        if (Chore.FISH.matchesTool(stack)) {
-            villager.setItemInHand(villager.getDominantHand(), ItemStack.EMPTY);
-        }
+        releaseChoreHand(villager, Chore.FISH);
     }
 }

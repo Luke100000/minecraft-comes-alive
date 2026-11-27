@@ -3,10 +3,13 @@ package net.conczin.mca.entity.ai.brain.tasks;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
 import net.conczin.mca.entity.ai.RangedWeaponHelper;
+import net.conczin.mca.gametest.GameTestTerrain;
 import net.conczin.mca.registry.ProfessionsMCA;
 import net.minecraft.core.BlockPos;
+import net.minecraft.gametest.framework.AfterBatch;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -27,6 +30,7 @@ import java.util.List;
 @PrefixGameTestTemplate(false)
 public final class ArcherBowTrajectoryGameTests {
     private static final List<Entity> TEST_ENTITIES = new ArrayList<>();
+    private static final List<ChunkPos> FORCED_CHUNKS = new ArrayList<>();
 
     private ArcherBowTrajectoryGameTests() {
     }
@@ -59,6 +63,21 @@ public final class ArcherBowTrajectoryGameTests {
                 new BlockPos(18, 22, 8),
                 "downhill"
         );
+    }
+
+    @AfterBatch(batch = "mca_archer_bow_level_skeleton")
+    public static void cleanupLevelTrajectory(ServerLevel level) {
+        cleanupTrajectory(level);
+    }
+
+    @AfterBatch(batch = "mca_archer_bow_uphill_skeleton")
+    public static void cleanupUphillTrajectory(ServerLevel level) {
+        cleanupTrajectory(level);
+    }
+
+    @AfterBatch(batch = "mca_archer_bow_downhill_skeleton")
+    public static void cleanupDownhillTrajectory(ServerLevel level) {
+        cleanupTrajectory(level);
     }
 
     private static void runSkeletonTrajectoryCase(
@@ -111,11 +130,12 @@ public final class ArcherBowTrajectoryGameTests {
                         1.0F,
                         bow
                 );
-                Vec3 shot = RangedWeaponHelper.calculateBowShotVector(
+                Vec3 shot = RangedWeaponHelper.solveBowShot(
                         projectile.position(),
                         skeleton.position(),
-                        skeleton.getBbHeight()
-                );
+                        skeleton.getBbHeight(),
+                        Vec3.ZERO
+                ).orElseThrow().direction();
                 projectile.shoot(shot.x, shot.y, shot.z, 1.6F, 0.0F);
                 helper.getLevel().addFreshEntity(projectile);
                 TEST_ENTITIES.add(projectile);
@@ -143,6 +163,10 @@ public final class ArcherBowTrajectoryGameTests {
                                 + ", arrowPos=" + (arrow[0] == null ? null : arrow[0].position())
                                 + ", arrowMotion=" + (arrow[0] == null ? null : arrow[0].getDeltaMovement())
                                 + ", arrowTickCount=" + (arrow[0] == null ? -1 : arrow[0].tickCount)
+                                + ", archerTickCount=" + archer.tickCount
+                                + ", archerEntityTicking=" + helper.getLevel().isPositionEntityTicking(archer.blockPosition())
+                                + ", arrowEntityTicking=" + (arrow[0] != null
+                                && helper.getLevel().isPositionEntityTicking(arrow[0].blockPosition()))
                                 + ", arrowPickable=" + (arrow[0] != null && arrow[0].isPickable())
                                 + ", arrowBlock=" + (arrow[0] == null
                                 ? null
@@ -168,11 +192,9 @@ public final class ArcherBowTrajectoryGameTests {
         int maxZ = Math.max(first.getZ(), second.getZ()) + 2;
         ChunkPos minChunk = new ChunkPos(new BlockPos(minX, first.getY(), minZ));
         ChunkPos maxChunk = new ChunkPos(new BlockPos(maxX, first.getY(), maxZ));
-        for (int chunkX = minChunk.x; chunkX <= maxChunk.x; chunkX++) {
-            for (int chunkZ = minChunk.z; chunkZ <= maxChunk.z; chunkZ++) {
-                helper.getLevel().setChunkForced(chunkX, chunkZ, true);
-            }
-        }
+        // The GameTest template is smaller than this terrain. Forced tickets must
+        // become entity-ticking before the arrow is spawned and measured.
+        GameTestTerrain.ensureEntityTickingChunks(helper, minChunk, maxChunk, FORCED_CHUNKS);
 
         for (int x = minX; x <= maxX; x++) {
             for (int z = minZ; z <= maxZ; z++) {
@@ -202,5 +224,11 @@ public final class ArcherBowTrajectoryGameTests {
             }
             return true;
         });
+    }
+
+    private static void cleanupTrajectory(ServerLevel level) {
+        cleanupTestEntities();
+        FORCED_CHUNKS.forEach(chunk -> level.setChunkForced(chunk.x, chunk.z, false));
+        FORCED_CHUNKS.clear();
     }
 }
