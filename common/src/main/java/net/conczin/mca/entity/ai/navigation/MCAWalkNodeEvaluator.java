@@ -11,6 +11,7 @@ import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.level.CollisionGetter;
 import net.minecraft.world.level.PathNavigationRegion;
 import net.minecraft.world.level.block.Blocks;
@@ -805,17 +806,10 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         return PathNodeGeometry.bodyAt(this.mob, standing).move(0.0D, FLOOR_EPSILON, 0.0D);
     }
 
-    private boolean canSweepTo(AABB startBox, AABB destinationBox, CollisionGetter collisions) {
-        AABB sweepBox = startBox;
-        double rise = destinationBox.minY - startBox.minY;
-        if (rise > RAISED_START_EPSILON) {
-            AABB verticalSweep = startBox.expandTowards(0.0D, rise, 0.0D);
-            if (!collisions.noBlockCollision(this.mob, verticalSweep)) {
-                return false;
-            }
-            sweepBox = startBox.move(0.0D, rise, 0.0D);
-        }
+    private static final int MAX_JUMP_SWEEP_TICKS = 20;
 
+    private boolean canSweepTo(AABB startBox, AABB destinationBox, CollisionGetter collisions) {
+        double rise = destinationBox.minY - startBox.minY;
         Vec3 travel = new Vec3(
                 destinationBox.minX - startBox.minX,
                 0.0D,
@@ -823,9 +817,136 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         );
         int steps = Mth.ceil(travel.length() / startBox.getSize());
         if (steps <= 0) {
-            return true;
+            return rise <= RAISED_START_EPSILON
+                    || collisions.noBlockCollision(this.mob, startBox.expandTowards(0.0D, rise, 0.0D));
+        }
+        if (rise > this.mob.maxUpStep()) {
+            if (canStepUpTo(startBox, destinationBox, travel, collisions)) {
+                return true;
+            }
+            if (!collisions.noBlockCollision(this.mob, startBox.expandTowards(0.0D, rise, 0.0D))) {
+                return false;
+            }
+            return canJumpSweepTo(startBox, rise, travel, steps, collisions);
         }
 
+        AABB sweepBox = startBox;
+        if (rise > RAISED_START_EPSILON) {
+            if (!collisions.noBlockCollision(this.mob, startBox.expandTowards(0.0D, rise, 0.0D))) {
+                return false;
+            }
+            sweepBox = startBox.move(0.0D, rise, 0.0D);
+        }
+        return canSweepHorizontally(sweepBox, travel, steps, collisions);
+    }
+
+    /**
+     * Multi-tread obstacles such as stairs can exceed {@code maxUpStep()} overall while remaining
+     * walkable via consecutive step-ups without jumping.
+     */
+    private boolean canStepUpTo(AABB startBox, AABB destinationBox, Vec3 travel, CollisionGetter collisions) {
+        double maxStep = this.mob.maxUpStep();
+        if (maxStep <= 0.0D) {
+            return false;
+        }
+
+        int stepCount = Math.max(4, Mth.ceil(travel.length() * 4.0D));
+        double stepX = travel.x / stepCount;
+        double stepZ = travel.z / stepCount;
+        AABB current = startBox;
+        for (int index = 0; index < stepCount; index++) {
+            AABB next = current.move(stepX, 0.0D, stepZ);
+            if (collisions.noBlockCollision(this.mob, next)) {
+                current = next;
+                continue;
+            }
+
+            double bestStepUp = Double.POSITIVE_INFINITY;
+            for (VoxelShape shape : collisions.getBlockCollisions(this.mob, next)) {
+                for (double yCoord : shape.getCoords(Direction.Axis.Y)) {
+                    double stepUp = yCoord - current.minY;
+                    if (stepUp <= BOX_EPSILON || stepUp > maxStep + BOX_EPSILON || stepUp >= bestStepUp) {
+                        continue;
+                    }
+                    if (collisions.noBlockCollision(this.mob, current.expandTowards(0.0D, stepUp, 0.0D))
+                            && collisions.noBlockCollision(this.mob, next.move(0.0D, stepUp, 0.0D))) {
+                        bestStepUp = stepUp;
+                    }
+                }
+            }
+            if (!Double.isFinite(bestStepUp)) {
+                return false;
+            }
+            current = next.move(0.0D, bestStepUp, 0.0D);
+        }
+        return current.minY >= destinationBox.minY - FLOOR_EPSILON - BOX_EPSILON;
+    }
+
+    /**
+     * A sheer step taller than {@code maxUpStep()} crosses only on discrete vanilla jump ticks.
+     * Raised partial floors can overshoot a tight ceiling window that continuous min-rise sweeps admit.
+     */
+    private boolean canJumpSweepTo(
+            AABB startBox,
+            double rise,
+            Vec3 travel,
+            int steps,
+            CollisionGetter collisions
+    ) {
+        double jumpPower = getJumpPowerAt(startBox, collisions);
+        if (jumpPower <= 1.0E-5F) {
+            return false;
+        }
+        double gravity = this.mob.getGravity();
+        if (gravity <= 0.0D) {
+            return canSweepHorizontally(startBox.move(0.0D, rise, 0.0D), travel, steps, collisions);
+        }
+
+        double yOffset = 0.0D;
+        double velocityY = jumpPower;
+        for (int tick = 0; tick < MAX_JUMP_SWEEP_TICKS; tick++) {
+            AABB current = startBox.move(0.0D, yOffset, 0.0D);
+            double dy = velocityY;
+            double collidedDy = Shapes.collide(
+                    Direction.Axis.Y,
+                    current,
+                    collisions.getBlockCollisions(this.mob, current.expandTowards(0.0D, dy, 0.0D)),
+                    dy
+            );
+            yOffset += collidedDy;
+            boolean verticalCollision = Math.abs(collidedDy - dy) > BOX_EPSILON;
+            if (verticalCollision) {
+                if (dy > 0.0D) {
+                    velocityY = 0.0D;
+                } else {
+                    break;
+                }
+            }
+            if (yOffset >= rise - FLOOR_EPSILON
+                    && canSweepHorizontally(startBox.move(0.0D, yOffset, 0.0D), travel, steps, collisions)) {
+                return true;
+            }
+            velocityY = (velocityY - gravity) * 0.98D;
+            if (yOffset <= 0.0D && velocityY <= 0.0D) {
+                break;
+            }
+        }
+        return false;
+    }
+
+    private double getJumpPowerAt(AABB startBox, CollisionGetter collisions) {
+        int x = Mth.floor((startBox.minX + startBox.maxX) * 0.5D);
+        int z = Mth.floor((startBox.minZ + startBox.maxZ) * 0.5D);
+        float inBlockFactor = collisions.getBlockState(this.collisionPos.set(x, Mth.floor(startBox.minY), z))
+                .getBlock().getJumpFactor();
+        float jumpFactor = inBlockFactor != 1.0F ? inBlockFactor
+                : collisions.getBlockState(this.collisionPos.set(x, Mth.floor(startBox.minY - 0.500001F), z))
+                        .getBlock().getJumpFactor();
+        return (float) this.mob.getAttributeValue(Attributes.JUMP_STRENGTH) * jumpFactor
+                + this.mob.getJumpBoostPower();
+    }
+
+    private boolean canSweepHorizontally(AABB sweepBox, Vec3 travel, int steps, CollisionGetter collisions) {
         Vec3 step = travel.scale(1.0D / steps);
         for (int index = 0; index < steps; index++) {
             sweepBox = sweepBox.move(step);

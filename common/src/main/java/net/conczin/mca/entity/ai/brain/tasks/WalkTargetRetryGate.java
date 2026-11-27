@@ -17,6 +17,8 @@ public final class WalkTargetRetryGate {
     private final int immediateRetries;
     @Nullable
     private final MemoryModuleType<GlobalPos> destinationMemory;
+    @Nullable
+    private GlobalPos assignment;
     private BlockPos previousDestination;
     private long previousAttemptTime;
     private BlockPos stalledOrigin;
@@ -24,7 +26,6 @@ public final class WalkTargetRetryGate {
     private long stalledSince;
     private int immediateRetriesRemaining;
     private long openPreemptedSince = Long.MIN_VALUE;
-    private long pendingFailureShift;
     private long unresolvedFailureSince = Long.MIN_VALUE;
 
     public WalkTargetRetryGate(long retryIntervalTicks, double progressDistanceSqr) {
@@ -46,6 +47,20 @@ public final class WalkTargetRetryGate {
     @Nullable
     public MemoryModuleType<GlobalPos> destinationMemory() {
         return destinationMemory;
+    }
+
+    @Nullable
+    public GlobalPos assignment() {
+        return assignment;
+    }
+
+    void bindAssignment(GlobalPos assignment) {
+        this.assignment = assignment;
+    }
+
+    public void forgetAssignment() {
+        resetActive();
+        assignment = null;
     }
 
     @Nullable
@@ -75,8 +90,10 @@ public final class WalkTargetRetryGate {
                 progressOrigin = origin.immutable();
                 stalledSince = gameTime;
                 openPreemptedSince = Long.MIN_VALUE;
-                pendingFailureShift = 0L;
-                unresolvedFailureSince = Long.MIN_VALUE;
+                // The first reservation may follow adoption of a matching runtime failure.
+                if (previousDestination != null || assignment == null || !assignment.pos().equals(destination)) {
+                    unresolvedFailureSince = Long.MIN_VALUE;
+                }
             }
         }
 
@@ -87,18 +104,22 @@ public final class WalkTargetRetryGate {
 
     /** Completion or a changed route ends the matching retry episode. */
     void reset(BlockPos destination) {
-        if (previousDestination != null && previousDestination.equals(destination)) {
-            previousDestination = null;
-            openPreemptedSince = Long.MIN_VALUE;
-            pendingFailureShift = 0L;
-            unresolvedFailureSince = Long.MIN_VALUE;
+        if (matchesDestination(destination)) {
+            resetActive();
+        }
+    }
+
+    /** A changed route permits one immediate attempt within the existing failure episode. */
+    void permitRetryAfterInvalidation(BlockPos destination, long gameTime) {
+        if (destination.equals(previousDestination)) {
+            previousAttemptTime = gameTime - retryIntervalTicks;
         }
     }
 
     public void resetActive() {
-        if (previousDestination != null) {
-            reset(previousDestination);
-        }
+        previousDestination = null;
+        openPreemptedSince = Long.MIN_VALUE;
+        unresolvedFailureSince = Long.MIN_VALUE;
     }
 
     /** An active partial path may make progress without asking its producer for a new target. */
@@ -130,7 +151,14 @@ public final class WalkTargetRetryGate {
     }
 
     public void noteFailure(BlockPos destination, long since) {
-        if (previousDestination != null && previousDestination.equals(destination)) {
+        if (unresolvedFailureSince == Long.MIN_VALUE && matchesDestination(destination)) {
+            unresolvedFailureSince = since;
+        }
+    }
+
+    /** Reconcile a clock from another gate of the same logical owner after closing preemption. */
+    public void adoptEstablishedFailure(BlockPos destination, long since) {
+        if (matchesDestination(destination)) {
             unresolvedFailureSince = since;
         }
     }
@@ -140,16 +168,16 @@ public final class WalkTargetRetryGate {
     }
 
     public long unresolvedFailureSince(BlockPos destination) {
-        return previousDestination != null && previousDestination.equals(destination)
-                ? unresolvedFailureSince
-                : Long.MIN_VALUE;
+        return matchesDestination(destination) ? unresolvedFailureSince : Long.MIN_VALUE;
+    }
+
+    private boolean matchesDestination(BlockPos destination) {
+        return assignment != null ? assignment.pos().equals(destination) : destination.equals(previousDestination);
     }
 
     public void observePreemption(long time, boolean preempted) {
-        if (previousDestination == null) {
+        if (previousDestination == null && unresolvedFailureSince == Long.MIN_VALUE) {
             openPreemptedSince = Long.MIN_VALUE;
-            pendingFailureShift = 0L;
-            unresolvedFailureSince = Long.MIN_VALUE;
             return;
         }
         if (preempted) {
@@ -159,18 +187,12 @@ public final class WalkTargetRetryGate {
         } else if (openPreemptedSince != Long.MIN_VALUE) {
             long delta = Math.max(0L, time - openPreemptedSince);
             openPreemptedSince = Long.MIN_VALUE;
-            stalledSince += delta;
-            pendingFailureShift += delta;
+            if (previousDestination != null) {
+                stalledSince += delta;
+            }
             if (unresolvedFailureSince != Long.MIN_VALUE) {
                 unresolvedFailureSince += delta;
             }
         }
-    }
-
-    public long consumeFailureShift(long time) {
-        observePreemption(time, false);
-        long shift = pendingFailureShift;
-        pendingFailureShift = 0L;
-        return shift;
     }
 }

@@ -4,6 +4,7 @@ import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.conczin.mca.entity.ai.brain.tasks.ExtendedWalkTowardsTask;
+import net.conczin.mca.entity.ai.brain.tasks.WanderOrTeleportToTargetTask;
 import net.conczin.mca.entity.ai.navigation.BedApproachTarget;
 import net.conczin.mca.gametest.GameTestTerrain;
 import net.conczin.mca.server.world.data.Building;
@@ -639,8 +640,15 @@ public final class ResidencySetHomeGameTests {
                 "HOME movement producer did not run");
         helper.assertTrue(owner.getBrain().hasMemoryValue(MemoryModuleType.WALK_TARGET),
                 "HOME movement producer did not assign movement");
-        helper.assertTrue(owner.getNavigation().moveTo(head.getX(), head.getY(), head.getZ(), 0.5D),
-                "fixture could not start HOME navigation");
+        var homeCommand = owner.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElseThrow();
+        var sink = new WanderOrTeleportToTargetTask();
+        helper.assertTrue(sink.tryStart(helper.getLevel(), owner, helper.getLevel().getGameTime()),
+                "fixture could not admit HOME navigation through its movement sink");
+        var homePath = owner.getNavigation().getPath();
+        helper.assertTrue(homePath != null && !owner.getNavigation().isDone()
+                        && owner.getBrain().getMemory(MemoryModuleType.PATH).filter(path -> path == homePath).isPresent()
+                        && owner.getBrain().getMemory(MemoryModuleType.WALK_TARGET).filter(command -> command == homeCommand).isPresent(),
+                "fixture did not establish the admitted HOME command and path");
         replaceBed(helper, foot, head);
         VillagerEntityMCA claimant = spawnVillager(helper, head.north(3));
 

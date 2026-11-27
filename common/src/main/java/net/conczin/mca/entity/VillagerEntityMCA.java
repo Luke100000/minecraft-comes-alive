@@ -731,7 +731,8 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
         Vec3 pos = victim.position();
         for (VillagerEntityMCA guard : victim.level().getEntitiesOfClass(VillagerEntityMCA.class, new AABB(pos, pos).inflate(32))) {
-            if (!guard.isGuard() || victim.distanceToSqr(guard) > (guard.getTarget() == null ? 1024 : 64)) {
+            if (!guard.isGuard() || victim.distanceToSqr(guard) >
+                    (guard.getBrain().getMemory(MemoryModuleType.ATTACK_TARGET).isEmpty() ? 1024 : 64)) {
                 continue;
             }
             if (attacker instanceof Player player) {
@@ -740,7 +741,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
                 if (bounty > maxWarning) {
                     guard.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, attacker);
                 } else if (bounty == 0 || bounty == maxWarning) {
-                    guard.getBrain().eraseMemory(MemoryModuleType.ATTACK_TARGET);
+                    if (guard.getBrain().isMemoryValue(MemoryModuleType.ATTACK_TARGET, player)) {
+                        guard.getBrain().eraseMemory(MemoryModuleType.ATTACK_TARGET);
+                    }
                     guard.sendChatMessage(player, "villager.warning");
                 }
                 guard.getBrain().setMemory(MemoryModuleTypeMCA.SMALL_BOUNTY, bounty + 1);
@@ -1820,7 +1823,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         getTypeDataManager().load(this, data);
         restoreGenderAfterLoad();
         restoreAgeAfterLoad(data);
-        relations.cancelInterruptedProcreationAfterLoad();
+        relations.clearProcreation();
         relations.readFromNbt(data);
         longTermMemory.readFromNbt(data);
         readNicknames(data);
@@ -1848,11 +1851,8 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             getVillagerBrain().randomize();
         }
 
-        ItemStack mourningFlower = getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_FLOWER)
-                .orElse(ItemStack.EMPTY);
-        boolean restoreMourningFlower = !mourningFlower.isEmpty()
-                && getBrain().hasMemoryValue(MemoryModuleTypeMCA.MOURNING_PREVIOUS_MAIN_HAND)
-                && (getMainHandItem().isEmpty() || ItemStack.matches(getMainHandItem(), mourningFlower));
+        ItemStack mourningFlower = Mourning.getReloadableFlower(this);
+        boolean restoreMourningFlower = !mourningFlower.isEmpty();
 
         // Older saves kept the displaced mourning item only in Brain memory.
         // Migrate it into the inventory that now owns real equipment.
@@ -1884,9 +1884,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         // Rebuild equipment from inventory; the setter preserves equipment-only real items.
         clearEquipment();
         if (restoreMourningFlower) {
-            ItemStack flower = InventoryUtils.temporary(mourningFlower.copy());
-            getBrain().setMemory(MemoryModuleTypeMCA.MOURNING_FLOWER, flower.copy());
-            setItemInHand(InteractionHand.MAIN_HAND, flower);
+            Mourning.restoreLoadedFlower(this, mourningFlower);
         }
         refreshDimensions();
     }

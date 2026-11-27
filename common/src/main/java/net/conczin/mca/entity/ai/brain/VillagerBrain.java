@@ -53,6 +53,9 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
     private int lastChoreClockTick = Integer.MIN_VALUE;
     @Nullable
     private Map<Object, WalkTargetRetryGate> walkTargetRetryGates;
+    // WALK_TARGET denotes an untyped movement command; null denotes an unclaimed runtime failure.
+    @Nullable
+    private MemoryModuleType<?> failureProjectionOwner;
 
     public VillagerBrain(E entity) {
         this.entity = entity;
@@ -148,46 +151,111 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
         long gameTime = villager.level().getGameTime();
         for (WalkTargetRetryGate gate : walkTargetRetryGates.values()) {
             MemoryModuleType<GlobalPos> memory = gate.destinationMemory();
-            if (memory == null || gate.activeDestination() == null) {
+            GlobalPos assignment = gate.assignment();
+            if (memory == null || assignment == null) {
                 continue;
             }
             GlobalPos remembered = villager.getBrain().getMemoryInternal(memory).orElse(null);
-            if (remembered == null
-                    || remembered.dimension() != villager.level().dimension()
-                    || !remembered.pos().equals(gate.activeDestination())) {
-                gate.resetActive();
+            if (!assignment.equals(remembered) || assignment.dimension() != villager.level().dimension()) {
+                WalkTargetFailureMemory.clearForProducer(villager, memory, assignment);
                 continue;
             }
             gate.observePreemption(gameTime, isJourneyPreempted(villager, memory));
         }
     }
 
-    void syncFailureToRetryGates(GlobalPos target, long since) {
-        if (!(entity instanceof VillagerEntityMCA villager) || walkTargetRetryGates == null) {
+    @Nullable
+    MemoryModuleType<?> failureProjectionOwner() {
+        return failureProjectionOwner;
+    }
+
+    void setFailureProjectionOwner(@Nullable MemoryModuleType<?> owner) {
+        failureProjectionOwner = owner;
+    }
+
+    private long establishedFailureSince(@Nullable MemoryModuleType<?> owner, GlobalPos target) {
+        if (owner == null || walkTargetRetryGates == null) {
+            return Long.MIN_VALUE;
+        }
+        long unresolvedSince = Long.MIN_VALUE;
+        for (WalkTargetRetryGate gate : walkTargetRetryGates.values()) {
+            if (gate.destinationMemory() == owner && target.equals(gate.assignment())) {
+                // A matching gate may have already closed a shared preemption interval.
+                unresolvedSince = Math.max(unresolvedSince, gate.unresolvedFailureSince(target.pos()));
+            }
+        }
+        return unresolvedSince;
+    }
+
+    long syncFailureToRetryGates(@Nullable MemoryModuleType<?> owner, GlobalPos target, long since) {
+        if (owner == null || walkTargetRetryGates == null) {
+            return since;
+        }
+        long unresolvedSince = establishedFailureSince(owner, target);
+        long failureSince = unresolvedSince == Long.MIN_VALUE ? since : unresolvedSince;
+        for (WalkTargetRetryGate gate : walkTargetRetryGates.values()) {
+            if (gate.destinationMemory() == owner && target.equals(gate.assignment())) {
+                gate.noteFailure(target.pos(), failureSince);
+            }
+        }
+        return failureSince;
+    }
+
+    long resumeFailureFromRetryGates(WalkTargetRetryGate resumed, GlobalPos target, long time,
+                                     Optional<Long> projection) {
+        MemoryModuleType<GlobalPos> owner = resumed.destinationMemory();
+        if (owner != null && walkTargetRetryGates != null) {
+            for (WalkTargetRetryGate gate : walkTargetRetryGates.values()) {
+                if (gate.destinationMemory() == owner && target.equals(gate.assignment())
+                        && (gate != resumed || gate.unresolvedFailureSince(target.pos()) != Long.MIN_VALUE)) {
+                    gate.observePreemption(time, false);
+                }
+            }
+        }
+        long failureSince = establishedFailureSince(owner, target);
+        if (failureSince == Long.MIN_VALUE) {
+            // Only when no matching gate owns a clock can the runtime projection initialize it.
+            projection.ifPresent(since -> resumed.noteFailure(target.pos(), since));
+            resumed.observePreemption(time, false);
+            failureSince = resumed.unresolvedFailureSince(target.pos());
+        } else {
+            // The established clock already excludes the closed interval. Close the resumed
+            // gate's own pause before adopting it, so that interval cannot be added twice.
+            resumed.observePreemption(time, false);
+        }
+        if (failureSince != Long.MIN_VALUE && owner != null && walkTargetRetryGates != null) {
+            for (WalkTargetRetryGate gate : walkTargetRetryGates.values()) {
+                if (gate.destinationMemory() == owner && target.equals(gate.assignment())) {
+                    gate.adoptEstablishedFailure(target.pos(), failureSince);
+                }
+            }
+        }
+        return failureSince;
+    }
+
+    void clearProducerRetryGates(MemoryModuleType<?> owner, GlobalPos target, boolean endEpisode) {
+        if (walkTargetRetryGates == null) {
             return;
         }
         for (WalkTargetRetryGate gate : walkTargetRetryGates.values()) {
-            MemoryModuleType<GlobalPos> memory = gate.destinationMemory();
-            if (memory != null && target.equals(villager.getBrain().getMemoryInternal(memory).orElse(null))) {
-                gate.noteFailure(target.pos(), since);
+            if (gate.destinationMemory() == owner && target.equals(gate.assignment())) {
+                if (endEpisode) {
+                    gate.forgetAssignment();
+                } else {
+                    gate.clearFailure();
+                }
             }
         }
     }
 
-    void clearFailureOnUnpreemptedRetryGates(@Nullable GlobalPos matchingTarget) {
+    void clearProjectedProducerFailure(GlobalPos target) {
         if (!(entity instanceof VillagerEntityMCA villager) || walkTargetRetryGates == null) {
             return;
         }
         for (WalkTargetRetryGate gate : walkTargetRetryGates.values()) {
             MemoryModuleType<GlobalPos> memory = gate.destinationMemory();
-            if (memory == null) {
-                continue;
-            }
-            if (matchingTarget != null) {
-                if (matchingTarget.equals(villager.getBrain().getMemoryInternal(memory).orElse(null))) {
-                    gate.clearFailure();
-                }
-            } else if (!isJourneyPreempted(villager, memory)) {
+            if (memory != null && memory == failureProjectionOwner && target.equals(gate.assignment())
+                    && !isJourneyPreempted(villager, memory)) {
                 gate.clearFailure();
             }
         }

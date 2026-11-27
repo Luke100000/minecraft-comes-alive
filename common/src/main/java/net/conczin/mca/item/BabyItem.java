@@ -265,9 +265,18 @@ public class BabyItem extends Item {
             return Optional.empty();
         }
 
-        WorldUtils.spawnEntity(world, child, MobSpawnType.BREEDING);
-
         FamilyTree tree = FamilyTree.get(world);
+        if (!WorldUtils.trySpawnEntity(world, child, MobSpawnType.BREEDING)) {
+            // Spawn initialization creates a family entry and can generate placeholder parents.
+            tree.getOrEmpty(child.getUUID()).ifPresent(entry -> {
+                entry.getParents()
+                        .filter(parent -> parent.isUnpairedGeneratedParentOf(entry.id()))
+                        .forEach(parent -> tree.remove(parent.id()));
+                entry.clearParents();
+                tree.remove(entry.id());
+            });
+            return Optional.empty();
+        }
 
         // Assign parents
         child.getRelationships().getFamilyEntry().removeMother();

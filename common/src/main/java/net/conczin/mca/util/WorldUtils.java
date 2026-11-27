@@ -75,10 +75,14 @@ public interface WorldUtils {
         }, loader, null), dataId);
     }
 
-    @SuppressWarnings("deprecation")
     static void spawnEntity(Level world, Mob entity, MobSpawnType reason) {
+        trySpawnEntity(world, entity, reason);
+    }
+
+    @SuppressWarnings("deprecation")
+    static boolean trySpawnEntity(Level world, Mob entity, MobSpawnType reason) {
         entity.finalizeSpawn((ServerLevelAccessor) world, world.getCurrentDifficultyAt(entity.blockPosition()), reason, null);
-        world.addFreshEntity(entity);
+        return world.addFreshEntity(entity);
     }
 
     //a wrapper for the unnecessary complex query provided by minecraft

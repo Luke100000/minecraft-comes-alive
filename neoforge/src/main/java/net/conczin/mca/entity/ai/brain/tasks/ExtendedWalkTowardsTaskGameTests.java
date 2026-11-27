@@ -2,6 +2,7 @@ package net.conczin.mca.entity.ai.brain.tasks;
 
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
+import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.conczin.mca.entity.ai.navigation.PersistentPathTarget;
 import net.minecraft.core.BlockPos;
@@ -12,12 +13,14 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
 import net.minecraft.world.entity.ai.behavior.EntityTracker;
+import net.minecraft.world.entity.ai.behavior.MoveToTargetSink;
 import net.minecraft.world.entity.ai.behavior.OneShot;
 import net.minecraft.world.entity.ai.behavior.SetWalkTargetFromBlockMemory;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
@@ -655,6 +658,329 @@ public final class ExtendedWalkTowardsTaskGameTests {
                 canGiveUp,
                 ignored -> { }
         );
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void samePositionReassignmentStartsFreshEpisode(GameTestHelper helper) {
+        VillagerEntityMCA villager = spawnVillagerOnFlatArea(helper);
+        try {
+            BlockPos home = villager.blockPosition().east(6);
+            GlobalPos destination = GlobalPos.of(helper.getLevel().dimension(), home);
+            long time = helper.getLevel().getGameTime();
+            OneShot<VillagerEntityMCA> task = createTask(ignored -> false);
+            setHome(villager, home);
+            task.tryStart(helper.getLevel(), villager, time);
+            helper.assertTrue(villager.getBrain().hasMemoryValue(MemoryModuleType.WALK_TARGET),
+                    "fixture never published HOME");
+            WalkTargetFailureMemory.record(villager, home, time);
+            villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+            villager.getBrain().eraseMemory(MemoryModuleType.HOME);
+            task.tryStart(helper.getLevel(), villager, time + 1);
+            villager.getBrain().setMemory(MemoryModuleType.HOME, destination);
+            task.tryStart(helper.getLevel(), villager, time + 2);
+            helper.assertTrue(villager.getBrain().hasMemoryValue(MemoryModuleType.WALK_TARGET),
+                    "new HOME assignment inherited the removed journey's retry delay");
+            helper.assertTrue(!villager.getBrain().hasMemoryValue(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE),
+                    "new HOME assignment inherited the removed journey's failure age");
+            helper.assertTrue(villager.getBrain().getMemory(MemoryModuleType.HOME).filter(destination::equals).isPresent(),
+                    "new HOME assignment was removed");
+        } finally {
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void expiredOwnedMovementIsRetractedBeforeGiveUpCallback(GameTestHelper helper) {
+        VillagerEntityMCA villager = spawnVillagerOnFlatArea(helper);
+        try {
+            villager.setOnGround(true);
+            BlockPos target = villager.blockPosition().east(6);
+            long time = helper.getLevel().getGameTime();
+            var brain = villager.getBrain();
+            brain.setMemory(MemoryModuleTypeMCA.MOURNING_POSITION,
+                    GlobalPos.of(helper.getLevel().dimension(), target));
+            int[] callbacks = {0};
+            OneShot<VillagerEntityMCA> task = ExtendedWalkTowardsTask.createWithoutPoiRelease(
+                    MemoryModuleTypeMCA.MOURNING_POSITION, 0.5F, 0, 20, ignored -> true, entity -> {
+                        callbacks[0]++;
+                        helper.assertTrue(!brain.hasMemoryValue(MemoryModuleType.WALK_TARGET), "expired WALK_TARGET survived");
+                        helper.assertTrue(!brain.hasMemoryValue(MemoryModuleType.PATH), "expired owned PATH survived");
+                        helper.assertTrue(entity.getNavigation().getPath() == null, "expired owned navigation survived");
+                        helper.assertTrue(!brain.hasMemoryValue(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE),
+                                "expired failure survived into callback");
+                        helper.assertTrue(!brain.hasMemoryValue(MemoryModuleTypeMCA.MOURNING_POSITION),
+                                "expired assignment survived into callback");
+                    });
+            task.tryStart(helper.getLevel(), villager, time);
+            WanderOrTeleportToTargetTask sink = new WanderOrTeleportToTargetTask();
+            helper.assertTrue(sink.tryStart(helper.getLevel(), villager, time), "fixture failed to admit owned movement");
+            helper.assertTrue(brain.hasMemoryValue(MemoryModuleType.PATH) && villager.getNavigation().getPath() != null,
+                    "fixture has no admitted path");
+            WalkTargetFailureMemory.record(villager, target, time);
+            task.tryStart(helper.getLevel(), villager, time + 21);
+            task.tryStart(helper.getLevel(), villager, time + 22);
+            helper.assertTrue(callbacks[0] == 1, "expired assignment did not invoke callback exactly once");
+        } finally {
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void foreignSamePositionMovementSurvivesProducerRetraction(GameTestHelper helper) {
+        VillagerEntityMCA villager = spawnVillagerOnFlatArea(helper);
+        try {
+            villager.setOnGround(true);
+            BlockPos target = villager.blockPosition().east(6);
+            GlobalPos destination = GlobalPos.of(helper.getLevel().dimension(), target);
+            long time = helper.getLevel().getGameTime();
+            var brain = villager.getBrain();
+            brain.setMemory(MemoryModuleTypeMCA.MOURNING_POSITION, destination);
+            int[] callbacks = {0};
+            var mourning = ExtendedWalkTowardsTask.createWithoutPoiRelease(
+                    MemoryModuleTypeMCA.MOURNING_POSITION, 0.5F, 0, 20, ignored -> true, ignored -> callbacks[0]++);
+            mourning.trigger(helper.getLevel(), villager, time);
+            WalkTargetFailureMemory.record(villager, target, time);
+
+            WalkTarget foreign = new WalkTarget(target, 0.5F, 0);
+            brain.setMemory(MemoryModuleType.WALK_TARGET, foreign);
+            var sink = new WanderOrTeleportToTargetTask();
+            helper.assertTrue(sink.tryStart(helper.getLevel(), villager, time + 1), "fixture did not admit foreign movement");
+            var foreignPath = villager.getNavigation().getPath();
+            helper.assertTrue(foreignPath != null && brain.getMemory(MemoryModuleType.PATH)
+                    .filter(path -> path == foreignPath).isPresent(), "fixture has no foreign PATH");
+            WalkTargetFailureMemory.record(villager, target, time + 1);
+            mourning.trigger(helper.getLevel(), villager, time + 30);
+            helper.assertTrue(brain.getMemory(MemoryModuleType.WALK_TARGET).filter(walk -> walk == foreign).isPresent(),
+                    "mourning replaced same-position foreign movement");
+            helper.assertTrue(villager.getNavigation().getPath() == foreignPath
+                            && brain.getMemory(MemoryModuleType.PATH).filter(path -> path == foreignPath).isPresent(),
+                    "mourning retracted foreign path");
+            helper.assertTrue(brain.getMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
+                    .filter(since -> since == time + 1).isPresent(), "mourning changed foreign failure age");
+            helper.assertTrue(callbacks[0] == 0, "mourning expired during foreign movement");
+
+            // A newly published command can precede the stop of the previous physical route.
+            brain.eraseMemory(MemoryModuleType.WALK_TARGET);
+            brain.eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
+            brain.eraseMemory(MemoryModuleTypeMCA.CANT_REACH_WALK_TARGET);
+            brain.setMemory(MemoryModuleType.HOME, destination);
+            var home = ExtendedWalkTowardsTask.createWithoutPoiRelease(
+                    MemoryModuleType.HOME, 0.5F, 0, 20, ignored -> true, ignored -> callbacks[0]++);
+            home.trigger(helper.getLevel(), villager, time + 31);
+            helper.assertTrue(ExtendedWalkTowardsTask.ownsWalkTarget(villager, MemoryModuleType.HOME),
+                    "fixture failed to publish HOME while the foreign path remained admitted");
+            WalkTargetFailureMemory.record(villager, target, time + 31);
+            home.trigger(helper.getLevel(), villager, time + 52);
+            helper.assertTrue(callbacks[0] == 1 && !brain.hasMemoryValue(MemoryModuleType.HOME),
+                    "new HOME did not expire independently");
+            helper.assertTrue(villager.getNavigation().getPath() == foreignPath
+                            && brain.getMemory(MemoryModuleType.PATH).filter(path -> path == foreignPath).isPresent(),
+                    "unadmitted HOME command stopped the prior foreign path");
+        } finally {
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void foreignSamePositionSinkDoesNotAdoptSuspendedHomeFailure(GameTestHelper helper) {
+        VillagerEntityMCA villager = spawnVillagerOnFlatArea(helper);
+        try {
+            villager.setOnGround(true);
+            BlockPos target = villager.blockPosition().east(6);
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    if (dx != 0 || dz != 0) {
+                        for (int dy = 0; dy < 3; dy++) {
+                            helper.getLevel().setBlockAndUpdate(target.offset(dx, dy, dz), Blocks.STONE.defaultBlockState());
+                        }
+                    }
+                }
+            }
+            var brain = villager.getBrain();
+            long time = helper.getLevel().getGameTime();
+            setHome(villager, target);
+            var home = createTask(ignored -> false);
+            home.trigger(helper.getLevel(), villager, time - 30);
+            WalkTargetFailureMemory.record(villager, target, time - 30);
+            brain.setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(target, 0.5F, 0));
+            home.trigger(helper.getLevel(), villager, time - 20);
+
+            var sink = new MoveToTargetSink();
+            if (sink.tryStart(helper.getLevel(), villager, time)) {
+                sink.doStop(helper.getLevel(), villager, time + 1);
+            }
+            helper.assertTrue(brain.getMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
+                            .filter(since -> since == time).isPresent(),
+                    "untyped same-position sink inherited the suspended HOME failure");
+            home.trigger(helper.getLevel(), villager, time + 5);
+            helper.assertTrue(brain.getMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
+                            .filter(since -> since == time - 5).isPresent(),
+                    "HOME adopted foreign failure instead of resuming its paused age");
+        } finally {
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void retiredOwnedSinkDoesNotEraseReplacementCommand(GameTestHelper helper) {
+        VillagerEntityMCA villager = spawnVillagerOnFlatArea(helper);
+        try {
+            villager.setOnGround(true);
+            BlockPos target = villager.blockPosition().east(6);
+            long time = helper.getLevel().getGameTime();
+            var brain = villager.getBrain();
+            setHome(villager, target);
+            var home = createTask(ignored -> false);
+            home.trigger(helper.getLevel(), villager, time);
+            var sink = new WanderOrTeleportToTargetTask();
+            helper.assertTrue(sink.tryStart(helper.getLevel(), villager, time), "fixture did not admit HOME route");
+            brain.eraseMemory(MemoryModuleType.HOME);
+            home.trigger(helper.getLevel(), villager, time + 1);
+            WalkTarget replacement = new WalkTarget(target, 0.5F, 0);
+            brain.setMemory(MemoryModuleType.WALK_TARGET, replacement);
+            sink.doStop(helper.getLevel(), villager, time + 2);
+            helper.assertTrue(brain.getMemory(MemoryModuleType.WALK_TARGET).filter(walk -> walk == replacement).isPresent(),
+                    "retired HOME sink erased the replacement command");
+        } finally {
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void completedRetiredSinkDoesNotRecordReplacementFailure(GameTestHelper helper) {
+        VillagerEntityMCA villager = spawnVillagerOnFlatArea(helper);
+        try {
+            villager.setOnGround(true);
+            BlockPos target = villager.blockPosition().east(6);
+            long time = helper.getLevel().getGameTime();
+            var brain = villager.getBrain();
+            setHome(villager, target);
+            createTask(ignored -> false).trigger(helper.getLevel(), villager, time);
+            var sink = new WanderOrTeleportToTargetTask();
+            helper.assertTrue(sink.tryStart(helper.getLevel(), villager, time), "fixture did not admit HOME route");
+            var path = villager.getNavigation().getPath();
+            helper.assertTrue(path != null && path.canReach(), "fixture did not admit a reachable HOME path");
+            helper.assertTrue(!brain.hasMemoryValue(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE),
+                    "fixture already had failure evidence");
+            while (!path.isDone()) path.advance();
+            WalkTarget replacement = new WalkTarget(target, 0.5F, 0);
+            brain.setMemory(MemoryModuleType.WALK_TARGET, replacement);
+            sink.tickOrStop(helper.getLevel(), villager, time + 1);
+            helper.assertTrue(!brain.hasMemoryValue(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE),
+                    "retired sink recorded terminal failure for a command it never admitted");
+            helper.assertTrue(brain.getMemory(MemoryModuleType.WALK_TARGET).filter(walk -> walk == replacement).isPresent(),
+                    "retired sink erased the replacement command");
+        } finally {
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void physicalStopDoesNotReleaseSinkOccupancyBeforeCleanup(GameTestHelper helper) {
+        VillagerEntityMCA villager = spawnVillagerOnFlatArea(helper);
+        try {
+            villager.setOnGround(true);
+            BlockPos target = villager.blockPosition().east(6);
+            long time = helper.getLevel().getGameTime();
+            var brain = villager.getBrain();
+            setHome(villager, target);
+            createTask(ignored -> false).trigger(helper.getLevel(), villager, time);
+            var playSink = new MoveToTargetSink(80, 120);
+            var coreSink = new WanderOrTeleportToTargetTask();
+            helper.assertTrue(playSink.tryStart(helper.getLevel(), villager, time),
+                    "fixture did not admit PLAY route");
+            WalkTarget command = brain.getMemory(MemoryModuleType.WALK_TARGET).orElseThrow();
+            villager.getNavigation().stop();
+            // Brain starts stopped behaviors before ticking/stopping the running sink.
+            helper.assertTrue(!coreSink.tryStart(helper.getLevel(), villager, time + 1),
+                    "CORE admitted the same command before PLAY finished its stopped route");
+            playSink.tickOrStop(helper.getLevel(), villager, time + 1);
+            helper.assertTrue(!brain.hasMemoryValue(MemoryModuleType.PATH)
+                            && !brain.hasMemoryValue(MemoryModuleType.WALK_TARGET),
+                    "PLAY cleanup did not release its route and command");
+            brain.setMemory(MemoryModuleType.WALK_TARGET, command);
+            helper.assertTrue(coreSink.tryStart(helper.getLevel(), villager, time + 2),
+                    "CORE could not admit the command after PLAY cleanup");
+        } finally {
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void expiredOwnedMovementClearsPathAfterNavigationStops(GameTestHelper helper) {
+        VillagerEntityMCA villager = spawnVillagerOnFlatArea(helper);
+        try {
+            villager.setOnGround(true);
+            BlockPos target = villager.blockPosition().east(6);
+            long time = helper.getLevel().getGameTime();
+            var brain = villager.getBrain();
+            brain.setMemory(MemoryModuleTypeMCA.MOURNING_POSITION,
+                    GlobalPos.of(helper.getLevel().dimension(), target));
+            int[] callbacks = {0};
+            var task = ExtendedWalkTowardsTask.createWithoutPoiRelease(
+                    MemoryModuleTypeMCA.MOURNING_POSITION, 0.5F, 0, 20, ignored -> true, entity -> {
+                        callbacks[0]++;
+                        helper.assertTrue(!brain.hasMemoryValue(MemoryModuleType.PATH),
+                                "stopped route's owned PATH survived expiry callback");
+                        helper.assertTrue(!brain.hasMemoryValue(MemoryModuleType.WALK_TARGET)
+                                        && !brain.hasMemoryValue(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
+                                        && !brain.hasMemoryValue(MemoryModuleTypeMCA.MOURNING_POSITION),
+                                "expired journey state survived callback");
+                    });
+            task.trigger(helper.getLevel(), villager, time);
+            var sink = new WanderOrTeleportToTargetTask();
+            helper.assertTrue(sink.tryStart(helper.getLevel(), villager, time), "fixture did not admit owned movement");
+            var path = villager.getNavigation().getPath();
+            helper.assertTrue(path != null && brain.getMemory(MemoryModuleType.PATH).filter(value -> value == path).isPresent(),
+                    "fixture has no admitted PATH");
+            WalkTargetFailureMemory.record(villager, target, time);
+            villager.getNavigation().stop();
+            helper.assertTrue(villager.getNavigation().getPath() == null, "fixture failed to stop navigation");
+            task.trigger(helper.getLevel(), villager, time + 21);
+            helper.assertTrue(callbacks[0] == 1, "expired journey did not invoke callback");
+        } finally {
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void homeInvalidationPreservesPreviouslyAdmittedForeignRoute(GameTestHelper helper) {
+        VillagerEntityMCA villager = spawnVillagerOnFlatArea(helper);
+        try {
+            villager.setOnGround(true);
+            BlockPos target = villager.blockPosition().east(6);
+            long time = helper.getLevel().getGameTime();
+            var brain = villager.getBrain();
+            WalkTarget foreign = new WalkTarget(target, 0.5F, 0);
+            brain.setMemory(MemoryModuleType.WALK_TARGET, foreign);
+            var sink = new WanderOrTeleportToTargetTask();
+            helper.assertTrue(sink.tryStart(helper.getLevel(), villager, time), "fixture did not admit foreign route");
+            var path = villager.getNavigation().getPath();
+            helper.assertTrue(path != null && brain.getMemory(MemoryModuleType.PATH).filter(value -> value == path).isPresent(),
+                    "fixture has no admitted foreign PATH");
+            setHome(villager, target);
+            var home = createTask(ignored -> false);
+            home.trigger(helper.getLevel(), villager, time + 1);
+            helper.assertTrue(ExtendedWalkTowardsTask.ownsWalkTarget(villager, MemoryModuleType.HOME),
+                    "fixture did not publish HOME before foreign route stopped");
+            villager.getResidency().invalidateHome(GlobalPos.of(helper.getLevel().dimension(), target));
+            helper.assertTrue(!brain.hasMemoryValue(MemoryModuleType.HOME)
+                            && !brain.hasMemoryValue(MemoryModuleType.WALK_TARGET), "HOME invalidation did not remove its assignment and command");
+            helper.assertTrue(villager.getNavigation().getPath() == path
+                            && brain.getMemory(MemoryModuleType.PATH).filter(value -> value == path).isPresent(),
+                    "HOME invalidation stopped a previously admitted foreign route");
+        } finally {
+            villager.discard();
+        }
+        helper.succeed();
     }
 
     @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)

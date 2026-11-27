@@ -8,6 +8,7 @@ import net.conczin.mca.entity.ai.MoveState;
 import net.conczin.mca.entity.ai.Traits;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.entity.ai.relationship.Personality;
+import net.conczin.mca.gametest.GameTestTerrain;
 import net.conczin.mca.network.c2s.CallToPlayerMessage;
 import net.conczin.mca.network.c2s.GetVillagerRequest;
 import net.conczin.mca.network.c2s.InteractionVillagerMessage;
@@ -25,6 +26,7 @@ import net.conczin.mca.server.world.data.FamilyTree;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
 import net.conczin.mca.server.world.data.PlayerSaveData;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
@@ -38,6 +40,8 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.common.util.FakePlayer;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -169,7 +173,9 @@ public final class EditorAuthorizationGameTests {
         ServerPlayer sender = createPlayer(helper, "editor-held", new BlockPos(2, 2, 2));
         sender.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(ItemsMCA.VILLAGER_EDITOR));
         VillagerEntityMCA target = spawnVillager(helper, new BlockPos(4, 2, 2));
-        helper.getLevel().getChunkAt(helper.absolutePos(new BlockPos(22, 2, 2)));
+        List<ChunkPos> ownedChunks = new ArrayList<>();
+        ChunkPos distantChunk = new ChunkPos(helper.absolutePos(new BlockPos(22, 2, 2)));
+        GameTestTerrain.ensureEntityTickingChunks(helper, distantChunk, distantChunk, ownedChunks);
         VillagerEntityMCA distantTarget = spawnVillager(helper, new BlockPos(22, 2, 2));
         try {
             FamilyTreeNode family = target.getRelationships().getFamilyEntry();
@@ -187,6 +193,10 @@ public final class EditorAuthorizationGameTests {
 
             helper.assertTrue(sender.distanceToSqr(distantTarget) > 64.0D,
                     "distant villager fixture must be > 8 blocks away");
+            helper.assertTrue(helper.getLevel().getEntity(distantTarget.getUUID()) == distantTarget,
+                    "distant editor target must be registered in the level's entity lookup");
+            helper.assertTrue(helper.getLevel().isPositionEntityTicking(distantTarget.blockPosition()),
+                    "distant editor target must be inside an entity-ticking chunk");
             CompoundTag distantPatch = new CompoundTag();
             distantPatch.putString("CustomName", "\"Distant editor edit\"");
             new VillagerEditorSyncRequest("sync", distantTarget.getUUID(), distantPatch).handleServer(sender);
@@ -195,6 +205,7 @@ public final class EditorAuthorizationGameTests {
         } finally {
             target.discard();
             distantTarget.discard();
+            ownedChunks.forEach(chunk -> helper.getLevel().setChunkForced(chunk.x, chunk.z, false));
         }
         helper.succeed();
     }
@@ -300,6 +311,10 @@ public final class EditorAuthorizationGameTests {
     public static void nonOpCombAndNeedleWorkOnSelfAndNearbyVillagerOnlyForOwnedKeys(GameTestHelper helper) {
         ServerPlayer sender = createPlayer(helper, "comb-needle-user", new BlockPos(2, 2, 2));
         VillagerEntityMCA nearbyVillager = spawnVillager(helper, new BlockPos(5, 2, 2));
+        List<ChunkPos> ownedChunks = new ArrayList<>();
+        ChunkPos at25 = new ChunkPos(BlockPos.containing(sender.position().add(25, 0, 0)));
+        ChunkPos at26 = new ChunkPos(BlockPos.containing(sender.position().add(26, 0, 0)));
+        GameTestTerrain.ensureEntityTickingChunks(helper, at25, at26, ownedChunks);
         VillagerEntityMCA farVillager = spawnVillager(helper, new BlockPos(14, 2, 2));
         helper.getLevel().addNewPlayer(sender);
 
@@ -342,6 +357,10 @@ public final class EditorAuthorizationGameTests {
                     "Comb should allow changing HairBase on villager 3 blocks away");
 
             farVillager.setPos(sender.position().add(25, 0, 0));
+            helper.assertTrue(helper.getLevel().getEntity(farVillager.getUUID()) == farVillager,
+                    "25-block comb target must be registered in the level's entity lookup");
+            helper.assertTrue(helper.getLevel().isPositionEntityTicking(farVillager.blockPosition()),
+                    "25-block comb target must be inside an entity-ticking chunk");
             String farOriginalHair = farVillager.getLayeredHair(LayeredHair.Category.BASE);
             String farNewHair = pickDifferentHairBase(farVillager.getGenetics().getGender(), farOriginalHair);
             CompoundTag farCombPatch = VillagerEditorSyncRequest.createEditorPatch(
@@ -386,6 +405,7 @@ public final class EditorAuthorizationGameTests {
             nearbyVillager.discard();
             farVillager.discard();
             helper.getLevel().removePlayerImmediately(sender, Entity.RemovalReason.DISCARDED);
+            ownedChunks.forEach(chunk -> helper.getLevel().setChunkForced(chunk.x, chunk.z, false));
         }
         helper.succeed();
     }

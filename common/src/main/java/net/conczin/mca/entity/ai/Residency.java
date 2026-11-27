@@ -3,6 +3,7 @@ package net.conczin.mca.entity.ai;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.conczin.mca.entity.ai.brain.tasks.ExtendedWalkTowardsTask;
 import net.conczin.mca.entity.ai.navigation.BedApproachTarget;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
@@ -198,10 +199,8 @@ public class Residency {
         if (!entity.getBrain().isMemoryValue(MemoryModuleType.HOME, invalidHome)) {
             return;
         }
-        if (ExtendedWalkTowardsTask.clearOwnedWalkTarget(entity, MemoryModuleType.HOME)) {
-            entity.getNavigation().stop();
-            entity.getBrain().eraseMemory(MemoryModuleType.PATH);
-        }
+        ExtendedWalkTowardsTask.retractOwnedMovement(entity, MemoryModuleType.HOME);
+        WalkTargetFailureMemory.clearForProducer(entity, MemoryModuleType.HOME, invalidHome);
         entity.getBrain().eraseMemory(MemoryModuleType.HOME);
         entity.getBrain().eraseMemory(MemoryModuleTypeMCA.FORCED_HOME);
         if (invalidHome.dimension() == entity.level().dimension()
