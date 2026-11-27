@@ -3,10 +3,15 @@ package net.conczin.mca.cobalt.network;
 import net.minecraft.server.level.ServerPlayer;
 
 public abstract class NetworkHandler {
+    public enum Direction {
+        SERVERBOUND,
+        CLIENTBOUND
+    }
+
     private static Impl INSTANCE;
 
-    public static <T extends Message> void registerMessage(Class<T> msg) {
-        INSTANCE.registerMessage(msg);
+    public static <T extends Message> void registerMessage(Class<T> msg, Direction direction) {
+        INSTANCE.registerMessage(msg, direction);
     }
 
     public static void sendToServer(Message m) {
@@ -22,7 +27,7 @@ public abstract class NetworkHandler {
             INSTANCE = this;
         }
 
-        public abstract <T extends Message> void registerMessage(Class<T> msg);
+        public abstract <T extends Message> void registerMessage(Class<T> msg, Direction direction);
 
         public abstract void sendToServer(Message m);
 

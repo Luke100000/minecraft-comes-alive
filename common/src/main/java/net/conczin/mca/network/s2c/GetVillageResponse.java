@@ -26,7 +26,7 @@ public class GetVillageResponse extends NbtDataMessage {
     public final Map<String, BuildingType> buildingTypes;
 
     public GetVillageResponse(Village data, Rank rank, int reputation, boolean isVillage, Set<String> ids) {
-        super(data.save());
+        super(data.saveForClient());
         this.rank = rank;
         this.reputation = reputation;
         this.isVillage = isVillage;

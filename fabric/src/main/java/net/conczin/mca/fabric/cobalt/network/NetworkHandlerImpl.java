@@ -8,6 +8,7 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.conczin.mca.MCA;
 import net.conczin.mca.cobalt.network.Message;
 import net.conczin.mca.cobalt.network.NetworkHandler;
+import net.conczin.mca.cobalt.network.NetworkHandler.Direction;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
@@ -27,16 +28,16 @@ public class NetworkHandlerImpl extends NetworkHandler.Impl {
     }
 
     @Override
-    public <T extends Message> void registerMessage(Class<T> msg) {
+    public <T extends Message> void registerMessage(Class<T> msg, Direction direction) {
         ResourceLocation id = getMessageIdentifier(msg);
 
-        ServerPlayNetworking.registerGlobalReceiver(id, (server, player, handler, buffer, responder) -> {
-            Message m = Message.decode(buffer);
-            server.execute(() -> m.receive(player));
-        });
-
-        if (FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT) {
-            ClientProxy.register(id);
+        if (direction == Direction.SERVERBOUND) {
+            ServerPlayNetworking.registerGlobalReceiver(id, (server, player, handler, buffer, responder) -> {
+                T message = Message.decode(buffer, msg);
+                server.execute(() -> message.receive(player));
+            });
+        } else if (FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT) {
+            ClientProxy.register(id, msg);
         }
     }
 
@@ -61,9 +62,9 @@ public class NetworkHandlerImpl extends NetworkHandler.Impl {
             throw new RuntimeException("new ClientProxy()");
         }
 
-        public static void register(ResourceLocation id) {
+        public static <T extends Message> void register(ResourceLocation id, Class<T> type) {
             ClientPlayNetworking.registerGlobalReceiver(id, (client, ignore1, buffer, ignore2) -> {
-                Message m = Message.decode(buffer);
+                T m = Message.decode(buffer, type);
                 client.execute(m::receive);
             });
         }

@@ -389,15 +389,20 @@ public class Village implements Iterable<Building> {
     }
 
     public CompoundTag save() {
+        CompoundTag v = saveForClient();
+        v.put("reputation", NbtHelper.fromMap(new CompoundTag(), reputation, UUID::toString, i ->
+                NbtHelper.fromMap(new CompoundTag(), i, UUID::toString, IntTag::valueOf)
+        ));
+        return v;
+    }
+
+    public CompoundTag saveForClient() {
         CompoundTag v = new CompoundTag();
         v.putInt("id", id);
         v.putString("name", name);
         v.putString("chatAIPrompt", chatAIPrompt);
         v.putFloat("taxesFloat", taxes);
         v.putInt("beds", beds);
-        v.put("reputation", NbtHelper.fromMap(new CompoundTag(), reputation, UUID::toString, i ->
-                NbtHelper.fromMap(new CompoundTag(), i, UUID::toString, IntTag::valueOf)
-        ));
         v.put("residentNames", NbtHelper.fromMap(new CompoundTag(), residentNames, Object::toString, StringTag::valueOf));
         v.put("residentHomes", NbtHelper.fromMap(new CompoundTag(), residentHomes, Object::toString, LongTag::valueOf));
         v.putFloat("populationThresholdFloat", populationThreshold);

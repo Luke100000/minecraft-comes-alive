@@ -1,18 +1,30 @@
 package net.conczin.mca.cobalt.network;
 
-import java.io.*;
+import io.netty.buffer.ByteBufInputStream;
+import io.netty.handler.codec.DecoderException;
+import net.conczin.mca.network.PacketFilter;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
 
-public interface Message extends Serializable {
-    static Message decode(FriendlyByteBuf b) {
-        byte[] data = new byte[b.readableBytes()];
-        b.readBytes(data);
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.Serializable;
 
-        try (ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(data))) {
-            return (Message)ois.readObject();
+public interface Message extends Serializable {
+    static <T extends Message> T decode(FriendlyByteBuf buffer, Class<T> expectedType) {
+        if (buffer.readableBytes() > PacketFilter.MAX_PACKET_BYTES) {
+            throw new DecoderException("MCA packet exceeds the size limit");
+        }
+        try (ObjectInputStream input = PacketFilter.openStream(new ByteBufInputStream(buffer), expectedType)) {
+            Object message = input.readObject();
+            if (message == null || message.getClass() != expectedType) {
+                throw new DecoderException("Unexpected MCA packet type");
+            }
+            return expectedType.cast(message);
         } catch (IOException | ClassNotFoundException e) {
-            throw new RuntimeException("SneakyThrows", e);
+            throw new DecoderException("Invalid MCA packet " + expectedType.getSimpleName(), e);
         }
     }
 

@@ -2,6 +2,7 @@ package net.conczin.mca.network;
 
 import net.conczin.mca.cobalt.network.Message;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtAccounter;
 import net.minecraft.nbt.NbtIo;
 
 import java.io.*;
@@ -20,7 +21,7 @@ public abstract class NbtDataMessage implements Message {
         return data.nbt;
     }
 
-    private static final class Data implements Serializable {
+    static final class Data implements Serializable {
         @Serial
         private static final long serialVersionUID = 5728742776742369248L;
 
@@ -36,8 +37,9 @@ public abstract class NbtDataMessage implements Message {
         }
 
         @Serial
-        private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
-            nbt = NbtIo.read(in);
+        private void readObject(ObjectInputStream in) throws IOException {
+            // Match the NBT accounting limit used by Minecraft's packet buffer.
+            nbt = NbtIo.read(in, new NbtAccounter(2 * 1024 * 1024));
         }
     }
 }

@@ -1,8 +1,11 @@
-# Beta Branch Note:
+# 7.7.0+ Note:
 
-* Incompatible with previous builds
 * Backup your world before using.
 * Some addons may not work/crash, if so either use 7.6.28-beta or 7.7.0-beta.2
+
+# 7.7.2
+
+* Security fixes - update both client and server
 
 # 7.7.1-beta.6
 
