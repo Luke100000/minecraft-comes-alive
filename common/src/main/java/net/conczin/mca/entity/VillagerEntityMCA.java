@@ -605,6 +605,10 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public VillagerEntityMCA getBreedOffspring(ServerLevel level, AgeableMob partner) {
+        if (!Genetics.canInheritEyes(this, partner)) {
+            MCA.LOGGER.warn("Declining offspring for {} and {} because a parent has unsupported eye genetics", getUUID(), partner.getUUID());
+            return null;
+        }
         VillagerEntityMCA child = partner instanceof VillagerEntityMCA partnerVillager
                 ? relations.getPregnancy().createChild(Gender.getRandom(), partnerVillager)
                 : relations.getPregnancy().createChild(Gender.getRandom());
@@ -1834,6 +1838,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         getTypeDataManager().load(this, data);
         restoreGenderAfterLoad();
         restoreAgeAfterLoad(data);
+        getGenetics().finishEyeExpression(EyeGenetics.seed(getUUID(), 0));
         relations.clearProcreation();
         relations.readFromNbt(data);
         longTermMemory.readFromNbt(data);
@@ -1856,7 +1861,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         }
 
         restoreMissingAppearance(data);
-        validateClothes();
+        validateAppearance();
 
         if (getVillagerBrain().getPersonality() == Personality.UNASSIGNED) {
             getVillagerBrain().randomize();

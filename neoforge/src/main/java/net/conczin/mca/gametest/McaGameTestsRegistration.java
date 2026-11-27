@@ -14,6 +14,7 @@ import net.conczin.mca.entity.ai.ProcreationInventoryGameTests;
 import net.conczin.mca.entity.ai.BedOccupancyLifecycleGameTests;
 import net.conczin.mca.entity.ai.BedPoiCompatibilityGameTests;
 import net.conczin.mca.entity.ai.ResidencyGoHomeGameTests;
+import net.conczin.mca.entity.ai.EyeGeneticsGameTests;
 import net.conczin.mca.entity.ai.ResidencySetHomeGameTests;
 import net.conczin.mca.entity.ai.brain.ForcedHomeOccupiedBedGameTests;
 import net.conczin.mca.entity.ai.brain.sensor.GuardEnemiesSensorGameTests;
@@ -102,6 +103,7 @@ public final class McaGameTestsRegistration {
 
     private static final List<Class<?>> GAME_TEST_CLASSES = List.of(
             TombstoneBlockGameTests.class,
+            EyeGeneticsGameTests.class,
             VillagerBedAlignmentGameTests.class,
             VillagerCarryPositionGameTests.class,
             VillageDefenseGameTests.class,

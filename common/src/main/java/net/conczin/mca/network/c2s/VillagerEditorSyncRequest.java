@@ -59,6 +59,7 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
             "HairBack",
             "HairFront",
             "HairExtra",
+            "EyeTexture",
             "SkinColor",
             "HairColor",
             "EyeColor",
@@ -129,6 +130,7 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
     }
 
     public static boolean isAllowedMcaKey(String key) {
+        if (key.equals("EyeGenetics") || key.equals("GeneEyeColor")) return false;
         if (key.startsWith("Gene")) {
             return true;
         }
@@ -203,10 +205,11 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
         if (target instanceof ServerPlayer targetPlayer) {
             playerData.setEntityData(merged);
             playerData.setEntityDataSet(true);
+            CompoundTag saved = playerData.getEntityData();
             syncFamilyTree(sender, targetPlayer, merged, approved.fullEditor());
             targetPlayer.serverLevel().players().forEach(player ->
-                    Network.sendToPlayer(new PlayerDataMessage(targetPlayer.getUUID(), merged), player));
-            Network.sendToPlayer(new GetVillagerResponse(merged), sender);
+                    Network.sendToPlayer(new PlayerDataMessage(targetPlayer.getUUID(), saved), player));
+            Network.sendToPlayer(new GetVillagerResponse(saved), sender);
         } else if (target instanceof VillagerLike<?> villager) {
             villager.syncFromEditor(merged);
             target.refreshDimensions();
@@ -390,6 +393,11 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
     private void sanitizeVisualIdentifiers(CompoundTag villagerData, CompoundTag fallback) {
         migrateLegacyHairStyle(villagerData);
         Gender gender = getGender(villagerData);
+        // An existing datapack selection can be temporarily unavailable. Reject new invalid
+        // selections, but do not erase the saved ID when an unrelated editor field changes.
+        if (!villagerData.getString("EyeTexture").equals(fallback.getString("EyeTexture"))) {
+            clearInvalidIdentifier(villagerData, fallback, "EyeTexture", identifier -> SkinVisualIds.isEyeTexture(identifier, gender));
+        }
         clearInvalidIdentifier(villagerData, fallback, "Skin", identifier -> SkinVisualIds.isBodySkin(identifier, gender));
         clearInvalidIdentifier(villagerData, fallback, "Clothes", identifier -> SkinVisualIds.isClothing(identifier, gender));
         clearInvalidIdentifier(villagerData, fallback, "Hair", identifier -> SkinVisualIds.isHairStyle(identifier, gender));

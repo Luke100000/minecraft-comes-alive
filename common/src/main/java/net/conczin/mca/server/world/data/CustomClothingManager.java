@@ -4,8 +4,6 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
-import net.conczin.mca.network.Network;
-import net.conczin.mca.network.s2c.CustomSkinsChangedMessage;
 import net.conczin.mca.resources.data.skin.Clothing;
 import net.conczin.mca.resources.data.skin.Hair;
 import net.conczin.mca.resources.data.skin.SkinListEntry;
@@ -36,18 +34,22 @@ public class CustomClothingManager {
 
     public static Storage<Clothing> getClothing() {
         Optional<MinecraftServer> server = MCA.getServer();
-        return server.<Storage<Clothing>>map(minecraftServer -> loadSafely(
-                minecraftServer.overworld().getDataStorage(),
-                minecraftServer.getWorldPath(LevelResource.ROOT).resolve("data"),
-                "immersive_library_clothing", Clothing::new)).orElse(CLOTHING_DUMMY);
+        return server.map(CustomClothingManager::getClothing).orElse(CLOTHING_DUMMY);
+    }
+
+    public static Storage<Clothing> getClothing(MinecraftServer server) {
+        return loadSafely(server.overworld().getDataStorage(), server.getWorldPath(LevelResource.ROOT).resolve("data"),
+                "immersive_library_clothing", Clothing::new);
     }
 
     public static Storage<Hair> getHair() {
         Optional<MinecraftServer> server = MCA.getServer();
-        return server.<Storage<Hair>>map(minecraftServer -> loadSafely(
-                minecraftServer.overworld().getDataStorage(),
-                minecraftServer.getWorldPath(LevelResource.ROOT).resolve("data"),
-                "immersive_library_hair", Hair::new)).orElse(HAIR_DUMMY);
+        return server.map(CustomClothingManager::getHair).orElse(HAIR_DUMMY);
+    }
+
+    public static Storage<Hair> getHair(MinecraftServer server) {
+        return loadSafely(server.overworld().getDataStorage(), server.getWorldPath(LevelResource.ROOT).resolve("data"),
+                "immersive_library_hair", Hair::new);
     }
 
     static <T extends SkinListEntry> Storage<T> loadSafely(DimensionDataStorage storage, Path dataFolder,
@@ -105,25 +107,22 @@ public class CustomClothingManager {
             return entries;
         }
 
-        public void addEntry(String id, T entry) {
+        public boolean addEntry(String id, T entry) {
+            T previous = entries.get(id);
+            if (previous != null && previous.toJson().equals(entry.toJson())) {
+                return false;
+            }
             entries.put(id, entry);
-            setDirty();
-        }
-
-        public void removeEntry(String id) {
-            entries.remove(id);
-            setDirty();
-        }
-
-        @Override
-        public void setDirty() {
             super.setDirty();
+            return true;
+        }
 
-            MCA.getServer().ifPresent(s -> {
-                for (ServerPlayer player : s.getPlayerList().getPlayers()) {
-                    Network.sendToPlayer(new CustomSkinsChangedMessage(), player);
-                }
-            });
+        public boolean removeEntry(String id) {
+            if (entries.remove(id) == null) {
+                return false;
+            }
+            super.setDirty();
+            return true;
         }
     }
 }

@@ -4,6 +4,7 @@ import it.unimi.dsi.fastutil.objects.Object2LongArrayMap;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.PlayerDimensions;
+import net.conczin.mca.entity.ai.Genetics;
 import net.conczin.mca.entity.ai.relationship.EntityRelationship;
 import net.conczin.mca.entity.ai.relationship.RelationshipState;
 import net.conczin.mca.item.BabyItem;
@@ -377,6 +378,10 @@ public class ServerInteractionManager {
 
         // Ensure the spouse is online.
         senderData.getPartner().filter(e -> e instanceof Player).map(Player.class::cast).ifPresentOrElse(spouse -> {
+            if (!Genetics.canInheritEyes(sender, spouse)) {
+                failMessage(sender, Component.translatable("interaction.procreate.fail.eyegenetics"));
+                return;
+            }
             // If the spouse is online and has previously sent a procreation request that hasn't expired, we can continue.
             // Otherwise, we notify the spouse that they must also enter the command.
             if (!procreateMap.containsKey(spouse.getUUID())) {
@@ -384,10 +389,9 @@ public class ServerInteractionManager {
                 infoMessage(spouse, Component.translatable("server.procreationRequest", sender.getScoreboardName()));
             } else {
                 // On success, add a randomly generated baby to the original requester.
+                spouse.addItem(BabyItem.createItem(spouse, sender, spouse.getRandom().nextLong()));
                 successMessage(sender, Component.translatable("server.procreationSuccessful"));
                 successMessage(spouse, Component.translatable("server.procreationSuccessful"));
-
-                spouse.addItem(BabyItem.createItem(spouse, sender, spouse.getRandom().nextLong()));
             }
         }, () -> failMessage(sender, Component.translatable("server.spouseNotPresent")));
     }

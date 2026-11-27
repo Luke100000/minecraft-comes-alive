@@ -43,7 +43,7 @@ class McaDataFixersTest {
 
         CompoundTag migrated = McaDataFixers.update(input);
 
-        assertEquals(2, migrated.getInt(McaDataFixers.DATA_VERSION_KEY));
+        assertEquals(McaDataFixers.CURRENT_VERSION, migrated.getInt(McaDataFixers.DATA_VERSION_KEY));
         CompoundTag migratedMemories = migrated.getCompound("Brain").getCompound("memories");
         CompoundTag migratedSite = migratedMemories.getCompound("mca:mourning_site");
         GlobalPos globalPos = GlobalPos.CODEC

@@ -67,7 +67,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public class SkinLibraryScreen extends Screen implements SkinListUpdateListener {
+public class SkinLibraryScreen extends Screen implements AppearanceCatalogUpdateListener {
     static final int CLOTHES_H = 7;
     static final int CLOTHES_V = 2;
     static final int CLOTHES_PER_PAGE = CLOTHES_H * CLOTHES_V + 1;
@@ -2295,7 +2295,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     }
 
     @Override
-    public void skinListUpdatedCallback() {
+    public void appearanceCatalogUpdated() {
         refreshServerContent();
 
         if (page == Page.LIBRARY) {
@@ -2305,8 +2305,8 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
     private void refreshServerContent() {
         serverContent.clear();
-        addServerContent(ClientSkinCatalog.clothing(), "clothing");
-        addServerContent(ClientSkinCatalog.hair(), "hair");
+        addServerContent(ClientAppearanceCatalog.clothing(), "clothing");
+        addServerContent(ClientAppearanceCatalog.hair(), "hair");
     }
 
     public enum Page {

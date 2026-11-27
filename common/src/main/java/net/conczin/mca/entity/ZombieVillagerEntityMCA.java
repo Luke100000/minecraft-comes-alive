@@ -3,6 +3,7 @@ package net.conczin.mca.entity;
 import net.conczin.mca.Config;
 import net.conczin.mca.datafix.McaDataFixers;
 import net.conczin.mca.entity.ai.Genetics;
+import net.conczin.mca.entity.ai.EyeGenetics;
 import net.conczin.mca.entity.ai.LongTermMemory;
 import net.conczin.mca.entity.ai.Relationship;
 import net.conczin.mca.entity.ai.Traits;
@@ -282,6 +283,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         if (getAgeState() == AgeState.UNASSIGNED) {
             setTrackedValue(AGE_STATE, isBaby() ? AgeState.BABY : AgeState.ADULT);
         }
+        getGenetics().finishEyeExpression(EyeGenetics.seed(getUUID(), 0));
         relations.readFromNbt(data);
         chatAIPrompt = data.getString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY);
         nicknameData = data.getCompound(VillagerEntityMCA.NICKNAMES_KEY).copy();
@@ -293,7 +295,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         InventoryUtils.readFromNBT(this.registryAccess(), inventory, data);
 
         restoreMissingAppearance(data);
-        validateClothes();
+        validateAppearance();
         refreshDimensions();
     }
 

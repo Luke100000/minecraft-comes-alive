@@ -2,6 +2,8 @@ package net.conczin.mca.network.c2s;
 
 import net.conczin.mca.MCA;
 import net.conczin.mca.network.HandleablePayload;
+import net.conczin.mca.network.s2c.AppearanceClothingUpdate;
+import net.conczin.mca.network.s2c.AppearanceHairUpdate;
 import net.conczin.mca.server.world.data.CustomClothingManager;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -24,14 +26,19 @@ public record RemoveCustomClothingMessage(Type kind, String identifier) implemen
 
     @Override
     public void handleServer(ServerPlayer player) {
-        if (!CustomClothingManager.canEdit(player)) {
+        if (!CustomClothingManager.canEdit(player) || !AddCustomClothingMessage.isValidLibraryId(identifier)) {
             return;
         }
 
+        var server = player.serverLevel().getServer();
         if (kind == Type.CLOTHING) {
-            CustomClothingManager.getClothing().removeEntry(identifier);
+            if (CustomClothingManager.getClothing(server).removeEntry(identifier)) {
+                AppearanceClothingUpdate.broadcast(server, identifier);
+            }
         } else if (kind == Type.HAIR) {
-            CustomClothingManager.getHair().removeEntry(identifier);
+            if (CustomClothingManager.getHair(server).removeEntry(identifier)) {
+                AppearanceHairUpdate.broadcast(server, identifier);
+            }
         }
     }
 

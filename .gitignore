@@ -21,6 +21,7 @@ run-gametest/
 logs/
 backup/
 /local.properties
+local-sources/
 *.log
 *.sparkprofile
 

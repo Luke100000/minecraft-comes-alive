@@ -36,7 +36,7 @@ public class HairStyleList extends SimpleJsonResourceReloadListener {
     protected void apply(Map<ResourceLocation, JsonElement> data, ResourceManager manager, ProfilerFiller profiler) {
         styles.clear();
 
-        data.forEach((id, file) -> SkinCatalogLoader.addHairStyles(styles, id, file));
+        data.forEach((id, file) -> AppearanceCatalogLoader.addHairStyles(styles, id, file));
     }
 
     public HashMap<String, HairStyle> getAllStyles(Map<String, Hair> extraHair) {
@@ -55,13 +55,14 @@ public class HairStyleList extends SimpleJsonResourceReloadListener {
 
     public List<HairStyle> getStyles(Gender gender, Map<String, Hair> extraHair) {
         return getAllStyles(extraHair).values().stream()
-                .filter(style -> style.getGender() == Gender.NEUTRAL || gender == Gender.NEUTRAL || style.getGender() == gender)
+                .filter(style -> SkinSelection.matchesGender(style, gender))
                 .sorted((a, b) -> SkinListEntry.compareIdentifiers(a.getIdentifier(), b.getIdentifier()))
                 .toList();
     }
 
     public WeightedPool<String> getPool(Gender gender) {
         return getStyles(gender).stream()
+                .filter(style -> !style.exclude())
                 .collect(() -> new WeightedPool.Mutable<>("mca:missing"),
                         (list, entry) -> list.add(entry.getIdentifier(), entry.getChance()),
                         (a, b) -> a.entries.addAll(b.entries));

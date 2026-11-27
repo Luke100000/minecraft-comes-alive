@@ -8,6 +8,7 @@ import net.minecraft.resources.ResourceLocation;
 public final class SkinVisualIds {
     private static final String LEGACY_HAIR_NAMESPACE = "mca";
     private static final String LEGACY_HAIR_PATH_PREFIX = "skins/hair/";
+    private static final String EYE_TEXTURE_PATH_PREFIX = "skins/face/";
 
     private SkinVisualIds() {
     }
@@ -23,6 +24,18 @@ public final class SkinVisualIds {
         return skin != null && SkinSelection.matchesGender(skin, gender);
     }
 
+    public static boolean isEyeTexture(String identifier, Gender gender) {
+        ResourceLocation id = ResourceLocation.tryParse(identifier);
+        EyeCatalog list = EyeCatalog.getInstance();
+        return isEyeTexturePath(id) && list != null && list.contains(id, gender);
+    }
+
+    public static boolean isEyeTexturePath(ResourceLocation id) {
+        return id != null
+                && id.getPath().startsWith(EYE_TEXTURE_PATH_PREFIX)
+                && id.getPath().endsWith(".png");
+    }
+
     public static boolean isClothing(String identifier) {
         ClothingList list = ClothingList.getInstance();
         return isImmersiveLibraryId(identifier)
@@ -32,8 +45,13 @@ public final class SkinVisualIds {
     public static boolean isClothing(String identifier, Gender gender) {
         ClothingList list = ClothingList.getInstance();
         Clothing clothing = getKnownClothing(identifier, list);
-        return isImmersiveLibraryId(identifier)
-                || clothing != null && SkinSelection.matchesGender(clothing, gender);
+        return matchesKnownClothing(identifier, gender, clothing);
+    }
+
+    static boolean matchesKnownClothing(String identifier, Gender gender, Clothing clothing) {
+        return clothing == null
+                ? isImmersiveLibraryId(identifier)
+                : SkinSelection.matchesGender(clothing, gender);
     }
 
     public static boolean isHairStyle(String identifier) {
@@ -82,8 +100,9 @@ public final class SkinVisualIds {
     }
 
     private static Clothing getKnownClothing(String identifier, ClothingList list) {
-        Clothing clothing = list == null ? null : list.clothing.get(identifier);
-        return clothing == null ? CustomClothingManager.getClothing().getEntries().get(identifier) : clothing;
+        return list == null
+                ? CustomClothingManager.getClothing().getEntries().get(identifier)
+                : list.getEffective(identifier);
     }
 
     private static boolean isKnownLayeredHair(String identifier, LayeredHair.Category category, LayeredHairList list) {

@@ -91,7 +91,7 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
             // The villager parent is animation-only; its visible appearance stays in MCA layers.
             mca$skinLayer = new SkinLayer<>(this, mca$createVisibleModel(VillagerEntityModelMCA.bodyData(CubeDeformation.NONE)));
             layers.add(0, mca$skinLayer);
-            addLayer(new FaceLayer<>(this, mca$createVisibleModel(VillagerEntityModelMCA.bodyData(new CubeDeformation(0.01F))), "normal"));
+            addLayer(new FaceLayer<>(this, mca$createVisibleModel(VillagerEntityModelMCA.bodyData(new CubeDeformation(0.01F)))));
 
             mca$clothingLayer = new ClothingLayer<>(this, mca$createVisibleModel(VillagerEntityModelMCA.bodyData(new CubeDeformation(0.0625F))), "normal");
             addLayer(mca$clothingLayer);

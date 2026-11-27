@@ -1,6 +1,7 @@
 package net.conczin.mca.entity.ai;
 
 import net.conczin.mca.Config;
+import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.entity.ai.relationship.Gender;
@@ -30,6 +31,7 @@ public class Pregnancy {
     private static final CDataParameter<Boolean> IS_BABY_MALE = CParameter.create("IsBabyMale", false);
     private static final CDataParameter<Integer> BABY_AGE = CParameter.create("BabyAge", 0);
     private final VillagerEntityMCA mother;
+    private boolean warnedUnsupportedBirth;
 
     Pregnancy(VillagerEntityMCA entity) {
         this.mother = entity;
@@ -45,6 +47,9 @@ public class Pregnancy {
 
     public void setPregnant(boolean pregnant) {
         mother.setTrackedValue(HAS_BABY, pregnant);
+        if (!pregnant) {
+            warnedUnsupportedBirth = false;
+        }
     }
 
     public int getBabyAge() {
@@ -64,22 +69,32 @@ public class Pregnancy {
             return;
         }
 
-        setBabyAge(getBabyAge() + 60);
+        int birthAge = Config.getInstance().babyItemGrowUpTime;
+        if (getBabyAge() < birthAge) {
+            setBabyAge((int) Math.min((long) getBabyAge() + 60, birthAge));
+        }
 
-        if (getBabyAge() < Config.getInstance().babyItemGrowUpTime) {
+        if (getBabyAge() < birthAge) {
             return;
         }
 
-        setBabyAge(0);
-        getFather().ifPresent(father -> {
-            setPregnant(false);
+        getFather().ifPresentOrElse(father -> {
+            if (!Genetics.canInheritEyes(mother, father)) {
+                if (!warnedUnsupportedBirth) {
+                    MCA.LOGGER.warn("Deferring birth for {} and {} because a parent has unsupported eye genetics", mother.getUUID(), father.getUUID());
+                    warnedUnsupportedBirth = true;
+                }
+                return;
+            }
 
             VillagerEntityMCA child = createChild(getGender(), father);
+            setBabyAge(0);
+            setPregnant(false);
 
             child.setPos(mother.getX(), mother.getY(), mother.getZ());
             WorldUtils.spawnEntity(mother.level(), child, MobSpawnType.BREEDING);
             child.moveToSafePositionIfSuffocating();
-        });
+        }, () -> setBabyAge(0));
     }
 
     public boolean tryStartGestation() {
@@ -89,7 +104,7 @@ public class Pregnancy {
         }
 
         return getFather().map(father -> {
-            if (father.getTraits().hasTrait(Traits.INFERTILE)) {
+            if (father.getTraits().hasTrait(Traits.INFERTILE) || !Genetics.canInheritEyes(mother, father)) {
                 return false;
             }
 
@@ -114,6 +129,7 @@ public class Pregnancy {
         child.getGenetics().combine(partner.getGenetics(), mother.getGenetics());
         child.getTraits().inherit(partner.getTraits());
         child.getTraits().inherit(mother.getTraits());
+        child.getGenetics().finishEyeExpression(EyeGenetics.seed(child.getUUID(), 0));
         child.setAge(getNaturalChildStartingAge());
         child.getRelationships().getFamilyEntry().replaceParents(mother.getRelationships(), partner.getRelationships());
 
@@ -172,7 +188,7 @@ public class Pregnancy {
 
     public boolean procreate(Entity spouse, int count) {
         // Verify capacity for all children before generating any of them.
-        if (!hasRoomForBabies(spouse, count)) {
+        if (!Genetics.canInheritEyes(mother, spouse) || !hasRoomForBabies(spouse, count)) {
             return false;
         }
 
