@@ -32,6 +32,7 @@ public record OpenDestinyGuiRequest(boolean allowTeleportation, List<DestinyDest
 
     public OpenDestinyGuiRequest {
         destinations = List.copyOf(destinations);
+        allowTeleportation = allowTeleportation && !destinations.isEmpty();
     }
 
     @Override

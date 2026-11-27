@@ -1,15 +1,16 @@
 package net.conczin.mca.entity.ai;
 
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.entity.ai.village.poi.PoiType;
 import net.minecraft.world.entity.ai.village.poi.PoiTypes;
 import net.minecraft.world.level.block.BedBlock;
-import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
 
 import java.util.Set;
+import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * Bridges modded vanilla-style beds into Minecraft's HOME POI system.
@@ -50,23 +51,21 @@ public final class BedPoiCompatibility {
         return isHomePoiState(state) && !state.getValue(BedBlock.OCCUPIED);
     }
 
-    public static Stream<BlockState> homeStates(Block block) {
-        if (!(block instanceof BedBlock)) {
-            return Stream.empty();
-        }
-
-        return block.getStateDefinition()
-                .getPossibleStates()
-                .stream()
-                .filter(BedPoiCompatibility::isHomePoiState);
-    }
-
-    public static Set<BlockState> unregisteredModdedHomeStates() {
-        return BuiltInRegistries.BLOCK.stream()
+    /**
+     * Registers fallback HOME states after the loader has finished its own POI registration.
+     * Existing registrations always take precedence, regardless of their POI type.
+     */
+    public static void registerMissingHomePois(BiConsumer<ResourceKey<PoiType>, Set<BlockState>> registrar) {
+        Set<BlockState> states = BuiltInRegistries.BLOCK.stream()
                 .filter(block -> block instanceof BedBlock)
                 .filter(block -> !"minecraft".equals(BuiltInRegistries.BLOCK.getKey(block).getNamespace()))
-                .flatMap(BedPoiCompatibility::homeStates)
+                .flatMap(block -> block.getStateDefinition().getPossibleStates().stream())
+                .filter(BedPoiCompatibility::isHomePoiState)
                 .filter(state -> PoiTypes.forState(state).isEmpty())
                 .collect(Collectors.toSet());
+
+        if (!states.isEmpty()) {
+            registrar.accept(PoiTypes.HOME, states);
+        }
     }
 }

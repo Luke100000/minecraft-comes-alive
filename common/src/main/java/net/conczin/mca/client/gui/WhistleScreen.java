@@ -92,16 +92,16 @@ public class WhistleScreen extends Screen {
     public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float offset) {
         super.extractRenderState(context, mouseX, mouseY, offset);
 
-        context.centeredText(font, Component.translatable("gui.whistle.title"), width / 2, height / 2 - 100, 0xffffff);
+        context.centeredText(font, Component.translatable("gui.whistle.title"), width / 2, height / 2 - 100, 0xFFFFFFFF);
 
         if (loadingAnimationTicks != -1) {
             String loadingMsg = new String(new char[(loadingAnimationTicks / 5) % 4]).replace("\0", ".");
-            context.text(font, Component.translatable("gui.loading").append(Component.literal(loadingMsg)), width / 2 - 20, height / 2 - 10, 0xffffff);
+            context.text(font, Component.translatable("gui.loading").append(Component.literal(loadingMsg)), width / 2 - 20, height / 2 - 10, 0xFFFFFFFF);
         } else {
             if (keys.isEmpty()) {
-                context.centeredText(font, Component.translatable("gui.whistle.noFamily"), width / 2, height / 2 + 50, 0xffffff);
+                context.centeredText(font, Component.translatable("gui.whistle.noFamily"), width / 2, height / 2 + 50, 0xFFFFFFFF);
             } else {
-                context.centeredText(font, (selectedIndex + 1) + " / " + keys.size(), width / 2, height / 2 + 50, 0xffffff);
+                context.centeredText(font, (selectedIndex + 1) + " / " + keys.size(), width / 2, height / 2 + 50, 0xFFFFFFFF);
             }
         }
 

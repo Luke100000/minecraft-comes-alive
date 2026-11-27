@@ -12,6 +12,26 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DetourHandoffTest {
     @Test
+    void gradualValleyRemainsEligibleForDetour() {
+        Path valley = new Path(List.of(
+                new Node(0, 64, 0), new Node(1, 63, 0), new Node(2, 62, 0),
+                new Node(3, 61, 0), new Node(4, 62, 0), new Node(5, 63, 0),
+                new Node(6, 64, 0)
+        ), new BlockPos(100, 64, 0), true);
+
+        assertTrue(MCAGroundPathNavigation.avoidsUnrecoverableDetourDrop(valley));
+    }
+
+    @Test
+    void steepOneWayDropIsRejectedEvenTowardLowerTarget() {
+        Path cliff = new Path(List.of(
+                new Node(0, 64, 0), new Node(1, 61, 0), new Node(2, 62, 0)
+        ), new BlockPos(100, 61, 0), true);
+
+        assertFalse(MCAGroundPathNavigation.avoidsUnrecoverableDetourDrop(cliff));
+    }
+
+    @Test
     void oneBlockOfForwardProgressCannotFinishFlankingAcrossLongObstacle() {
         BlockPos origin = new BlockPos(0, 64, 0);
         BlockPos destination = new BlockPos(100, 64, 0);

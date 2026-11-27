@@ -24,6 +24,10 @@ public class ClientProxy {
         return INSTANCE.getPlayerData(uuid);
     }
 
+    public static Optional<Float> getGeneticsPassengerScale(UUID playerId) {
+        return INSTANCE.getGeneticsPassengerScale(playerId);
+    }
+
     public static class Impl {
         protected Impl() {
             INSTANCE = this;
@@ -38,6 +42,10 @@ public class ClientProxy {
         }
 
         public Optional<VillagerLike<?>> getPlayerData(UUID uuid) {
+            return Optional.empty();
+        }
+
+        public Optional<Float> getGeneticsPassengerScale(UUID playerId) {
             return Optional.empty();
         }
     }

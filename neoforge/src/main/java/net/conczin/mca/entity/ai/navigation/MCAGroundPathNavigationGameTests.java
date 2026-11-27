@@ -15,6 +15,7 @@ import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.registry.BlocksMCA;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.resources.Identifier;
 import net.conczin.mca.neoforge.gametest.AfterBatch;
 import net.conczin.mca.neoforge.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -24,6 +25,7 @@ import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.behavior.InsideBrownianWalk;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
@@ -1832,13 +1834,7 @@ public final class MCAGroundPathNavigationGameTests {
         prepareStrollRoom(helper, start);
 
         var stroll = LocalInsideBrownianWalk.create(0.5F);
-        // In 26.3 the roof block can be present before sky lighting has
-        // propagated. Reuse the light-readiness contract exercised by the
-        // adjacent outdoor-to-indoor test rather than assuming five ticks.
-        helper.startSequence().thenIdle(5).thenWaitUntil(() ->
-                helper.assertTrue(!helper.getLevel().canSeeSky(villager.blockPosition()),
-                        "rejected-target fixture roof has not updated sky lighting yet")
-        ).thenExecute(() -> {
+        helper.runAfterDelay(5, () -> whenSkyLightBlocked(helper, start, 55, () -> {
             try {
                 long gameTime = helper.getLevel().getGameTime();
                 helper.assertTrue(!helper.getLevel().canSeeSky(villager.blockPosition()),
@@ -1869,7 +1865,7 @@ public final class MCAGroundPathNavigationGameTests {
             } finally {
                 villager.discard();
             }
-        });
+        }));
     }
 
     @GameTest(batch = "mca_navigation_local_brownian_rejected", templateNamespace = "minecraft",
@@ -2142,46 +2138,101 @@ public final class MCAGroundPathNavigationGameTests {
         int originalPathfindingDistance = config.villagerPathfindingDistance;
         try {
             config.villagerPathfindingDistance = 160;
-            villager.getAttribute(Attributes.FOLLOW_RANGE).setBaseValue(96.0D);
-            // Construct after updating the attribute: vanilla fixes its base node
-            // budget when PathNavigation creates its PathFinder.
-            MCAGroundPathNavigation navigation = new MCAGroundPathNavigation(villager, helper.getLevel());
-            PathRequestDiagnostics.SearchSnapshot before = PathRequestDiagnostics.snapshot(villager);
-            Path ordinary = navigation.createPath(target, 0);
-            PathRequestDiagnostics.SearchSnapshot afterOrdinary = PathRequestDiagnostics.snapshot(villager);
-            Path extended = navigation.createPathForPersistentIntent(Set.of(target), 0);
-            PathRequestDiagnostics.SearchSnapshot afterExtended = PathRequestDiagnostics.snapshot(villager);
-            long ordinaryNodes = afterOrdinary.expandedNodes() - before.expandedNodes();
-            long extendedNodes = afterExtended.expandedNodes() - afterOrdinary.expandedNodes();
-            helper.assertTrue(ordinary != null && !ordinary.canReach()
-                            && extended != null && !extended.canReach(),
-                    "sealed target was unexpectedly reachable");
-            helper.assertTrue(ordinaryNodes > 1_024,
-                    "fixture did not exceed the small extended search cap: " + ordinaryNodes);
-            helper.assertTrue(extendedNodes >= ordinaryNodes,
-                    "extended search expanded fewer nodes than ordinary: " + extendedNodes + " vs " + ordinaryNodes);
+            // Exercise the navigator that vanilla actually updates on attribute changes.
+            MCAGroundPathNavigation navigation = (MCAGroundPathNavigation) villager.getNavigation();
+            var followRange = villager.getAttribute(Attributes.FOLLOW_RANGE);
+            followRange.removeModifier(Identifier.withDefaultNamespace("random_spawn_bonus"));
+            navigation.setRequiredPathLength(48.0F);
+            followRange.setBaseValue(16.0D);
+            assertSealedSearchBudget(helper, villager, navigation, target, 48, 768, 1024);
+            followRange.setBaseValue(96.0D);
+            assertSealedSearchBudget(helper, villager, navigation, target, 96, 1536, 1536);
+            // Vanilla applies the dirty attribute on its refresh tick. Exercise both
+            // the pre-refresh query above and the settled budget before decreasing it.
+            navigation.updatePathfinderMaxVisitedNodes();
+            assertSealedSearchBudget(helper, villager, navigation, target, 96, 1536, 1536);
+            followRange.setBaseValue(16.0D);
+            assertSealedSearchBudget(helper, villager, navigation, target, 48, 768, 1024);
+            navigation.updatePathfinderMaxVisitedNodes();
+            Identifier modifier = Identifier.fromNamespaceAndPath("mca", "test_follow_range");
+            followRange.addTransientModifier(new AttributeModifier(modifier, 48.0D, AttributeModifier.Operation.ADD_VALUE));
+            assertSealedSearchBudget(helper, villager, navigation, target, 64, 1024, 1024);
+            navigation.setRequiredPathLength(80.0F);
+            assertSealedSearchBudget(helper, villager, navigation, target, 80, 1280, 1280);
+            followRange.removeModifier(modifier);
+            navigation.setRequiredPathLength(48.0F);
+            assertSealedSearchBudget(helper, villager, navigation, target, 48, 768, 1024);
 
-            navigation.setMaxVisitedNodesMultiplier(2.0F);
-            PathRequestDiagnostics.SearchSnapshot beforeBoosted = PathRequestDiagnostics.snapshot(villager);
-            Path boostedOrdinary = navigation.createPath(target, 0);
-            PathRequestDiagnostics.SearchSnapshot afterBoostedOrdinary = PathRequestDiagnostics.snapshot(villager);
-            Path boostedExtended = navigation.createPathForPersistentIntent(Set.of(target), 0);
-            PathRequestDiagnostics.SearchSnapshot afterBoostedExtended = PathRequestDiagnostics.snapshot(villager);
-            long boostedOrdinaryNodes = afterBoostedOrdinary.expandedNodes() - beforeBoosted.expandedNodes();
-            long boostedExtendedNodes = afterBoostedExtended.expandedNodes() - afterBoostedOrdinary.expandedNodes();
-            helper.assertTrue(boostedOrdinary != null && !boostedOrdinary.canReach()
-                            && boostedExtended != null && !boostedExtended.canReach(),
-                    "sealed target became reachable with a caller multiplier");
-            helper.assertTrue(boostedOrdinaryNodes > extendedNodes,
-                    "fixture did not exercise an increased caller budget: " + boostedOrdinaryNodes);
-            helper.assertTrue(boostedExtendedNodes >= boostedOrdinaryNodes,
-                    "boosted extended search shrank the ordinary budget: "
-                            + boostedExtendedNodes + " vs " + boostedOrdinaryNodes);
+            navigation.updatePathfinderMaxVisitedNodes();
+            navigation.setMaxVisitedNodesMultiplier(1.0F);
+            var beforeBaseline = PathRequestDiagnostics.snapshot(villager);
+            Path baseline = navigation.probePath(Set.of(target), 0);
+            long baselineNodes = PathRequestDiagnostics.snapshot(villager).expandedNodes()
+                    - beforeBaseline.expandedNodes();
+            helper.assertTrue(baseline != null && !baseline.canReach(),
+                    "sealed target was unexpectedly reachable in the baseline probe");
+            // Vanilla stops before expanding the node that reaches the 768-node limit.
+            helper.assertTrue(baselineNodes == 767,
+                    "baseline probe did not exhaust the 48-block ordinary allowance: " + baselineNodes);
+
+            // Refresh the finder at 1135 nodes, then shrink the live range without a refresh.
+            followRange.setBaseValue(70.9375D);
+            navigation.updatePathfinderMaxVisitedNodes();
+            followRange.setBaseValue(16.0D);
+            helper.assertTrue(navigation.getMaxPathLength() == 48.0F,
+                    "unexpected live range after fractional follow-range decrease");
+            var beforeStale = PathRequestDiagnostics.snapshot(villager);
+            Path stale = navigation.probePath(Set.of(target), 0);
+            long staleNodes = PathRequestDiagnostics.snapshot(villager).expandedNodes()
+                    - beforeStale.expandedNodes();
+            helper.assertTrue(stale != null && !stale.canReach(),
+                    "sealed target was unexpectedly reachable with a stale finder budget");
+            helper.assertTrue(staleNodes == baselineNodes,
+                    "stale finder budget changed the exhausted ordinary allowance: "
+                            + staleNodes + " vs " + baselineNodes);
         } finally {
             config.villagerPathfindingDistance = originalPathfindingDistance;
             villager.discard();
         }
         helper.succeed();
+    }
+
+    private static void assertSealedSearchBudget(GameTestHelper helper, VillagerEntityMCA villager,
+                                                  MCAGroundPathNavigation navigation, BlockPos target,
+                                                  int ordinaryRange, int ordinaryBudget, int extendedBudget) {
+        helper.assertTrue(navigation.getMaxPathLength() == ordinaryRange,
+                "unexpected live ordinary range: " + navigation.getMaxPathLength());
+        long unboostedNodes = 0;
+        for (int multiplier : new int[]{1, 2}) {
+            navigation.setMaxVisitedNodesMultiplier(multiplier);
+            var before = PathRequestDiagnostics.snapshot(villager);
+            Path ordinary = navigation.probePath(Set.of(target), 0);
+            var afterOrdinary = PathRequestDiagnostics.snapshot(villager);
+            Path extended = navigation.createPathForPersistentIntent(Set.of(target), 0);
+            var afterExtended = PathRequestDiagnostics.snapshot(villager);
+            long ordinaryNodes = afterOrdinary.expandedNodes() - before.expandedNodes();
+            long extendedNodes = afterExtended.expandedNodes() - afterOrdinary.expandedNodes();
+            int ordinaryLimit = ordinaryBudget * multiplier;
+            int extendedLimit = Math.max(extendedBudget, ordinaryLimit);
+            String phase = "range=" + ordinaryRange + ", multiplier=" + multiplier;
+            helper.assertTrue(ordinary != null && !ordinary.canReach()
+                            && extended != null && !extended.canReach(),
+                    "sealed target was unexpectedly reachable: " + phase);
+            helper.assertTrue(afterExtended.extendedSearches() == afterOrdinary.extendedSearches() + 1,
+                    "fixture did not exercise extended search: " + phase);
+            helper.assertTrue(ordinaryNodes > 0 && ordinaryNodes <= ordinaryLimit,
+                    "ordinary expansion outside budget " + ordinaryLimit + ": " + ordinaryNodes + " (" + phase + ")");
+            if (multiplier == 1) {
+                helper.assertTrue(ordinaryNodes >= Math.min(ordinaryBudget * 0.9, 1024),
+                        "fixture did not exercise the ordinary budget: " + ordinaryNodes + " (" + phase + ")");
+                unboostedNodes = ordinaryNodes;
+            } else {
+                helper.assertTrue(ordinaryNodes >= unboostedNodes,
+                        "boosted ordinary search shrank: " + ordinaryNodes + " vs " + unboostedNodes + " (" + phase + ")");
+            }
+            helper.assertTrue(extendedNodes >= ordinaryNodes && extendedNodes <= extendedLimit,
+                    "extended expansion outside ordinary/capped allowance " + extendedLimit + ": " + extendedNodes + " (" + phase + ")");
+        }
     }
 
     @AfterBatch(batch = "mca_navigation_progressive_walk")

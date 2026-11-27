@@ -104,7 +104,9 @@ neoForge {
             type.set('gameTestServer')
             gameDirectory = file('run-abbenchmark/')
             ideName = "NeoForge A/B GameTest Server (${project.path})"
-            systemProperty('neoforge.enabledGameTestNamespaces', 'mca_ab')
+            // 26.x selects registered test IDs, not the legacy annotation namespace.
+            programArguments.addAll '--tests', 'mca:pathfindingabgametests/*'
+            systemProperty('mca.gametest.repairChunkTickets', 'true')
             systemProperty('mca.pathABBenchmark', 'true')
             // Exclude development-only StackWalker diagnostics from comparative CPU samples.
             systemProperty('mca.pathDebug.benchmarkWithoutDiagnostics', 'true')
@@ -113,7 +115,8 @@ neoForge {
             type.set('gameTestServer')
             gameDirectory = file('run-abopen/')
             ideName = "NeoForge Open-Only Path Benchmark (${project.path})"
-            systemProperty('neoforge.enabledGameTestNamespaces', 'mca_ab')
+            programArguments.addAll '--tests', 'mca:openpathabgametests/*'
+            systemProperty('mca.gametest.repairChunkTickets', 'true')
             systemProperty('mca.pathABBenchmark', 'true')
             systemProperty('mca.pathABOpenOnly', 'true')
             // Isolate released navigation costs; regular development runs still retain all path debug logs.
@@ -129,7 +132,9 @@ neoForge {
             }
             // Each alternative gets its own disposable world; never use a player's save.
             gameDirectory = file("run-searchbudget-${horizon}-${nodeCap}-${runLabel}/")
-            systemProperty('neoforge.enabledGameTestNamespaces', 'mca_ab')
+            programArguments.addAll '--tests', 'mca:pathsearchbudgetgametests/*'
+            // Use the same 26.x batch-readiness repair as normal GameTests.
+            systemProperty('mca.gametest.repairChunkTickets', 'true')
             systemProperty('mca.pathSearchBenchmark', 'true')
             systemProperty('mca.pathSearchHorizon', horizon)
             systemProperty('mca.pathSearchNodeCap', nodeCap)
@@ -200,17 +205,6 @@ tasks.named('processResources', ProcessResources) {
     from(project(':common').layout.buildDirectory.file('generated/accesstransformer.cfg')) {
         into 'META-INF'
     }
-}
-
-tasks.named('jar') {
-    exclude '**/*GameTests*.class'
-    exclude 'net/conczin/mca/neoforge/gametest/**'
-    exclude 'data/mca/structure/ported_1_21_1/**'
-    exclude 'net/conczin/mca/gametest/**'
-    exclude 'net/conczin/mca/benchmark/**'
-    exclude 'data/mca/gametest/**'
-    exclude 'data/mca/structure/gametest/**'
-    exclude 'data/mca_ab/**'
 }
 
 sourceSets.main.resources { srcDir 'src/generated/resources' }

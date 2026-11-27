@@ -13,6 +13,7 @@ import net.minecraft.client.gui.components.MultiLineEditBox;
 import net.minecraft.client.gui.components.StringWidget;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.ARGB;
 
 import java.net.URI;
 import java.util.EnumMap;
@@ -85,7 +86,7 @@ public class ChatAIContextScreen extends Screen {
             nicknameField = addRenderableWidget(new EditBox(font, left + 62, top + 70, 226, 15,
                     Component.translatable("gui.chat_ai_context.nickname_placeholder")));
             nicknameField.setMaxLength(MAX_NICKNAME_LENGTH);
-            nicknameField.setTextColor(CONTEXT_TEXT_COLOR);
+            nicknameField.setTextColor(ARGB.opaque(CONTEXT_TEXT_COLOR));
             nicknameField.setHint(
                     Component.translatable("gui.chat_ai_context.nickname_placeholder")
                             .withColor(0x808080)
@@ -151,10 +152,10 @@ public class ChatAIContextScreen extends Screen {
         graphics.fill(left + 1, top + 1, left + 299, top + 231, 0xE02A2E36);
 
         // Title
-        graphics.centeredText(font, title, width / 2, top + 12, 0xFFFFFF);
+        graphics.centeredText(font, title, width / 2, top + 12, 0xFFFFFFFF);
 
         // Name
-        graphics.text(font, Component.translatable(selectedTab.translationKey).append(": ").append(selectedTab.name(context)), left + 12, top + 59, CONTEXT_TEXT_COLOR);
+        graphics.text(font, Component.translatable(selectedTab.translationKey).append(": ").append(selectedTab.name(context)), left + 12, top + 59, ARGB.opaque(CONTEXT_TEXT_COLOR));
     }
 
     private void openHelp() {

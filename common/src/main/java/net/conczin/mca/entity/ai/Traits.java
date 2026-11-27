@@ -9,6 +9,8 @@ import net.conczin.mca.util.network.datasync.CDataParameter;
 import net.conczin.mca.util.network.datasync.CParameter;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.syncher.EntityDataAccessor;
+import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
@@ -74,6 +76,14 @@ public class Traits {
         return builder.addAll(TRAITS);
     }
 
+    public static boolean affectsDimensions(CDataManager<?> data, EntityDataAccessor<?> accessor) {
+        return data.isParam(TRAITS, accessor);
+    }
+
+    public static boolean affectsDimensions(CDataManager<?> data, SynchedEntityData.DataValue<?> value) {
+        return data.isParam(TRAITS, value);
+    }
+
     public Set<Trait> getTraits() {
         Set<Trait> traits = new LinkedHashSet<>();
         for (String id : entity.getTrackedValue(TRAITS).keySet()) {
@@ -111,11 +121,9 @@ public class Traits {
             return;
         }
 
-        if (!hasTrait(trait)) {
-            CompoundTag traits = entity.getTrackedValue(TRAITS).copy();
-            traits.putBoolean(trait.storageKey, true);
-            entity.setTrackedValue(TRAITS, traits);
-        }
+        CompoundTag traits = entity.getTrackedValue(TRAITS).copy();
+        traits.putBoolean(trait.storageKey, true);
+        entity.setTrackedValue(TRAITS, traits);
         entity.onTraitChanged(trait, true);
     }
 
@@ -124,11 +132,9 @@ public class Traits {
             return;
         }
 
-        if (hasTrait(trait)) {
-            CompoundTag traits = entity.getTrackedValue(TRAITS).copy();
-            traits.remove(trait.storageKey);
-            entity.setTrackedValue(TRAITS, traits);
-        }
+        CompoundTag traits = entity.getTrackedValue(TRAITS).copy();
+        traits.remove(trait.storageKey);
+        entity.setTrackedValue(TRAITS, traits);
         entity.onTraitChanged(trait, false);
     }
 

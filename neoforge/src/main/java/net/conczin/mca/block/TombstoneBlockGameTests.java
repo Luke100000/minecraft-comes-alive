@@ -14,6 +14,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.item.ItemStack;
@@ -106,6 +107,53 @@ public final class TombstoneBlockGameTests {
         helper.assertTrue(GraveyardManager.get(helper.getLevel()).getOccupiedGrave(deceased.getUUID())
                         .filter(expected::equals).isPresent(),
                 "replacing the preserved occupied tombstone must move the exact grave mapping");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_tombstone_grave_recovery", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void loadingLegacyOccupiedTombstoneRestoresMissingGraveIndex(GameTestHelper helper) {
+        BlockPos gravePos = helper.absolutePos(new BlockPos(1, 1, 1));
+        helper.getLevel().setBlock(gravePos, BlocksMCA.CROSS_HEADSTONE.defaultBlockState(), 3);
+        VillagerEntityMCA deceased = spawnVillager(helper, new BlockPos(5, 1, 1), "Legacy Grave");
+        TombstoneBlock.Data original = TombstoneBlock.Data.of(helper.getLevel().getBlockEntity(gravePos)).orElseThrow();
+        original.setEntity(deceased);
+        GlobalPos grave = GlobalPos.of(helper.getLevel().dimension(), gravePos);
+        GraveyardManager manager = GraveyardManager.getGlobal(helper.getLevel());
+        CompoundTag persistedBlockEntity = original.saveWithFullMetadata(helper.getLevel().registryAccess());
+        manager.clearOccupiedGrave(deceased.getUUID(), grave);
+        helper.assertTrue(manager.getOccupiedGrave(deceased.getUUID()).isEmpty(),
+                "fixture requires a missing legacy occupied-grave entry");
+
+        BlockEntity loaded = BlockEntity.loadStatic(gravePos, helper.getLevel().getBlockState(gravePos),
+                persistedBlockEntity, helper.getLevel().registryAccess());
+        helper.assertTrue(loaded instanceof TombstoneBlock.Data, "fixture did not load the persisted tombstone");
+        helper.getLevel().setBlockEntity(loaded);
+
+        helper.assertTrue(manager.getOccupiedGrave(deceased.getUUID()).filter(grave::equals).isPresent(),
+                "loading a legacy occupied tombstone must restore its missing index entry");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_tombstone_grave_recovery", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void loadingLegacyTombstoneDoesNotReplaceNewerGrave(GameTestHelper helper) {
+        BlockPos gravePos = helper.absolutePos(new BlockPos(1, 1, 1));
+        BlockPos replacementPos = helper.absolutePos(new BlockPos(4, 1, 1));
+        helper.getLevel().setBlock(gravePos, BlocksMCA.CROSS_HEADSTONE.defaultBlockState(), 3);
+        VillagerEntityMCA deceased = spawnVillager(helper, new BlockPos(6, 1, 1), "Moved Legacy Grave");
+        TombstoneBlock.Data original = TombstoneBlock.Data.of(helper.getLevel().getBlockEntity(gravePos)).orElseThrow();
+        original.setEntity(deceased);
+        CompoundTag persistedBlockEntity = original.saveWithFullMetadata(helper.getLevel().registryAccess());
+        GlobalPos replacement = GlobalPos.of(helper.getLevel().dimension(), replacementPos);
+        GraveyardManager manager = GraveyardManager.getGlobal(helper.getLevel());
+        manager.setOccupiedGrave(deceased.getUUID(), replacement);
+
+        BlockEntity loaded = BlockEntity.loadStatic(gravePos, helper.getLevel().getBlockState(gravePos),
+                persistedBlockEntity, helper.getLevel().registryAccess());
+        helper.assertTrue(loaded instanceof TombstoneBlock.Data, "fixture did not load the persisted tombstone");
+        helper.getLevel().setBlockEntity(loaded);
+
+        helper.assertTrue(manager.getOccupiedGrave(deceased.getUUID()).filter(replacement::equals).isPresent(),
+                "reloading stale legacy tombstone overwrote the newer grave location");
         helper.succeed();
     }
 

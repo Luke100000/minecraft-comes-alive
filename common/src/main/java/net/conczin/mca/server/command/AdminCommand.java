@@ -67,7 +67,7 @@ public class AdminCommand {
                 .then(register("removeVillageWithId").then(Commands.argument("id", IntegerArgumentType.integer()).executes(AdminCommand::removeVillageWithId)))
                 .then(register("convertVanillaVillagers").then(Commands.argument("radius", IntegerArgumentType.integer()).executes(AdminCommand::convertVanillaVillagers)))
                 .then(register("removeVillage").then(Commands.argument("name", StringArgumentType.string()).executes(AdminCommand::removeVillage)))
-                .then(register("buildingProcessingRate").then(Commands.argument("cooldown", IntegerArgumentType.integer()).executes(AdminCommand::buildingProcessingRate)))
+                .then(register("buildingProcessingRate").then(Commands.argument("cooldown", IntegerArgumentType.integer(1)).executes(AdminCommand::buildingProcessingRate)))
                 .then(register("overrideVillageRequirements")
                         .then(Commands.argument("target", EntityArgument.player())
                                 .then(Commands.argument("value", BoolArgumentType.bool())

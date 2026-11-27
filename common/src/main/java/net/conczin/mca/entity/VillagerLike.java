@@ -28,6 +28,8 @@ import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.ComponentSerialization;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.syncher.EntityDataAccessor;
+import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.ARGB;
@@ -37,6 +39,7 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Mob;
@@ -396,6 +399,17 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         return getAgeState();
     }
 
+    default boolean affectsDimensions(EntityDataAccessor<?> accessor) {
+        CDataManager<?> data = getTypeDataManager();
+        return Genetics.affectsDimensions(data, accessor)
+                || Traits.affectsDimensions(data, accessor);
+    }
+
+    default boolean affectsDimensions(SynchedEntityData.DataValue<?> value) {
+        CDataManager<?> data = getTypeDataManager();
+        return Genetics.affectsDimensions(data, value)
+                || Traits.affectsDimensions(data, value);
+    }
     default void updateAttributes() {
         //set speed
         float speed = 1.0f;
@@ -569,6 +583,33 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         setHairStyleId("");
     }
 
+    default void restoreGenderAfterLoad() {
+        if (getGenetics().getGender() == Gender.UNASSIGNED) {
+            EntityType<?> type = asEntity().getType();
+            getGenetics().setGender(type == EntitiesMCA.FEMALE_VILLAGER || type == EntitiesMCA.FEMALE_ZOMBIE_VILLAGER
+                    ? Gender.FEMALE : Gender.MALE);
+        }
+    }
+
+    default void restoreMissingAppearance(CompoundTag data) {
+        if (asEntity().level().isClientSide()) {
+            return;
+        }
+
+        if (data.getString("Skin").isEmpty()) {
+            randomizeSkin();
+        }
+        if (data.getString("Hair").isEmpty()
+                && data.getString("HairStyle").isEmpty()
+                && data.getString("HairBase").isEmpty()
+                && data.getString("HairBangs").isEmpty()
+                && data.getString("HairBack").isEmpty()
+                && data.getString("HairFront").isEmpty()
+                && data.getString("HairExtra").isEmpty()) {
+            randomizeHair();
+        }
+    }
+
     default void validateClothes() {
         if (!asEntity().level().isClientSide()) {
             migrateLegacyHairStyle();
@@ -640,6 +681,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         this.getTypeDataManager().load((E) asEntity(), input);
         readAdditionalConversionData(input);
         onTraitsLoaded();
+        asEntity().refreshDimensions();
     }
 
     default void writeAdditionalConversionData(CompoundTag output) {

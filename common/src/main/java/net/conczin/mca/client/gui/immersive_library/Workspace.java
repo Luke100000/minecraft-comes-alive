@@ -15,7 +15,7 @@ import net.minecraft.util.Mth;
 import java.util.*;
 import java.util.stream.Collectors;
 
-public final class Workspace {
+public final class Workspace implements AutoCloseable {
     private static final int MAX_HISTORY = 50;
     // Tags the library and the editor manage, not the player
     public static final Set<String> SYSTEM_TAGS = Set.of("clothing", "hair", "invalid");
@@ -37,6 +37,7 @@ public final class Workspace {
 
     private boolean dirty;
     private boolean dirtySinceSnapshot;
+    private boolean closed;
 
     private static NativeImage copyImage(NativeImage image) {
         NativeImage copy = new NativeImage(image.format(), image.getWidth(), image.getHeight(), false);
@@ -155,8 +156,6 @@ public final class Workspace {
     }
 
     public void addContrast(float c) {
-        saveSnapshot(true);
-
         int average = 0;
         int samples = 0;
         for (int x = 0; x < 64; x++) {
@@ -171,7 +170,11 @@ public final class Workspace {
                 }
             }
         }
+        if (samples == 0) {
+            return;
+        }
         average /= samples;
+        saveSnapshot(true);
 
         for (int x = 0; x < 64; x++) {
             for (int y = 0; y < 64; y++) {
@@ -223,7 +226,7 @@ public final class Workspace {
     public void saveSnapshot(boolean always) {
         if (always || dirtySinceSnapshot) {
             dirtySinceSnapshot = false;
-            while (history.size() > MAX_HISTORY) {
+            while (history.size() >= MAX_HISTORY) {
                 history.removeFirst().close();
             }
             NativeImage image = new NativeImage(64, 64, false);
@@ -251,6 +254,18 @@ public final class Workspace {
         if (dirty) {
             dirtySinceSnapshot = true;
         }
+    }
+
+    @Override
+    public void close() {
+        if (closed) {
+            return;
+        }
+        closed = true;
+        history.forEach(NativeImage::close);
+        history.clear();
+        // DynamicTexture owns currentImage and closes it with the GPU texture.
+        backendTexture.close();
     }
 
     private record FillTodo(int x, int y, int red, int green, int blue, int alpha) {

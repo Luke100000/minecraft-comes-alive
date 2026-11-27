@@ -10,6 +10,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.resources.Identifier;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Block;
@@ -61,12 +62,23 @@ public class Building implements VillageBuilding {
         posX = tag.getInt("posX").orElse(0);
         posY = tag.getInt("posY").orElse(0);
         posZ = tag.getInt("posZ").orElse(0);
-        ListTag cellsTag = tag.getList("floorCells").orElseGet(ListTag::new);
-        floorCells = cellsTag.stream()
-                .map(NbtHelper::decodeBlockPos)
-                .filter(Objects::nonNull)
-                .map(BlockPos::immutable)
-                .collect(Collectors.toUnmodifiableSet());
+        if (tag.getLongArray("floorCellPositions").isPresent()) {
+            long[] packed = tag.getLongArray("floorCellPositions").orElseThrow();
+            Set<BlockPos> decoded = new HashSet<>(packed.length);
+            for (long value : packed) {
+                decoded.add(BlockPos.of(value));
+            }
+            floorCells = Set.copyOf(decoded);
+        } else if (tag.getList("floorCells").isPresent()) {
+            ListTag cellsTag = tag.getList("floorCells").orElseThrow();
+            floorCells = cellsTag.stream()
+                    .map(NbtHelper::decodeBlockPos)
+                    .filter(Objects::nonNull)
+                    .map(BlockPos::immutable)
+                    .collect(Collectors.toUnmodifiableSet());
+        } else {
+            floorCells = Set.of();
+        }
         structureId = tag.getInt("structureId").orElse(-1);
         floorId = tag.getInt("floorId").orElse(-1);
         typeForced = tag.getBoolean("isTypeForced").orElse(false);
@@ -80,6 +92,14 @@ public class Building implements VillageBuilding {
     }
 
     public CompoundTag save() {
+        return saveInternal(false);
+    }
+
+    CompoundTag saveForClient(boolean ownsEntireFloor) {
+        return saveInternal(ownsEntireFloor);
+    }
+
+    private CompoundTag saveInternal(boolean ownsEntireFloor) {
         CompoundTag tag = new CompoundTag();
         tag.putInt("id", id);
         tag.putInt("pos0X", pos0X);
@@ -96,7 +116,15 @@ public class Building implements VillageBuilding {
         tag.putBoolean("isTypeForced", typeForced);
         tag.putString("type", type);
         tag.putBoolean("contributesToMain", contributesToMain);
-        tag.put("floorCells", NbtHelper.fromList(floorCells, NbtHelper::encodeBlockPos));
+        if (ownsEntireFloor) {
+            tag.putBoolean("ownsFloor", true);
+        } else {
+            long[] packedFloorCells = floorCells.stream()
+                    .mapToLong(BlockPos::asLong)
+                    .sorted()
+                    .toArray();
+            tag.putLongArray("floorCellPositions", packedFloorCells);
+        }
         CompoundTag blockTag = new CompoundTag();
         NbtHelper.fromMap(blockTag, blocks, Identifier::toString,
                 positions -> NbtHelper.fromList(positions, NbtHelper::encodeBlockPos));
@@ -108,28 +136,39 @@ public class Building implements VillageBuilding {
         return NbtHelper.decodeBlockPos(tag);
     }
 
-    Building.validationResult applyRoomScan(Level world,
-                                             BuildingRoomScanner.Result scan) {
-        if (scan.status() != validationResult.SUCCESS) return scan.status();
+    Building.validationResult applyRoomComponent(Level world,
+                                                 BlockPos source,
+                                                 int maxSize,
+                                                 RoomPoiEvidence.Index evidence,
+                                                 RoomPartitioner.Component component) {
+        if (component == null || component.area() < RoomPartitioner.MIN_ROOM_AREA) {
+            return validationResult.TOO_SMALL;
+        }
+        if (component.area() > maxSize) {
+            return validationResult.BLOCK_LIMIT;
+        }
 
         blocks.clear();
         invalidateBlocksView();
         Map<Block, Boolean> previousMatches = activeScanMatches;
         activeScanMatches = new IdentityHashMap<>();
         try {
-            scan.visitPoiCells(pos -> recordBuildingBlock(world, pos));
+            if (evidence != null) {
+                evidence.forEachCandidate(component, pos -> recordBuildingBlock(world, pos));
+            }
         } finally {
             activeScanMatches = previousMatches;
         }
-        BlockPos seed = scan.seed();
+        BlockPos seed = component.nearestCell(source);
         posX = seed.getX();
         posY = seed.getY();
         posZ = seed.getZ();
-        setGeometry(scan.min(), scan.max(), scan.floorCells());
+        FloorGeometry.Bounds bounds = FloorGeometry.bounds(component.cells(), 0);
+        setGeometry(bounds.min(), bounds.max(), component.floorCells());
         return validationResult.SUCCESS;
     }
 
-    void setGeometry(BlockPos min, BlockPos max, Collection<BlockPos> exactFloorCells) {
+    public void setGeometry(BlockPos min, BlockPos max, Collection<BlockPos> exactFloorCells) {
         pos0X = min.getX();
         pos0Y = min.getY();
         pos0Z = min.getZ();
@@ -165,12 +204,9 @@ public class Building implements VillageBuilding {
         return floorCells.size();
     }
 
-
     public int getStructureId() {
         return structureId;
     }
-
-
 
     public void setStructureId(int structureId) {
         this.structureId = structureId;
@@ -254,6 +290,9 @@ public class Building implements VillageBuilding {
     }
 
     protected void recordBuildingBlock(Level world, BlockPos pos) {
+        if (world instanceof ServerLevel serverLevel && !serverLevel.hasChunk(pos.getX() >> 4, pos.getZ() >> 4)) {
+            return;
+        }
         BlockState state = world.getBlockState(pos);
         Block block = state.getBlock();
         boolean relevant = activeScanMatches == null
@@ -333,7 +372,8 @@ public class Building implements VillageBuilding {
     }
 
     public BuildingType getBuildingType() {
-        return BuildingTypes.getInstance().getBuildingTypes().getOrDefault(type, new BuildingType());
+        BuildingTypes types = BuildingTypes.getInstance();
+        return types.getBuildingType(types.hasBuildingType(type) ? type : "building");
     }
 
     public BlockPos getRawPos0() {

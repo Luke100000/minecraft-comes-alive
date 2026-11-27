@@ -1,5 +1,6 @@
 package net.conczin.mca.entity.ai.brain.tasks;
 
+import net.conczin.mca.entity.VillagerEntityMCA;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.ai.behavior.GoToPotentialJobSite;
 import net.minecraft.world.entity.ai.behavior.PositionTracker;
@@ -20,9 +21,19 @@ public class ScheduledGoToPotentialJobSiteTask extends GoToPotentialJobSite {
     }
 
     @Override
+    protected boolean checkExtraStartConditions(ServerLevel level, Villager villager) {
+        return !shouldYield(villager) && super.checkExtraStartConditions(level, villager);
+    }
+
+    @Override
     protected boolean canStillUse(ServerLevel level, Villager villager, long time) {
-        return super.checkExtraStartConditions(level, villager)
+        return checkExtraStartConditions(level, villager)
                 && super.canStillUse(level, villager, time);
+    }
+
+    private static boolean shouldYield(Villager villager) {
+        return villager instanceof VillagerEntityMCA mcaVillager
+                && (InteractTask.shouldRun(mcaVillager) || mcaVillager.hasIgnitedCreeperThreat());
     }
 
     @Override

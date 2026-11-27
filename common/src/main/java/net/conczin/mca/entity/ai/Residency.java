@@ -3,8 +3,10 @@ package net.conczin.mca.entity.ai;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.conczin.mca.entity.ai.brain.tasks.ExtendedWalkTowardsTask;
 import net.conczin.mca.entity.ai.navigation.BedApproachTarget;
+import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
 import net.conczin.mca.server.world.data.GraveyardManager;
 import net.conczin.mca.server.world.data.Village;
 import net.conczin.mca.server.world.data.VillageManager;
@@ -40,7 +42,6 @@ public class Residency {
     private static final CDataParameter<Integer> VILLAGE = CParameter.create("HomeVillage", -1);
     private static final int WORKPLACE_SEARCH_RADIUS = 8;
     private final VillagerEntityMCA entity;
-    private final BedDebugLog bedDebugLog = new BedDebugLog();
 
     public Residency(VillagerEntityMCA entity) {
         this.entity = entity;
@@ -162,12 +163,35 @@ public class Residency {
      * Records the current HOME after its POI ticket has been successfully acquired.
      */
     public void onHomeClaimed() {
-        reconcileVillageMembership(true);
+        if (entity.requiresHome()) {
+            reconcileVillageMembership(true);
+        } else if (entity.level() instanceof ServerLevel level) {
+            VillageManager manager = VillageManager.get(level);
+            if (manager.hasUnreadableSavedData()) return;
+            clearGuestHomeClaims(manager);
+            getHome().filter(home -> home.dimension().equals(level.dimension())).ifPresent(home ->
+                    manager.findNearestVillage(home.pos(), Village.BORDER_MARGIN)
+                            .ifPresent(village -> village.recordHomeClaim(entity.getUUID(), home)));
+        }
+    }
+
+    public void clearGuestHomeClaims() {
+        if (entity.level() instanceof ServerLevel level) {
+            clearGuestHomeClaims(VillageManager.get(level));
+        }
+    }
+
+    private void clearGuestHomeClaims(VillageManager manager) {
+        if (manager.hasUnreadableSavedData()) return;
+        for (Village village : manager) {
+            village.clearGuestHomeClaim(entity.getUUID());
+        }
     }
 
     private void reconcileVillageMembership(boolean authoritativeHomeClaim) {
         if (entity.requiresHome()) {
             VillageManager manager = VillageManager.get((ServerLevel) entity.level());
+            if (manager.hasUnreadableSavedData()) return;
             Optional<Village> current = getHomeVillage();
             Optional<Village> target = getHome()
                     .filter(home -> home.dimension() == entity.level().dimension())
@@ -198,10 +222,8 @@ public class Residency {
         if (!entity.getBrain().isMemoryValue(MemoryModuleType.HOME, invalidHome)) {
             return;
         }
-        if (ExtendedWalkTowardsTask.clearOwnedWalkTarget(entity, MemoryModuleType.HOME)) {
-            entity.getNavigation().stop();
-            entity.getBrain().eraseMemory(MemoryModuleType.PATH);
-        }
+        ExtendedWalkTowardsTask.retractOwnedMovement(entity, MemoryModuleType.HOME);
+        WalkTargetFailureMemory.clearForProducer(entity, MemoryModuleType.HOME, invalidHome);
         clearHomeMemories(entity.getBrain());
         if (invalidHome.dimension() == entity.level().dimension()
                 && entity.getSleepingPos().filter(invalidHome.pos()::equals).isPresent()) {
@@ -218,12 +240,13 @@ public class Residency {
      * Removes MCA village membership without changing HOME or its POI ticket.
      */
     public void leaveVillage() {
+        if (VillageManager.get((ServerLevel) entity.level()).hasUnreadableSavedData()) return;
         getHomeVillage().ifPresent(village -> village.removeResident(entity));
         entity.setTrackedValue(VILLAGE, -1);
     }
 
     public void tick() {
-        bedDebugLog.tick(entity);
+        if (VillageManager.get((ServerLevel) entity.level()).hasUnreadableSavedData()) return;
         //report buildings close by
         if (entity.requiresHome() && (entity.tickCount == 1 || entity.tickCount % 600 == 0)) {
             Optional<Village> village = getHomeVillage();
@@ -275,6 +298,7 @@ public class Residency {
     }
 
     public void setHome(ServerPlayer player) {
+        if (VillageManager.get((ServerLevel) entity.level()).hasUnreadableSavedData()) return;
         if (!entity.requiresHome()) {
             entity.sendChatMessage(player, "interaction.sethome.temporary");
             return;
@@ -289,8 +313,8 @@ public class Residency {
                     ? "interaction.sethome.already_assigned"
                     : "interaction.sethome.success");
         } else {
-            getHomeVillage().map(v -> v.getBuildingAt(entity.blockPosition())).filter(Optional::isPresent).map(Optional::get).filter(b -> b.getBuildingType().noBeds()).ifPresentOrElse(building -> {
-                entity.sendChatMessage(player, "interaction.sethome.bedfail." + building.getBuildingType().name());
+            getHomeVillage().flatMap(v -> v.getBuildingAt(entity.blockPosition()).map(v::getEffectiveBuildingType)).filter(bt -> bt.noBeds()).ifPresentOrElse(buildingType -> {
+                entity.sendChatMessage(player, "interaction.sethome.bedfail." + buildingType.name());
             }, () -> {
                 entity.sendChatMessage(player, "interaction.sethome.bedfail");
             });
@@ -371,15 +395,16 @@ public class Residency {
 
     /** Unlike the memory-based check, this also works after vanilla erased HOME. */
     public boolean mayReleaseHomePoiAt(ServerLevel level, BlockPos position) {
-        Optional<Village> village = VillageManager.get(level).findNearestVillage(position, Village.BORDER_MARGIN);
+        VillageManager manager = VillageManager.get(level);
+        Optional<Village> village = manager.findNearestVillage(position, Village.BORDER_MARGIN);
         if (village.isPresent()) {
             return village.get().ownsResidentHome(entity.getUUID(), position);
         }
 
         // Outside registered MCA villages, POI tickets have no entity identity. A competing
         // villager remembering this HOME means we cannot safely release its anonymous ticket.
-        for (Entity other : level.getAllEntities()) {
-            if (other instanceof Villager villager && other != entity
+        for (Villager villager : manager.getLoadedVillagers()) {
+            if (villager != entity
                     && villager.getBrain().getMemoryInternal(MemoryModuleType.HOME)
                     .filter(home -> home.dimension().equals(level.dimension()) && home.pos().equals(position))
                     .isPresent()) {
@@ -395,7 +420,7 @@ public class Residency {
                     if (target.isReached(entity, 0)) {
                         return true;
                     }
-                    Path path = entity.getNavigation().createPath(target.getPathTargets(entity), 0);
+                    Path path = MCAGroundPathNavigation.probePath(entity.getNavigation(), target.getPathTargets(entity), 0);
                     return path != null && path.canReach();
                 })
                 .orElse(false);

@@ -5,6 +5,8 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.destiny.DestinyDestination;
 import net.conczin.mca.network.HandleablePayload;
 import net.conczin.mca.server.DestinyLocationResolver;
+import net.conczin.mca.server.ServerInteractionManager;
+import net.conczin.mca.server.world.data.PlayerSaveData;
 import net.conczin.mca.util.compat.ExtendedFuzzyPositions;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
@@ -32,6 +34,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 
 public record DestinyMessage(Optional<DestinyDestination> destination) implements HandleablePayload {
     private static final TicketType DESTINY_TELEPORT_TICKET = new TicketType(5L, TicketType.FLAG_LOADING);
@@ -58,14 +61,23 @@ public record DestinyMessage(Optional<DestinyDestination> destination) implement
         if (!(player instanceof ServerPlayer serverPlayer)) {
             return;
         }
+        UUID playerId = serverPlayer.getUUID();
+        ServerInteractionManager interactionManager = ServerInteractionManager.getInstance();
 
         if (destination.isEmpty()) {
-            serverPlayer.removeEffect(MobEffects.INVISIBILITY);
-            serverPlayer.removeEffect(MobEffects.HEALTH_BOOST);
+            // Also sent when the story finishes: close UI session and effects without cancelling an in-flight teleport.
+            boolean closedOpenUi = interactionManager.closeDestinyUi(playerId);
+            if (!closedOpenUi && !interactionManager.hasPendingDestinyTeleport(serverPlayer)) {
+                return;
+            }
+            finishDestinyOnboarding(serverPlayer);
             return;
         }
 
-        MCA.getStructureLocator().cancel(serverPlayer.getUUID());
+        if (!interactionManager.hasActiveDestinySession(serverPlayer)) {
+            return;
+        }
+
         DestinyDestination selectedDestination = destination.get();
         var server = serverPlayer.level().getServer();
         List<DestinyDestination> allowedDestinations =
@@ -75,7 +87,13 @@ public record DestinyMessage(Optional<DestinyDestination> destination) implement
             return;
         }
 
-        if (!Config.getInstance().allowDestinyTeleportation || selectedDestination.dimension().isEmpty()) {
+        if (!Config.getInstance().allowDestinyTeleportation) {
+            interactionManager.clearDestinySession(playerId);
+            finishDestinyOnboarding(serverPlayer);
+            return;
+        }
+        if (selectedDestination.dimension().isEmpty()) {
+            markDestinyCompleted(serverPlayer);
             return;
         }
 
@@ -86,30 +104,49 @@ public record DestinyMessage(Optional<DestinyDestination> destination) implement
             return;
         }
 
+        if (!interactionManager.beginDestinyTeleport(playerId)) {
+            return;
+        }
+
         BlockPos searchOrigin = getSearchOrigin(serverPlayer, targetLevel);
         ServerLevel sourceLevel = serverPlayer.level();
         DestinyLocationResolver.findNearestAsync(
-                serverPlayer.getUUID(),
+                playerId,
                 targetLevel,
                 searchOrigin,
                 selectedDestination,
                 128
-        ).thenAccept(result -> {
-            if (serverPlayer.isRemoved() || serverPlayer.level() != sourceLevel
-                    || !Config.getInstance().allowDestinyTeleportation
-                    || !DestinyLocationResolver.getCachedDestinations(server).contains(selectedDestination)) {
+        ).whenComplete((result, error) -> {
+            // The locator completes on the server thread and holds its chunk ticket through this callback.
+            if (!interactionManager.consumePendingDestinyTeleport(playerId)
+                    || serverPlayer.hasDisconnected() || serverPlayer.isRemoved()
+                    || !serverPlayer.connection.isAcceptingMessages()
+                    || !server.isRunning() || server.isStopped()) {
                 return;
             }
-            result.ifPresentOrElse(
-                    pos -> handleBlockPos(
-                            serverPlayer,
-                            targetLevel,
-                            selectedDestination.location(),
-                            pos
-                    ),
-                    () -> notifyDestinationNotFound(serverPlayer)
-            );
+
+            finishDestinyOnboarding(serverPlayer);
+            if (error != null || result == null || result.isEmpty()
+                    || serverPlayer.level() != sourceLevel || !Config.getInstance().allowDestinyTeleportation
+                    || !DestinyLocationResolver.getCachedDestinations(server).contains(selectedDestination)) {
+                notifyDestinationNotFound(serverPlayer);
+                return;
+            }
+            handleBlockPos(serverPlayer, targetLevel, selectedDestination.location(), result.orElseThrow());
         });
+    }
+
+    private static void finishDestinyOnboarding(ServerPlayer player) {
+        markDestinyCompleted(player);
+        player.removeEffect(MobEffects.INVISIBILITY);
+        player.removeEffect(MobEffects.HEALTH_BOOST);
+    }
+
+    private static void markDestinyCompleted(ServerPlayer player) {
+        PlayerSaveData data = PlayerSaveData.get(player);
+        if (!data.hasUnreadableSavedData()) {
+            data.setEntityDataSet(true);
+        }
     }
 
     private static BlockPos getSearchOrigin(ServerPlayer player, ServerLevel targetLevel) {
@@ -134,35 +171,52 @@ public record DestinyMessage(Optional<DestinyDestination> destination) implement
         return DESTINY_TELEPORT_TICKET;
     }
 
-    private static void handleBlockPos(
-            ServerPlayer player,
+    public static Optional<BlockPos> resolveSafeTeleportPos(
             ServerLevel targetLevel,
             String location,
-            BlockPos pos
+            BlockPos rawPos
     ) {
-        targetLevel.getChunkAt(pos);
-        if (location.equals("minecraft:ancient_city")) {
-            pos = new BlockPos(pos.getX(), -50, pos.getZ());
-        } else {
-            pos = targetLevel.getHeightmapPos(Heightmap.Types.WORLD_SURFACE, pos);
+        // The async locator has already requested the destination at FULL status.
+        if (targetLevel.getChunkSource().getChunkNow(rawPos.getX() >> 4, rawPos.getZ() >> 4) == null) {
+            return Optional.empty();
         }
+        BlockPos pos = location.equals("minecraft:ancient_city")
+                ? new BlockPos(rawPos.getX(), -50, rawPos.getZ())
+                : targetLevel.getHeightmapPos(Heightmap.Types.WORLD_SURFACE, rawPos);
         pos = RandomPos.moveUpOutOfSolid(
                 pos,
-                targetLevel.getHeight(),
+                targetLevel.getMaxY(),
                 candidate -> targetLevel.getBlockState(candidate).isSuffocating(targetLevel, candidate)
         );
         pos = ExtendedFuzzyPositions.downWhile(
                 pos,
-                1,
-                candidate -> !targetLevel.getBlockState(candidate.below()).isCollisionShapeFullBlock(targetLevel, candidate)
+                targetLevel.getMinY() + 1,
+                candidate -> !targetLevel.getBlockState(candidate.below()).isCollisionShapeFullBlock(targetLevel, candidate.below())
         );
-        if (!targetLevel.isInWorldBounds(pos) || !targetLevel.getWorldBorder().isWithinBounds(pos)) {
+        BlockPos below = pos.below();
+        if (!targetLevel.isInWorldBounds(pos)
+                || !targetLevel.isInWorldBounds(below)
+                || !targetLevel.getWorldBorder().isWithinBounds(pos)
+                || !targetLevel.getBlockState(below).isCollisionShapeFullBlock(targetLevel, below)) {
+            return Optional.empty();
+        }
+        return Optional.of(pos);
+    }
+
+    private static void handleBlockPos(
+            ServerPlayer player,
+            ServerLevel targetLevel,
+            String location,
+            BlockPos rawPos
+    ) {
+        Optional<BlockPos> resolved = resolveSafeTeleportPos(targetLevel, location, rawPos);
+        if (resolved.isEmpty()) {
             notifyDestinationNotFound(player);
             return;
         }
-
+        BlockPos pos = resolved.get();
         targetLevel.getChunkSource().addTicketWithRadius(DESTINY_TELEPORT_TICKET, ChunkPos.containing(pos), 1);
-        player.teleportTo(
+        if (!player.teleportTo(
                 targetLevel,
                 pos.getX(),
                 pos.getY(),
@@ -171,7 +225,10 @@ public record DestinyMessage(Optional<DestinyDestination> destination) implement
                 player.getYRot(),
                 player.getXRot(),
                 false
-        );
+        )) {
+            notifyDestinationNotFound(player);
+            return;
+        }
         player.setRespawnPosition(new ServerPlayer.RespawnConfig(
                 LevelData.RespawnData.of(targetLevel.dimension(), pos, 0.0F, 0.0F),
                 true

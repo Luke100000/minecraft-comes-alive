@@ -82,64 +82,60 @@ class RangedWeaponHelperTest {
 
     @Test
     void levelSkeletonUsesMidpointAndArrowPhysics() {
-        Vec3 shot = RangedWeaponHelper.calculateBowShotVector(
-                new Vec3(0.0D, 1.5D, 0.0D),
-                new Vec3(10.0D, 0.0D, 0.0D),
-                2.0D
-        );
+        Vec3 launch = new Vec3(0.0D, 1.5D, 0.0D);
+        Vec3 target = new Vec3(10.0D, 0.0D, 0.0D);
+        var shot = RangedWeaponHelper.solveBowShot(launch, target, 2.0D, Vec3.ZERO).orElseThrow();
 
-        assertVector(shot, 10.0D, 0.365D, 0.0D);
+        assertTrue(shot.direction().y > 0.0D, "gravity compensation must aim above horizontal");
+        assertHitsMidpoint(launch, target, 2.0D, shot, RangedWeaponHelper.BOW_PROJECTILE_SPEED);
     }
 
     @Test
     void uphillAndDownhillCompensateForActualTrajectory() {
-        Vec3 uphill = RangedWeaponHelper.calculateBowShotVector(
-                new Vec3(0.0D, 1.5D, 0.0D),
-                new Vec3(10.0D, 3.0D, 0.0D),
-                2.0D
-        );
-        Vec3 downhill = RangedWeaponHelper.calculateBowShotVector(
-                new Vec3(0.0D, 1.5D, 0.0D),
-                new Vec3(10.0D, -2.0D, 0.0D),
-                2.0D
-        );
+        Vec3 launch = new Vec3(0.0D, 1.5D, 0.0D);
+        Vec3 uphillTarget = new Vec3(10.0D, 3.0D, 0.0D);
+        Vec3 downhillTarget = new Vec3(10.0D, -2.0D, 0.0D);
+        var uphill = RangedWeaponHelper.solveBowShot(launch, uphillTarget, 2.0D, Vec3.ZERO).orElseThrow();
+        var downhill = RangedWeaponHelper.solveBowShot(launch, downhillTarget, 2.0D, Vec3.ZERO).orElseThrow();
 
-        assertVector(uphill, 10.0D, 3.478D, 0.0D);
-        assertVector(downhill, 10.0D, -1.611D, 0.0D);
+        assertTrue(uphill.direction().y > downhill.direction().y);
+        assertHitsMidpoint(launch, uphillTarget, 2.0D, uphill, RangedWeaponHelper.BOW_PROJECTILE_SPEED);
+        assertHitsMidpoint(launch, downhillTarget, 2.0D, downhill, RangedWeaponHelper.BOW_PROJECTILE_SPEED);
     }
 
     @Test
     void spiderAndCaveSpiderUseTheirActualBodyMidpoints() {
-        Vec3 spider = RangedWeaponHelper.calculateBowShotVector(
-                new Vec3(0.0D, 1.5D, 0.0D),
-                new Vec3(10.0D, 0.0D, 0.0D),
-                0.9D
-        );
-        Vec3 caveSpider = RangedWeaponHelper.calculateBowShotVector(
-                new Vec3(0.0D, 1.5D, 0.0D),
-                new Vec3(10.0D, 0.0D, 0.0D),
-                0.5D
-        );
+        Vec3 launch = new Vec3(0.0D, 1.5D, 0.0D);
+        Vec3 target = new Vec3(10.0D, 0.0D, 0.0D);
+        var spider = RangedWeaponHelper.solveBowShot(launch, target, 0.9D, Vec3.ZERO).orElseThrow();
+        var caveSpider = RangedWeaponHelper.solveBowShot(launch, target, 0.5D, Vec3.ZERO).orElseThrow();
 
-        assertVector(spider, 10.0D, -0.186D, 0.0D);
-        assertVector(caveSpider, 10.0D, -0.385D, 0.0D);
+        assertTrue(spider.direction().y > caveSpider.direction().y);
+        assertHitsMidpoint(launch, target, 0.9D, spider, RangedWeaponHelper.BOW_PROJECTILE_SPEED);
+        assertHitsMidpoint(launch, target, 0.5D, caveSpider, RangedWeaponHelper.BOW_PROJECTILE_SPEED);
     }
 
     @Test
     void zeroHorizontalDistanceProducesFiniteMidpointVector() {
-        Vec3 shot = RangedWeaponHelper.calculateBowShotVector(
-                new Vec3(0.0D, 1.5D, 0.0D),
-                new Vec3(0.0D, 3.0D, 0.0D),
-                2.0D
-        );
+        Vec3 launch = new Vec3(0.0D, 1.5D, 0.0D);
+        Vec3 target = new Vec3(0.0D, 3.0D, 0.0D);
+        var shot = RangedWeaponHelper.solveBowShot(launch, target, 2.0D, Vec3.ZERO).orElseThrow();
 
-        assertTrue(Double.isFinite(shot.y));
-        assertVector(shot, 0.0D, 2.5D, 0.0D);
+        assertEquals(0.0D, shot.direction().x, EPSILON);
+        assertEquals(0.0D, shot.direction().z, EPSILON);
+        assertTrue(Double.isFinite(shot.direction().y) && shot.direction().y > 0.0D);
+        assertHitsMidpoint(launch, target, 2.0D, shot, RangedWeaponHelper.BOW_PROJECTILE_SPEED);
     }
 
-    private static void assertVector(Vec3 actual, double x, double y, double z) {
-        assertEquals(x, actual.x, EPSILON);
-        assertEquals(y, actual.y, EPSILON);
-        assertEquals(z, actual.z, EPSILON);
+    private static void assertHitsMidpoint(Vec3 launch, Vec3 target, double height,
+                                           RangedWeaponHelper.BowShot shot, float speed) {
+        Vec3 position = launch;
+        Vec3 velocity = shot.direction().normalize().scale(speed);
+        for (int tick = 0; tick < Math.ceil(shot.flightTicks()); tick++) {
+            position = position.add(velocity.scale(Math.min(1.0D, shot.flightTicks() - tick)));
+            velocity = velocity.scale(0.99D).subtract(0.0D, 0.05D, 0.0D);
+        }
+        assertTrue(position.distanceTo(target.add(0.0D, height * 0.5D, 0.0D)) < 1.0E-4D,
+                "nominal projectile missed midpoint at target=" + target + ", height=" + height);
     }
 }

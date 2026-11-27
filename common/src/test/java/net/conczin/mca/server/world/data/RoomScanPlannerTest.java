@@ -46,7 +46,7 @@ class RoomScanPlannerTest {
         StructureScanner.FloorObservation observation = observation(
                 source, scannedFloor(64, 68, 0, 6));
 
-        RoomScanPlan plan = RoomScanPlanner.planFresh(village, source, observation);
+        RoomWorkflow.Plan plan = RoomWorkflow.analyzeFresh(village, null, source, observation).plan();
 
         assertEquals(Village.RoomScanMode.ADD_ROOM, plan.mode());
         assertTrue(plan.currentRoom().isEmpty());
@@ -61,8 +61,8 @@ class RoomScanPlannerTest {
         Village village = village(persisted, room(100, 20, 7, Set.of(new BlockPos(0, 68, 0))));
         BlockPos source = new BlockPos(4, 68, 0);
 
-        RoomScanPlan plan = RoomScanPlanner.planFresh(village, source,
-                observation(source, scannedFloor(68, 70, 0, 4)));
+        RoomWorkflow.Plan plan = RoomWorkflow.analyzeFresh(village, null, source,
+                observation(source, scannedFloor(68, 70, 0, 4))).plan();
 
         assertEquals(Village.RoomScanMode.ADD_ROOM, plan.mode());
         assertEquals(20, plan.targetStructureId());
@@ -81,8 +81,8 @@ class RoomScanPlannerTest {
         village.registerStructure(upper, room(101, 21, 8, Set.of(new BlockPos(0, 70, 0))));
         BlockPos source = new BlockPos(4, 68, 0);
 
-        RoomScanPlan plan = RoomScanPlanner.planFresh(village, source,
-                observation(source, scannedFloor(68, 70, 0, 4)));
+        RoomWorkflow.Plan plan = RoomWorkflow.analyzeFresh(village, null, source,
+                observation(source, scannedFloor(68, 70, 0, 4))).plan();
 
         assertEquals(Village.RoomScanMode.ADD_ROOM, plan.mode());
         assertEquals(20, plan.targetStructureId());
@@ -97,8 +97,8 @@ class RoomScanPlannerTest {
         Structure landing = structure(21, 20, new StructureFloor(0, 2, scannedFloor(76, 80, 5, 8)));
         village.registerStructure(landing, room(101, 21, 0, Set.of(new BlockPos(5, 76, 0))));
         BlockPos source = new BlockPos(9, 78, 0);
-        RoomScanPlan plan = RoomScanPlanner.planFresh(village, source,
-                observation(source, scannedFloor(78, 82, 9, 12), Set.of(new BlockPos(8, 76, 0)), village));
+        RoomWorkflow.Plan plan = RoomWorkflow.analyzeFresh(village, null, source,
+                observation(source, scannedFloor(78, 82, 9, 12), Set.of(new BlockPos(8, 76, 0)), village)).plan();
         assertEquals(Village.RoomScanMode.ADD_ATTACHMENT, plan.mode());
         assertEquals(2, plan.prospectiveFloorNumber());
     }
@@ -112,7 +112,7 @@ class RoomScanPlannerTest {
         village.registerStructure(structure(22, 20, new StructureFloor(0, 3, scannedFloor(78, 82, 15, 18))),
                 room(102, 22, 0, Set.of(new BlockPos(15, 78, 0))));
         BlockPos source = new BlockPos(9, 78, 0);
-        var analysis = RoomScanPlanner.analyzeFresh(village, source,
+        var analysis = RoomWorkflow.analyzeFresh(village, null, source,
                 observation(source, scannedFloor(78, 82, 9, 12), Set.of(new BlockPos(8, 76, 0)), village));
         assertEquals(Building.validationResult.AMBIGUOUS_STRUCTURE, analysis.result());
         assertEquals(Village.RoomScanMode.ADD_ATTACHMENT, analysis.plan().mode());
@@ -120,7 +120,7 @@ class RoomScanPlannerTest {
         assertTrue(!analysis.plan().hasProspectiveFloor());
         assertEquals(3, village.getStructure(22).orElseThrow().getFloor(0).orElseThrow().floorNumber());
         assertEquals(Village.RoomScanMode.UPDATE_ROOM,
-                village.getRoomScanPlan(null, new BlockPos(15, 78, 0)).mode());
+                RoomWorkflow.plan(village, null, new BlockPos(15, 78, 0)).mode());
     }
 
     @Test
@@ -131,8 +131,8 @@ class RoomScanPlannerTest {
         Village village = village(persisted, room);
         BlockPos source = new BlockPos(4, 67, 0);
 
-        RoomScanPlan plan = RoomScanPlanner.planFresh(village, source,
-                observation(selectedCell, source, scannedFloor(64, 68, 0, 3), Set.of()));
+        RoomWorkflow.Plan plan = RoomWorkflow.analyzeFresh(village, null, source,
+                observation(selectedCell, source, scannedFloor(64, 68, 0, 3), Set.of())).plan();
 
         assertEquals(Village.RoomScanMode.UPDATE_ROOM, plan.mode());
         assertEquals(room, plan.currentRoom().orElseThrow());
@@ -148,8 +148,8 @@ class RoomScanPlannerTest {
         Village village = village(persisted, room);
         BlockPos source = new BlockPos(4, 67, 0);
 
-        RoomScanPlan plan = RoomScanPlanner.planFresh(village, source,
-                observation(selectedCell, null, scannedFloor(64, 68, 0, 3), Set.of()));
+        RoomWorkflow.Plan plan = RoomWorkflow.analyzeFresh(village, null, source,
+                observation(selectedCell, null, scannedFloor(64, 68, 0, 3), Set.of())).plan();
 
         assertEquals(Village.RoomScanMode.ADD_BUILDING, plan.mode());
         assertTrue(plan.currentRoom().isEmpty());
@@ -165,8 +165,8 @@ class RoomScanPlannerTest {
         BlockPos selectedCell = new BlockPos(2, 64, 0);
         assertTrue(persisted.replaceFloorGeometry(0, scannedFloor(64, 68, 0, 3)));
 
-        RoomScanPlan plan = RoomScanPlanner.planFresh(village, source,
-                observation(selectedCell, selectedCell, scannedFloor(64, 68, 0, 3), Set.of()));
+        RoomWorkflow.Plan plan = RoomWorkflow.analyzeFresh(village, null, source,
+                observation(selectedCell, selectedCell, scannedFloor(64, 68, 0, 3), Set.of())).plan();
 
         assertEquals(Village.RoomScanMode.UPDATE_ROOM, plan.mode());
         assertEquals(room, plan.currentRoom().orElseThrow());
@@ -183,7 +183,7 @@ class RoomScanPlannerTest {
                 cell(0, 64), cell(1, 64), cell(2, 64), cell(3, 64),
                 cell(4, 64), cell(5, 64), cell(6, 65)), Map.of());
 
-        RoomScanPlan plan = RoomScanPlanner.planFresh(village, source, observation(source, fresh));
+        RoomWorkflow.Plan plan = RoomWorkflow.analyzeFresh(village, null, source, observation(source, fresh)).plan();
 
         assertEquals(Village.RoomScanMode.ADD_ROOM, plan.mode());
         assertTrue(plan.currentRoom().isEmpty());
@@ -201,8 +201,8 @@ class RoomScanPlannerTest {
                 cell(0, 88), cell(1, 88), cell(2, 88), cell(3, 88),
                 cell(4, 89), cell(5, 90), cell(6, 91)), Map.of());
 
-        RoomScanPlan plan = RoomScanPlanner.planFresh(
-                village, source, observation(source, fresh));
+        RoomWorkflow.Plan plan = RoomWorkflow.analyzeFresh(
+                village, null, source, observation(source, fresh)).plan();
 
         assertEquals(Village.RoomScanMode.ADD_ROOM, plan.mode());
         assertTrue(plan.currentRoom().isEmpty());
@@ -224,8 +224,8 @@ class RoomScanPlannerTest {
                 cell(5, 64), cell(6, 64), cell(7, 64), cell(8, 64)),
                 Map.of(door, FloorConnector.Type.DOOR));
 
-        RoomScanPlan plan = RoomScanPlanner.planFresh(
-                village, source, observation(source, fresh));
+        RoomWorkflow.Plan plan = RoomWorkflow.analyzeFresh(
+                village, null, source, observation(source, fresh)).plan();
 
         assertEquals(Village.RoomScanMode.ADD_ROOM, plan.mode());
         assertTrue(plan.currentRoom().isEmpty());
@@ -247,8 +247,8 @@ class RoomScanPlannerTest {
                 cell(0, 64), cell(1, 64), cell(2, 64), cell(3, 64), cell(4, 64),
                 cell(5, 65), cell(6, 64)), Map.of(door, FloorConnector.Type.DOOR));
 
-        RoomScanPlan plan = RoomScanPlanner.planFresh(
-                village, source, observation(source, fresh));
+        RoomWorkflow.Plan plan = RoomWorkflow.analyzeFresh(
+                village, null, source, observation(source, fresh)).plan();
 
         assertEquals(Village.RoomScanMode.ADD_ROOM, plan.mode());
         assertEquals(expectedSeed, plan.scanSeed());
@@ -266,8 +266,8 @@ class RoomScanPlannerTest {
                 cell(0, 64), cell(1, 64), cell(2, 64), cell(3, 64), cell(4, 64),
                 cell(5, 64), cell(6, 64)), Map.of(door, FloorConnector.Type.DOOR));
 
-        RoomScanPlan plan = RoomScanPlanner.planFresh(
-                village, door, observation(door, fresh));
+        RoomWorkflow.Plan plan = RoomWorkflow.analyzeFresh(
+                village, null, door, observation(door, fresh)).plan();
 
         assertEquals(Village.RoomScanMode.ADD_ROOM, plan.mode());
         assertTrue(plan.currentRoom().isEmpty());
@@ -287,8 +287,8 @@ class RoomScanPlannerTest {
                 cell(5, 64), cell(6, 64), cell(7, 64), cell(8, 64), cell(9, 64), cell(10, 64)),
                 Map.of(door, FloorConnector.Type.DOOR));
 
-        RoomScanPlan plan = RoomScanPlanner.planFresh(
-                village, source, observation(source, fresh));
+        RoomWorkflow.Plan plan = RoomWorkflow.analyzeFresh(
+                village, null, source, observation(source, fresh)).plan();
 
         assertEquals(Village.RoomScanMode.ADD_ROOM, plan.mode());
         assertTrue(plan.currentRoom().isEmpty());
@@ -307,8 +307,8 @@ class RoomScanPlannerTest {
         village.registerStructure(second, secondRoom);
         BlockPos source = new BlockPos(4, 64, 0);
 
-        RoomScanPlan plan = RoomScanPlanner.planFresh(village, source,
-                observation(source, scannedFloor(64, 68, 0, 4)));
+        RoomWorkflow.Plan plan = RoomWorkflow.analyzeFresh(village, null, source,
+                observation(source, scannedFloor(64, 68, 0, 4))).plan();
 
         assertEquals(Village.RoomScanMode.ADD_BUILDING, plan.mode());
     }
@@ -322,8 +322,8 @@ class RoomScanPlannerTest {
         Village village = village(persisted, room);
         BlockPos source = new BlockPos(0, 68, 0);
 
-        RoomScanPlan plan = RoomScanPlanner.planFresh(village, source,
-                observation(source, scannedFloor(68, 72, 0, 3)));
+        RoomWorkflow.Plan plan = RoomWorkflow.analyzeFresh(village, null, source,
+                observation(source, scannedFloor(68, 72, 0, 3))).plan();
 
         assertEquals(Village.RoomScanMode.ADD_ATTACHMENT, plan.mode());
         assertEquals(20, plan.targetBuildingId());
@@ -339,8 +339,8 @@ class RoomScanPlannerTest {
         Village village = village(persisted, room);
         BlockPos source = new BlockPos(4, 68, 0);
 
-        RoomScanPlan plan = RoomScanPlanner.planFresh(village, source,
-                observation(source, scannedFloor(68, 72, 4, 7)));
+        RoomWorkflow.Plan plan = RoomWorkflow.analyzeFresh(village, null, source,
+                observation(source, scannedFloor(68, 72, 4, 7))).plan();
 
         assertEquals(Village.RoomScanMode.ADD_BUILDING, plan.mode());
         assertEquals(-1, plan.targetBuildingId());
@@ -356,8 +356,8 @@ class RoomScanPlannerTest {
         BlockPos source = new BlockPos(0, 68, 0);
         FloorGeometry upper = scannedFloor(68, 72, 0, 3);
 
-        RoomScanPlan plan = RoomScanPlanner.planFresh(
-                village, source, observation(source, upper, Set.of(new BlockPos(0, 67, 0)), village));
+        RoomWorkflow.Plan plan = RoomWorkflow.analyzeFresh(
+                village, null, source, observation(source, upper, Set.of(new BlockPos(0, 67, 0)), village)).plan();
 
         assertEquals(Village.RoomScanMode.ADD_ATTACHMENT, plan.mode());
         assertEquals(20, plan.targetBuildingId());
@@ -374,9 +374,9 @@ class RoomScanPlannerTest {
         BlockPos source = new BlockPos(4, 63, 0);
         FloorGeometry primary = scannedFloor(63, 68, 0, 4);
 
-        RoomScanPlanner.Analysis analysis = RoomScanPlanner.analyzeFresh(
-                village, source, observation(source, primary, Set.of(new BlockPos(0, 64, 0)), village));
-        RoomScanPlan plan = analysis.plan();
+        RoomWorkflow.Analysis analysis = RoomWorkflow.analyzeFresh(
+                village, null, source, observation(source, primary, Set.of(new BlockPos(0, 64, 0)), village));
+        RoomWorkflow.Plan plan = analysis.plan();
 
         assertEquals(Village.RoomScanMode.ADD_ATTACHMENT, plan.mode());
         assertEquals(20, plan.targetBuildingId());
@@ -400,8 +400,8 @@ class RoomScanPlannerTest {
                 new FloorGeometry.Cell(source, 68)), Map.of());
         FloorGeometry lower = scannedFloor(60, 64, 0, 4);
 
-        RoomScanPlan plan = RoomScanPlanner.planFresh(
-                village, source, observation(source, primary));
+        RoomWorkflow.Plan plan = RoomWorkflow.analyzeFresh(
+                village, null, source, observation(source, primary)).plan();
 
         assertEquals(Village.RoomScanMode.ADD_ROOM, plan.mode());
         assertEquals(20, plan.targetStructureId());
@@ -418,8 +418,8 @@ class RoomScanPlannerTest {
         BlockPos source = new BlockPos(4, 67, 0);
         FloorGeometry primary = scannedFloor(65, 69, 0, 4);
 
-        RoomScanPlan plan = RoomScanPlanner.planFresh(
-                village, source, observation(source, primary, Set.of(new BlockPos(0, 64, 0)), village));
+        RoomWorkflow.Plan plan = RoomWorkflow.analyzeFresh(
+                village, null, source, observation(source, primary, Set.of(new BlockPos(0, 64, 0)), village)).plan();
 
         assertEquals(Village.RoomScanMode.ADD_ATTACHMENT, plan.mode());
         assertEquals(20, plan.targetBuildingId());
@@ -436,7 +436,7 @@ class RoomScanPlannerTest {
         BlockPos source = new BlockPos(4, 63, 0);
         FloorGeometry primary = scannedFloor(63, 68, 0, 4);
 
-        RoomScanPlanner.Analysis analysis = RoomScanPlanner.analyzeFresh(village, source,
+        RoomWorkflow.Analysis analysis = RoomWorkflow.analyzeFresh(village, null, source,
                 observation(source, primary, Set.of(new BlockPos(0, 64, 0)), village));
 
         assertEquals(Village.RoomScanMode.ADD_ATTACHMENT, analysis.plan().mode());
@@ -452,7 +452,7 @@ class RoomScanPlannerTest {
                 new BlockPos(2, 64, 0), new BlockPos(3, 64, 0)));
         Village village = village(persisted, room);
 
-        RoomScanPlan plan = RoomScanPlanner.plan(village, null, new BlockPos(2, 64, 0));
+        RoomWorkflow.Plan plan = RoomWorkflow.plan(village, null, new BlockPos(2, 64, 0));
 
         assertEquals(Village.RoomScanMode.UPDATE_ROOM, plan.mode());
         assertEquals(room, plan.currentRoom().orElseThrow());
@@ -465,7 +465,7 @@ class RoomScanPlannerTest {
         LevelAwareVillage village = new LevelAwareVillage(persisted, room);
         BlockPos source = new BlockPos(8, 70, 8);
 
-        RoomScanPlan plan = RoomScanPlanner.plan(village, null, source);
+        RoomWorkflow.Plan plan = RoomWorkflow.plan(village, null, source);
 
         assertTrue(village.levelAwareResolverUsed);
         assertEquals(Village.RoomScanMode.UPDATE_ROOM, plan.mode());
@@ -486,7 +486,7 @@ class RoomScanPlannerTest {
                 new BlockPos(2, 64, 0), new BlockPos(3, 64, 0)));
         Village village = village(persisted, room);
 
-        RoomScanPlan plan = RoomScanPlanner.plan(village, null, door);
+        RoomWorkflow.Plan plan = RoomWorkflow.plan(village, null, door);
 
         assertEquals(Village.RoomScanMode.ADD_ROOM, plan.mode());
         assertEquals(20, plan.targetStructureId());

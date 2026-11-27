@@ -94,6 +94,10 @@ public final class ProcreationInventoryGameTests {
 
         helper.assertTrue(villager.getRelationships().getPregnancy().hasRoomForBabies(player, 1),
                 "One free villager slot must accommodate one baby");
+        helper.assertTrue(!villager.getRelationships().getPregnancy().procreate(player, 2),
+                "One free slot must reject delivery of twins");
+        helper.assertTrue(countBabies(player) == 0 && countBabies(villager) == 0,
+                "Insufficient capacity must not result in partial baby delivery");
         helper.assertTrue(!villager.getRelationships().getPregnancy().hasRoomForBabies(player, 2),
                 "One free slot must not be considered sufficient for twins");
         helper.succeed();
@@ -139,15 +143,9 @@ public final class ProcreationInventoryGameTests {
     }
 
     @GameTest(batch = "mca_procreation_inventory", templateNamespace = "minecraft", template = "bastion/blocks/air")
-    public static void deliveryRejectionAfterAnimationRefundsCooldown(GameTestHelper helper) {
+    public static void deliveryRejectionAfterAnimationLeavesCooldownAvailable(GameTestHelper helper) {
         VillagerEntityMCA villager = spawnVillager(helper);
-        VillagerEntityMCA spouse = VillagerFactory.newVillager(helper.getLevel())
-                .withAge(0)
-                .withGender(Gender.MALE)
-                .withPosition(Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(7, 2, 4))))
-                .spawn(EntitySpawnReason.STRUCTURE);
-        villager.getRelationships().marry(spouse);
-        spouse.getRelationships().marry(villager);
+        VillagerEntityMCA spouse = marryVillager(helper, villager);
         BreedableRelationship relationship = villager.getRelationships();
         helper.assertTrue(relationship.startProcreating(spouse, helper.getLevel().getGameTime()),
                 "Procreation with available slots failed to start");
@@ -164,7 +162,7 @@ public final class ProcreationInventoryGameTests {
     }
 
     @GameTest(batch = "mca_procreation_inventory", templateNamespace = "minecraft", template = "bastion/blocks/air")
-    public static void saveReloadCancelsPendingTwinsAndRefundsCooldown(GameTestHelper helper) {
+    public static void saveReloadCancelsPendingAttemptAndLeavesCooldownAvailable(GameTestHelper helper) {
         VillagerEntityMCA villager = spawnVillager(helper);
         Player player = createPlayer(helper, false);
         BreedableRelationship relationship = villager.getRelationships();
@@ -183,6 +181,60 @@ public final class ProcreationInventoryGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "mca_procreation_inventory", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void activeAnimationRejectsAnotherAttempt(GameTestHelper helper) {
+        VillagerEntityMCA villager = spawnVillager(helper);
+        Player player = createPlayer(helper, false);
+        BreedableRelationship relationship = villager.getRelationships();
+        long time = helper.getLevel().getGameTime();
+
+        helper.assertTrue(relationship.startProcreating(player, time), "could not start first attempt");
+        helper.assertTrue(!relationship.mayProcreateAgain(time), "active attempt was eligible to start again");
+        helper.assertTrue(!relationship.startProcreating(player, time), "second attempt replaced the active one");
+        helper.assertTrue(relationship.isProcreating(), "second request interrupted the active attempt");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_procreation_inventory", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void successfulDeliveryStartsPersistentCooldown(GameTestHelper helper) {
+        VillagerEntityMCA villager = spawnVillager(helper);
+        VillagerEntityMCA spouse = marryVillager(helper, villager);
+        BreedableRelationship relationship = villager.getRelationships();
+        long time = helper.getLevel().getGameTime();
+
+        helper.assertTrue(relationship.startProcreating(spouse, time), "could not start attempt");
+        TagValueOutput pendingOutput = TagValueOutput.createWithContext(ProblemReporter.DISCARDING, helper.getLevel().registryAccess());
+        villager.saveWithoutId(pendingOutput);
+        helper.assertTrue(pendingOutput.buildResult()
+                        .getCompound(VillagerEntityMCA.MCA_DATA_KEY).orElseThrow()
+                        .getInt("LastProcreation").orElseThrow() == 0,
+                "pending animation wrote a cooldown before delivery");
+
+        for (int i = 0; i <= 60; i++) {
+            relationship.tick(1);
+        }
+
+        helper.assertTrue(countBabies(villager) > 0, "completed attempt did not deliver a baby item");
+        helper.assertTrue(!relationship.isProcreating(), "completed attempt left the animation active");
+        helper.assertTrue(!relationship.mayProcreateAgain(time), "successful delivery did not start a cooldown");
+        TagValueOutput output = TagValueOutput.createWithContext(ProblemReporter.DISCARDING, helper.getLevel().registryAccess());
+        villager.saveWithoutId(output);
+        villager.load(TagValueInput.create(ProblemReporter.DISCARDING, helper.getLevel().registryAccess(), output.buildResult()));
+        helper.assertTrue(!relationship.mayProcreateAgain(time), "reload lost the successful cooldown");
+        helper.succeed();
+    }
+
+    private static VillagerEntityMCA marryVillager(GameTestHelper helper, VillagerEntityMCA villager) {
+        VillagerEntityMCA spouse = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0)
+                .withGender(Gender.MALE)
+                .withPosition(Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(7, 2, 4))))
+                .spawn(EntitySpawnReason.STRUCTURE);
+        villager.getRelationships().marry(spouse);
+        spouse.getRelationships().marry(villager);
+        return spouse;
+    }
+
     private static VillagerEntityMCA spawnVillager(GameTestHelper helper) {
         BlockPos pos = helper.absolutePos(new BlockPos(4, 2, 4));
         return VillagerFactory.newVillager(helper.getLevel())
@@ -199,7 +251,7 @@ public final class ProcreationInventoryGameTests {
     }
 
     private static void fillPlayerInventory(Player player) {
-        for (int slot = 0; slot < player.getInventory().getContainerSize(); slot++) {
+        for (int slot = 0; slot < player.getInventory().getNonEquipmentItems().size(); slot++) {
             player.getInventory().setItem(slot, new ItemStack(Items.COBBLESTONE));
         }
     }

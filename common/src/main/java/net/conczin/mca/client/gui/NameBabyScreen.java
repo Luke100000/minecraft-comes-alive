@@ -71,7 +71,8 @@ public class NameBabyScreen extends Screen {
     public void extractRenderState(GuiGraphicsExtractor context, int w, int h, float scale) {
         super.extractRenderState(context, w, h, scale);
         setFocused(babyNameTextField);
-        context.centeredText(this.font, this.title, this.width / 2, 70, 16777215);
+
+        context.centeredText(this.font, this.title, this.width / 2, 70, 0xFFFFFFFF);
     }
 
     public void setBabyName(String name) {

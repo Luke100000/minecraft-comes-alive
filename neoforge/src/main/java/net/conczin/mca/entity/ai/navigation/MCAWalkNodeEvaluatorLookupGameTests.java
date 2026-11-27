@@ -12,15 +12,20 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.level.PathNavigationRegion;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.pathfinder.Node;
+import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.level.pathfinder.PathfindingContext;
 import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
 import net.minecraft.world.phys.Vec3;
 import net.conczin.mca.neoforge.gametest.GameTestHolder;
 import net.conczin.mca.neoforge.gametest.PrefixGameTestTemplate;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatArea;
 
@@ -277,6 +282,13 @@ public final class MCAWalkNodeEvaluatorLookupGameTests {
             int repeatedCount = evaluator.addDescendingClimbableEntries(repeated, 0, origin);
             helper.assertTrue(repeatedCount == 1 && repeated[0] == nodes[0],
                     "cached descending probe returned a different climb node");
+            evaluator.done();
+
+            level.setBlock(origin.east(), Blocks.STONE.defaultBlockState(), 3);
+            evaluator.prepare(new PathNavigationRegion(level, origin.offset(-4, -4, -4),
+                    origin.offset(4, 3, 4)), villager);
+            helper.assertTrue(!transitionNeighbors(evaluator, evaluator.getStart()).contains(lower),
+                    "a lower climbable was reachable through a solid departure-height obstruction");
             helper.succeed();
         } finally {
             evaluator.done();
@@ -322,6 +334,161 @@ public final class MCAWalkNodeEvaluatorLookupGameTests {
             evaluator.done();
             villager.discard();
         }
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void wetBodyContactCannotMoveGroundStartIntoSolidSupport(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos feet = helper.absolutePos(new BlockPos(8, 1, 8));
+        prepareTransitionFloor(level, feet);
+        VillagerEntityMCA villager = VillagerFactory.newVillager(level).withAge(0)
+                .withPosition(new Vec3(feet.getX() + 0.251D, feet.getY(), feet.getZ() + 0.250D))
+                .spawn(EntitySpawnReason.STRUCTURE);
+        villager.setNoAi(true);
+        villager.setOnGround(true);
+        MCAWalkNodeEvaluator evaluator = new MCAWalkNodeEvaluator();
+        try {
+            evaluator.setCanFloat(true);
+            villager.baseTick();
+            double inset = villager.getBbWidth() / 2.0D - 0.05D;
+            villager.setPos(feet.getX() + inset, feet.getY(), feet.getZ() + inset);
+            evaluator.prepare(new PathNavigationRegion(level, feet.offset(-5, -3, -5), feet.offset(5, 5, 5)), villager);
+            helper.assertTrue(evaluator.getStart().y == feet.getY(), "dry-ground start began inside its support");
+            evaluator.done();
+
+            level.setBlock(feet.north().west(), Blocks.WATER.defaultBlockState()
+                    .setValue(net.minecraft.world.level.block.LiquidBlock.LEVEL, 7), 3);
+            villager.baseTick();
+            helper.assertTrue(villager.isInWater() && level.getBlockState(villager.blockPosition()).isAir()
+                            && villager.onGround()
+                            && !level.noBlockCollision(villager, villager.getBoundingBox().move(0, -0.05D, 0)),
+                    "thin-water and dry supported-feet fixture is invalid");
+            evaluator.prepare(new PathNavigationRegion(level, feet.offset(-5, -3, -5), feet.offset(5, 5, 5)), villager);
+            helper.assertTrue(evaluator.getStart().y == feet.getY(),
+                    "water contacting the body lowered the start into solid support: " + evaluator.getStart());
+            helper.succeed();
+        } finally {
+            evaluator.done();
+            villager.discard();
+        }
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void flowingWaterCannotPublishUnreachableRaisedGroundJump(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos water = helper.absolutePos(new BlockPos(8, 2, 8));
+        BlockPos bank = water.east().above();
+        prepareTransitionFloor(level, water);
+        level.setBlock(water, Blocks.WATER.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.LiquidBlock.LEVEL, 3), 3);
+        level.setBlock(water.east(), Blocks.GRASS_BLOCK.defaultBlockState(), 3);
+        VillagerEntityMCA villager = VillagerFactory.newVillager(level).withAge(0)
+                .withPosition(new Vec3(water.getX() + 0.715D, water.getY() + 0.18D, water.getZ() + 0.285D))
+                .spawn(EntitySpawnReason.STRUCTURE);
+        MCAWalkNodeEvaluator evaluator = new MCAWalkNodeEvaluator();
+        Node origin = new Node(water.getX(), water.getY(), water.getZ());
+        origin.type = PathType.WATER;
+        try {
+            evaluator.setCanFloat(true);
+            evaluator.prepare(new PathNavigationRegion(level, water.offset(-5, -3, -5), water.offset(5, 5, 5)), villager);
+            helper.assertTrue(!transitionNeighbors(evaluator, origin).contains(bank),
+                    "flowing water offered a jump higher than the mob's grounded step");
+            evaluator.done();
+
+            level.setBlock(water.east(), Blocks.OAK_SLAB.defaultBlockState(), 3);
+            evaluator.prepare(new PathNavigationRegion(level, water.offset(-5, -3, -5), water.offset(5, 5, 5)), villager);
+            helper.assertTrue(transitionNeighbors(evaluator, origin).contains(bank),
+                    "a traversable slab exit from water was lost");
+            evaluator.done();
+
+            level.setBlock(water, Blocks.AIR.defaultBlockState(), 3);
+            level.setBlock(water.east(), Blocks.GRASS_BLOCK.defaultBlockState(), 3);
+            origin.type = PathType.WALKABLE;
+            evaluator.prepare(new PathNavigationRegion(level, water.offset(-5, -3, -5), water.offset(5, 5, 5)), villager);
+            helper.assertTrue(transitionNeighbors(evaluator, origin).contains(bank),
+                    "ordinary dry-ground jump was lost");
+            helper.succeed();
+        } finally {
+            evaluator.done();
+            villager.discard();
+        }
+    }
+
+    @GameTest(batch = "mca_shallow_water_ground_jump", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 160)
+    public static void supportedShallowFlowingWaterAllowsPhysicalBankExit(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos water = helper.absolutePos(new BlockPos(12, 1, 12));
+        BlockPos bank = water.east().above();
+        prepareFlatArea(helper, water, 10, 4);
+        for (int x = -8; x <= 3; x++) {
+            for (int y = 0; y < 3; y++) {
+                level.setBlock(water.offset(x, y, -1), Blocks.STONE.defaultBlockState(), 3);
+                level.setBlock(water.offset(x, y, 1), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        for (int x = 1; x <= 3; x++) {
+            level.setBlock(water.east(x), Blocks.STONE.defaultBlockState(), 3);
+        }
+        // A source seven cells upstream keeps the departure shallow throughout the real traversal.
+        for (int x = -7; x <= 0; x++) {
+            level.setBlock(water.east(x), Blocks.WATER.defaultBlockState()
+                    .setValue(LiquidBlock.LEVEL, x + 7), 3);
+        }
+        VillagerEntityMCA villager = VillagerFactory.newVillager(level).withAge(0)
+                .withPosition(Vec3.atBottomCenterOf(water)).spawn(EntitySpawnReason.STRUCTURE);
+        villager.getBrain().removeAllBehaviors();
+        villager.setOnGround(true);
+        villager.baseTick();
+        MCAWalkNodeEvaluator evaluator = new MCAWalkNodeEvaluator();
+        try {
+            helper.assertTrue(villager.isInWater() && villager.onGround()
+                            && level.getFluidState(water).getHeight(level, water) <= villager.getFluidJumpThreshold(),
+                    "shallow-water fixture must allow a grounded jump");
+            evaluator.setCanFloat(true);
+            evaluator.prepare(new PathNavigationRegion(level, water.offset(-10, -2, -3),
+                    water.offset(5, 5, 3)), villager);
+            helper.assertTrue(transitionNeighbors(evaluator, evaluator.getStart()).contains(bank),
+                    "supported shallow water lost a physically usable ground-jump exit");
+        } catch (RuntimeException | Error failure) {
+            villager.discard();
+            throw failure;
+        } finally {
+            evaluator.done();
+        }
+        villager.getNavigation().setCanFloat(true);
+        Path path = villager.getNavigation().createPath(bank, 0);
+        helper.assertTrue(path != null && path.canReach() && villager.getNavigation().moveTo(path, 0.8D),
+                "the shallow-water bank must have a usable movement route");
+        helper.onEachTick(() -> {
+            if (villager.onGround() && villager.getY() >= bank.getY() - 0.05D
+                    && villager.distanceToSqr(Vec3.atBottomCenterOf(bank)) < 0.4D) {
+                villager.discard();
+                helper.succeed();
+            }
+        });
+    }
+
+    private static void prepareTransitionFloor(ServerLevel level, BlockPos origin) {
+        for (int x = -4; x <= 4; x++) {
+            for (int z = -4; z <= 4; z++) {
+                BlockPos feet = origin.offset(x, 0, z);
+                level.setBlock(feet.below(), Blocks.STONE.defaultBlockState(), 3);
+                for (int y = 0; y <= 3; y++) {
+                    level.setBlock(feet.above(y), Blocks.AIR.defaultBlockState(), 3);
+                }
+            }
+        }
+    }
+
+    private static List<BlockPos> transitionNeighbors(MCAWalkNodeEvaluator evaluator, Node origin) {
+        Node[] nodes = new Node[32];
+        int count = evaluator.getNeighbors(nodes, origin);
+        List<BlockPos> positions = new ArrayList<>(count);
+        for (int index = 0; index < count; index++) {
+            positions.add(nodes[index].asBlockPos());
+        }
+        return positions;
     }
 
     private static final class DescendingCountingEvaluator extends MCAWalkNodeEvaluator {
