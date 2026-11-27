@@ -331,11 +331,18 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         }
 
         BlockPos originPos = origin.asBlockPos();
+        if (isBarrierSupport(this.currentContext.getBlockState(originPos.below()))) {
+            return true;
+        }
+        // Air cannot raise a modeled node above its vanilla floor. Only the live start
+        // can have a raised body position here without a supporting shape in the node.
+        if (origin != this.startNode && this.currentContext.getBlockState(originPos).isAir()) {
+            return false;
+        }
         double modeledFloor = this.getFloorLevel(originPos);
         double standingFloor = origin == this.startNode ? this.mob.getBoundingBox().minY
                 : PathNodeGeometry.walkingFloorY(this.currentContext.level(), originPos, this.mob, modeledFloor);
-        return standingFloor > modeledFloor + RAISED_START_EPSILON
-                || isBarrierSupport(this.currentContext.getBlockState(originPos.below()));
+        return standingFloor > modeledFloor + RAISED_START_EPSILON;
     }
 
     private AABB getDepartureBox(Node origin) {
