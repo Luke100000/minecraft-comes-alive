@@ -11,18 +11,22 @@ import net.conczin.mca.client.gui.immersive_library.Workspace;
 import net.conczin.mca.client.gui.immersive_library.responses.ContentResponse;
 import net.conczin.mca.client.gui.immersive_library.types.Content;
 import net.conczin.mca.client.gui.immersive_library.types.LiteContent;
+import net.conczin.mca.client.gui.widget.ToggleableTooltipIconButtonWidget;
 import net.conczin.mca.client.resources.ClientSkinCatalog;
 import net.minecraft.SharedConstants;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.util.thread.BlockableEventLoop;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import sun.misc.Unsafe;
 
@@ -343,6 +347,50 @@ class SkinLibraryAsyncGuardTest {
         assertEquals(like, invoke(screen, "isLiked", new Class<?>[]{LiteContent.class}, skin));
         assertEquals(like ? 9 : 7, invoke(screen, "getLikes", new Class<?>[]{LiteContent.class}, skin));
         assertEquals(like ? List.of(skin) : List.of(), field(SkinLibraryScreen.class, "contents").get(screen));
+    }
+
+    @ParameterizedTest
+    @CsvSource({"true, false", "false, false", "true, true", "false, true"})
+    void reopenedDetailHeartReflectsOnlyCurrentAccountLikeCompletion(boolean like, boolean invalidateAccount) throws Exception {
+        ObservedScreen screen = screen(SkinLibraryScreen.Page.DETAIL);
+        field(SkinLibraryScreen.class, "authenticated").setBoolean(screen, true);
+        LiteContent skin = new LiteContent(42, 7, "owner", 8, Set.of("clothing"), "Skin", 1, !like, Set.of());
+        field(SkinLibraryScreen.class, "focusedContent").set(screen, skin);
+        screen.navigate(SkinLibraryScreen.Page.DETAIL);
+        ToggleableTooltipIconButtonWidget original = likeButton(screen);
+        assertEquals(!like, original.toggle);
+
+        original.onPress();
+        assertTrue(requestEntered.await(4, TimeUnit.SECONDS), "Like mutation never reached the test server");
+        screen.navigate(SkinLibraryScreen.Page.EDITOR_LOCKED);
+        if (invalidateAccount) {
+            invoke(screen, "invalidateAccountRequests");
+        }
+        screen.navigate(SkinLibraryScreen.Page.DETAIL);
+        ToggleableTooltipIconButtonWidget replacement = likeButton(screen);
+        assertNotSame(original, replacement);
+        assertEquals(!like, replacement.toggle, "Pending mutation has not completed yet");
+
+        releaseResponse.countDown();
+        awaitClientTask();
+        drainClientTasks();
+
+        boolean expected = invalidateAccount ? !like : like;
+        assertEquals(expected, invoke(screen, "isLiked", new Class<?>[]{LiteContent.class}, skin));
+        assertEquals(expected, likeButton(screen).toggle,
+                "The visible heart must reflect the accepted account state after reopening the detail");
+        assertEquals(1, requestCount.get(), "Reopening the detail must not send another mutation");
+    }
+
+    private static ToggleableTooltipIconButtonWidget likeButton(SkinLibraryScreen screen) throws Exception {
+        Field tooltipMessage = field(Tooltip.class, "message");
+        for (var child : screen.children()) {
+            if (child instanceof ToggleableTooltipIconButtonWidget button && button.getTooltip() != null
+                    && Component.translatable("gui.skin_library.like").equals(tooltipMessage.get(button.getTooltip()))) {
+                return button;
+            }
+        }
+        throw new AssertionError("No mounted skin like button");
     }
 
     @Test

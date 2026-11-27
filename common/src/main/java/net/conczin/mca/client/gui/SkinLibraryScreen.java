@@ -131,6 +131,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private LiteContent deleteConfirmationContent;
     private LiteContent reportConfirmationContent;
     private ButtonWidget deleteConfirmButton;
+    private ToggleableTooltipIconButtonWidget detailLikeButton;
     private final Set<String> pendingMutations = new HashSet<>();
 
     // Editor
@@ -948,6 +949,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
     private void rebuild() {
         clearWidgets();
+        detailLikeButton = null;
 
         timeSinceLastRebuild = 0;
 
@@ -1419,18 +1421,22 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
         // like
         if (authenticated) {
-            widgets.add(new ToggleableTooltipIconButtonWidget(0, 0, 16, 3 * 16,
+            ToggleableTooltipIconButtonWidget likeButton = new ToggleableTooltipIconButtonWidget(0, 0, 16, 3 * 16,
                     isLiked(content),
                     Component.translatable("gui.skin_library.like"),
                     v -> {
                         ToggleableTooltipButtonWidget button = (ToggleableTooltipButtonWidget) v;
                         boolean liked = !isLiked(content);
                         setLike(content, liked, success -> {
-                            if (success) {
+                            if (success && !advanced) {
                                 button.toggle = liked;
                             }
                         });
-                    }));
+                    });
+            widgets.add(likeButton);
+            if (advanced) {
+                detailLikeButton = likeButton;
+            }
         }
 
         // edit
@@ -2196,6 +2202,8 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
             likeOverrides.put(contentId, add);
             if (page == Page.LIBRARY) {
                 refreshContentList();
+            } else if (page == Page.DETAIL && selectedId(focusedContent) == contentId && detailLikeButton != null) {
+                detailLikeButton.toggle = isLiked(focusedContent);
             }
         }, response -> {
             boolean success = response instanceof SuccessResponse;
