@@ -45,6 +45,8 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.common.util.FakePlayer;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -53,6 +55,7 @@ import java.util.Optional;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.UUID;
+import java.util.function.Consumer;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -142,6 +145,76 @@ public final class FishingTaskGameTests {
 
         second.discard();
         helper.assertTrue(villager.getFishingBobber() == null, "removing the current bobber did not clear the owner reference");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_fishing_bobber", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void cancelledBobberSpawnDoesNotLeaveGhostOwnerReference(GameTestHelper helper) {
+        BlockPos villagerPos = helper.absolutePos(new BlockPos(40, 3, 40));
+        BlockPos water = villagerPos.east(2);
+        prepareWater(helper, water);
+        VillagerEntityMCA villager = spawnFisher(helper, villagerPos);
+        int[] cancelled = {0};
+        Consumer<EntityJoinLevelEvent> cancellation = event -> {
+            if (event.getLevel() == helper.getLevel() && event.getEntity() instanceof MCAFishingBobberEntity) {
+                cancelled[0]++;
+                event.setCanceled(true);
+            }
+        };
+
+        try {
+            NeoForge.EVENT_BUS.addListener(EntityJoinLevelEvent.class, cancellation);
+            try {
+                MCAFishingBobberEntity rejected = MCAFishingBobberEntity.cast(helper.getLevel(), villager, water);
+                helper.assertTrue(cancelled[0] == 1, "fixture did not cancel the bobber spawn");
+                helper.assertTrue(rejected == null, "cancelled cast reported an unspawned bobber as usable");
+                helper.assertTrue(villager.getFishingBobber() == null,
+                        "cancelled cast left a ghost bobber in the villager's owner reference");
+            } finally {
+                NeoForge.EVENT_BUS.unregister(cancellation);
+            }
+
+            MCAFishingBobberEntity accepted = MCAFishingBobberEntity.cast(helper.getLevel(), villager, water);
+            try {
+                helper.assertTrue(accepted != null && villager.getFishingBobber() == accepted,
+                        "villager could not cast normally after a cancelled spawn");
+            } finally {
+                if (accepted != null) accepted.discard();
+            }
+        } finally {
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_fishing_bobber", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void fishingChoreHandlesCancelledBobberWithoutStalling(GameTestHelper helper) {
+        BlockPos villagerPos = helper.absolutePos(new BlockPos(40, 3, 40));
+        prepareWater(helper, villagerPos.east(2));
+        VillagerEntityMCA villager = spawnFisher(helper, villagerPos);
+        TestFishingTask task = new TestFishingTask(helper.makeMockPlayer(GameType.SURVIVAL));
+        int[] cancelled = {0};
+        Consumer<EntityJoinLevelEvent> cancellation = event -> {
+            if (event.getLevel() == helper.getLevel() && event.getEntity() instanceof MCAFishingBobberEntity) {
+                cancelled[0]++;
+                event.setCanceled(true);
+            }
+        };
+
+        NeoForge.EVENT_BUS.addListener(EntityJoinLevelEvent.class, cancellation);
+        try {
+            long time = helper.getLevel().getGameTime();
+            task.start(helper.getLevel(), villager, time);
+            helper.assertTrue(cancelled[0] > 0, "fishing chore never attempted a cast");
+            helper.assertTrue(villager.getFishingBobber() == null,
+                    "fishing chore retained a rejected bobber and cannot retry later");
+            task.tick(helper.getLevel(), villager, time + 1);
+            helper.assertTrue(villager.getFishingBobber() == null,
+                    "fishing chore recached a rejected bobber on the next tick");
+        } finally {
+            NeoForge.EVENT_BUS.unregister(cancellation);
+            villager.discard();
+        }
         helper.succeed();
     }
 

@@ -23,6 +23,7 @@
 * Improved building and floor detection around uneven and stepped porches.
 * Improved rescanning around narrow doorways, doorless rooms, and stacked slab floors so unchanged buildings keep their detected floor layout.
 * Reduced repeated work when rescanning unchanged floors and building layouts.
+* MCA protects unreadable village save data from being overwritten and warns players when village changes cannot be saved.
 * Added a **Remove Floor** action for empty floors.
 * Admin building-type changes now apply to the exact room you are standing in.
 * Rooms can now share their requirements with the building's **Main Room**, and you can choose the Main Room yourself or switch back to automatic selection.
@@ -47,6 +48,7 @@
 * Added `villagersInteractWithAnyDoor` to optionally let villagers operate all vanilla-style doors instead of only mob-interactable ones.
 * Villagers can open, close, and walk through fence gates. This is controlled by `villagersInteractWithFenceGates`.
 * Improved home, bed, workplace, and resident assignment, including support for more modded beds.
+* Temporary inn guests free their beds when their stay ends. Datapacks can customize the inn's wandering-trader visitor pool with the `mca:spawn_at_inn` entity type tag.
 * Added `villagersChangeProfession` so assigning a workplace can preserve a villager's existing profession instead of changing it.
 * **Set Home** only assigns a bed the villager can reach. If no reachable replacement is available, the current home is kept.
 * Villagers move into a safe position beside their bed before going to sleep.
@@ -102,6 +104,7 @@
 * Guards and archers keep their weapons and armour while peacefully following a player.
 * MCA archer arrows can pass through villagers and iron golems. This is controlled by `archerArrowsIgnoreVillagers`.
 * Guards can spot visible threats from farther away.
+* Village iron golems can target hostile outlaws and alert nearby guards when attacked.
 * Guards can stay focused on a current fight when another villager raises an alarm.
 * Following archers pause their route to fight and remember who they were following.
 * Guards can still go to bed when enemies are far away, while responding to nearby threats.
@@ -119,9 +122,9 @@
 * Having a baby now checks for enough inventory space for all baby items, including twins, before the animation starts. Interrupted attempts reset when the villager reloads.
 * Fixed a possible error when a villager's interaction memory data is missing.
 * Profession changes in the Villager Editor now refresh consistently.
-* Villager gifts can now be given with **Enter** or numpad Enter as well as the right mouse button.
+* Villager gifts can now be given with **Enter** or numpad Enter as well as the right mouse button. Each key press gives one gift.
 * Added `whistleCallMakesVillagersFollow` to optionally make villagers follow after being called with the whistle.
-* Destiny can automatically discover vanilla and modded village structures, including destinations in other dimensions.
+* Destiny can automatically discover vanilla and modded village structures, including destinations in other dimensions. Character creation can finish without teleporting when no destination is available.
 * Fixed the Destiny screen repeatedly reopening over other mods' menus when joining a world.
 * Added `autoDiscoverDestinyLocations`, `destinySpawnLocationBlacklist`, `destinyOverworldOnly`, and `destinyDimensionBlacklist`. Blacklists support simple `*` wildcards such as `ctov:*`.
 * Destiny no longer teleports to locations that have since been disabled.
@@ -138,6 +141,7 @@
 
 * Villagers can play **Immersive Melodies** instruments while socialising, and nearby villagers can join in. `immersiveMelodiesChance` controls how often this happens, while `immersiveMelodiesNamespace` limits which melodies they play.
 * Villager voice lines no longer overlap for the same villager. Delayed text-to-speech responses are ignored when newer requests have taken their place.
+* Interrupted downloads can be retried without keeping incomplete audio in the cache.
 
 ## Other fixes
 
@@ -160,7 +164,7 @@
 * Fixed saved letters losing their pages after loading the world again.
 * Vanilla villagers being converted into MCA villagers now release their previous bed claims.
 * Changes to custom clothing and skin textures now refresh cached villager textures and face icons.
-* Fixed villager and player size, eye height, name-tag position, and hitbox updates across growth, respawning, and dimension changes.
+* Fixed villager and player size, eye height, name-tag position, and hitbox updates across growth, respawning, and dimension changes, including after loading saved villagers.
 * Fixed carried-villager name tags using a fixed height instead of following the villager's visual size.
 * Fixed translated text not refreshing after changing language or reloading resources.
 * Updated translations across supported languages.

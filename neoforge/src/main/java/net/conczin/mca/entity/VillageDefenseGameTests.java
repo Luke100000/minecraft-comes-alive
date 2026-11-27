@@ -90,6 +90,76 @@ public final class VillageDefenseGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "mca_guards_warning_preserves_combat", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void guardWarningPreservesUnrelatedCombat(GameTestHelper helper) {
+        VillagerEntityMCA guard = spawnVillager(helper, new BlockPos(2, 2, 2), ProfessionsMCA.GUARD);
+        VillagerEntityMCA archer = spawnVillager(helper, new BlockPos(2, 2, 4), ProfessionsMCA.ARCHER);
+        VillagerEntityMCA outlaw = spawnVillager(helper, new BlockPos(3, 2, 3), ProfessionsMCA.OUTLAW);
+        IronGolem golem = spawnGolem(helper, new BlockPos(4, 2, 2), false);
+        var attacker = helper.makeMockPlayer(GameType.SURVIVAL);
+        attacker.setPos(Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(4, 2, 4))));
+        try {
+            guard.getVillagerBrain().getMemoriesForPlayer(attacker).setHearts(0);
+            archer.getVillagerBrain().getMemoriesForPlayer(attacker).setHearts(0);
+            guard.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, outlaw);
+            archer.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, attacker);
+
+            helper.assertTrue(golem.hurtServer(helper.getLevel(), helper.getLevel().damageSources().playerAttack(attacker), 1), "hit did not damage golem");
+            helper.assertTrue(guard.getSmallBounty() == 1 && archer.getSmallBounty() == 1,
+                    "guards did not record the attack that triggered the warning");
+            helper.assertTrue(guard.getBrain().getMemory(MemoryModuleType.ATTACK_TARGET).orElse(null) == outlaw,
+                    "warning interrupted combat against an unrelated outlaw");
+            helper.assertTrue(archer.getBrain().getMemory(MemoryModuleType.ATTACK_TARGET).isEmpty(),
+                    "warning did not clear combat against the warned player");
+        } finally {
+            guard.discard();
+            archer.discard();
+            outlaw.discard();
+            golem.discard();
+            attacker.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_guard_alarm_brain_radius", templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 80)
+    public static void guardAlarmUsesBrainCombatTargetForRadius(GameTestHelper helper) {
+        IronGolem victim = spawnGolem(helper, new BlockPos(3, 2, 3), false);
+        VillagerEntityMCA idleFar = spawnVillager(helper, new BlockPos(23, 2, 3), ProfessionsMCA.GUARD);
+        VillagerEntityMCA fightingFar = spawnVillager(helper, new BlockPos(23, 2, 4), ProfessionsMCA.GUARD);
+        VillagerEntityMCA fightingNear = spawnVillager(helper, new BlockPos(9, 2, 3), ProfessionsMCA.GUARD);
+        VillagerEntityMCA fightingOutside = spawnVillager(helper, new BlockPos(12, 2, 3), ProfessionsMCA.GUARD);
+        VillagerEntityMCA outlaw = spawnVillager(helper, new BlockPos(5, 2, 5), ProfessionsMCA.OUTLAW);
+        var attacker = helper.makeMockPlayer(GameType.SURVIVAL);
+        attacker.setPos(Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(4, 2, 3))));
+        try {
+            for (VillagerEntityMCA guard : new VillagerEntityMCA[]{fightingFar, fightingNear, fightingOutside}) {
+                guard.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, outlaw);
+                helper.assertTrue(guard.getTarget() == null
+                                && guard.getBrain().isMemoryValue(MemoryModuleType.ATTACK_TARGET, outlaw),
+                        "fixture must use Brain combat state without vanilla Mob target state");
+            }
+            helper.assertTrue(idleFar.getBrain().getMemory(MemoryModuleType.ATTACK_TARGET).isEmpty(),
+                    "idle guard must have no combat target");
+
+            VillagerEntityMCA.notifyNearbyGuards(victim, attacker);
+
+            helper.assertTrue(idleFar.getSmallBounty() == 1, "idle guard ignored a 20-block alarm");
+            helper.assertTrue(fightingNear.getSmallBounty() == 1, "fighting guard ignored a 6-block alarm");
+            helper.assertTrue(fightingOutside.getSmallBounty() == 0, "fighting guard received a 9-block alarm");
+            helper.assertTrue(fightingFar.getSmallBounty() == 0, "fighting guard received a 20-block alarm");
+            helper.succeed();
+        } finally {
+            victim.discard();
+            idleFar.discard();
+            fightingFar.discard();
+            fightingNear.discard();
+            fightingOutside.discard();
+            outlaw.discard();
+            attacker.discard();
+        }
+    }
+
     @GameTest(batch = "mca_guards_ignore_player_golem", templateNamespace = "minecraft", template = "bastion/blocks/air")
     public static void attackingPlayerCreatedGolemDoesNotAlertGuards(GameTestHelper helper) {
         VillagerEntityMCA guard = spawnVillager(helper, new BlockPos(2, 2, 2), ProfessionsMCA.GUARD);

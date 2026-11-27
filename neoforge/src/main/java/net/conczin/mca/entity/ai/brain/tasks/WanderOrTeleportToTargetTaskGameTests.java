@@ -408,10 +408,28 @@ public final class WanderOrTeleportToTargetTaskGameTests {
                 sink = new WanderOrTeleportToTargetTask();
                 helper.assertTrue(sink.tryStart(helper.getLevel(), villager, startedAt),
                         "persistent movement did not start before intent change");
-                brain.setMemory(MemoryModuleType.WALK_TARGET,
-                        new WalkTarget(target.east(offset), 0.5F, 0));
-                sink.tickOrStop(helper.getLevel(), villager, startedAt + 251L);
+                WalkTarget ordinaryReplacement = new WalkTarget(target.east(offset), 0.5F, 0);
+                brain.setMemory(MemoryModuleType.WALK_TARGET, ordinaryReplacement);
+                long replacementStartedAt = startedAt + 251L;
+                sink.tickOrStop(helper.getLevel(), villager, replacementStartedAt);
+                helper.assertTrue(villager.getNavigation().isDone()
+                                && !brain.hasMemoryValue(MemoryModuleType.PATH)
+                                && brain.getMemory(MemoryModuleType.WALK_TARGET)
+                                .filter(command -> command == ordinaryReplacement).isPresent(),
+                        "retired persistent sink did not release its route while preserving the ordinary replacement after a target shift of " + offset);
+
+                sink = new WanderOrTeleportToTargetTask();
+                helper.assertTrue(sink.tryStart(helper.getLevel(), villager, replacementStartedAt),
+                        "ordinary replacement was not admitted after a target shift of " + offset);
+                Path replacementPath = villager.getNavigation().getPath();
+                helper.assertTrue(replacementPath != null && !villager.getNavigation().isDone()
+                                && brain.getMemory(MemoryModuleType.PATH).filter(path -> path == replacementPath).isPresent()
+                                && brain.getMemory(MemoryModuleType.WALK_TARGET)
+                                .filter(command -> command == ordinaryReplacement).isPresent(),
+                        "ordinary replacement did not establish its own route after a target shift of " + offset);
+                sink.tickOrStop(helper.getLevel(), villager, replacementStartedAt + 251L);
                 helper.assertTrue(!brain.hasMemoryValue(MemoryModuleType.WALK_TARGET)
+                                && !brain.hasMemoryValue(MemoryModuleType.PATH)
                                 && villager.getNavigation().isDone(),
                         "ordinary intent retained persistent lifetime after a target shift of " + offset);
             }

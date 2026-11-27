@@ -291,10 +291,15 @@ public interface WorldUtils {
 
     @SuppressWarnings("deprecation")
     static void spawnEntity(Level world, Mob entity, EntitySpawnReason reason) {
+        trySpawnEntity(world, entity, reason);
+    }
+
+    @SuppressWarnings("deprecation")
+    static boolean trySpawnEntity(Level world, Mob entity, EntitySpawnReason reason) {
         if (world instanceof ServerLevel serverLevel) {
             entity.finalizeSpawn(serverLevel, serverLevel.getCurrentDifficultyAt(entity.blockPosition()), reason, null);
         }
-        world.addFreshEntity(entity);
+        return world.addFreshEntity(entity);
     }
 
     //a wrapper for the unnecessary complex query provided by minecraft

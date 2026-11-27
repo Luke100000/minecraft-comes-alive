@@ -46,6 +46,7 @@ import net.conczin.mca.neoforge.gametest.GameTestHolder;
 import net.conczin.mca.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.HashSet;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -71,6 +72,198 @@ public final class PathRetryLifecycleGameTests {
     private static Integer originalPathfindingDistance;
 
     private PathRetryLifecycleGameTests() {
+    }
+
+    @GameTest(batch = "mca_path_retry_same_position_owners", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void twoProducerCompletionPreservesOtherFailure(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(2, 1, 2));
+        prepareFlatArea(helper, start, 16, 2);
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(start)).spawn(EntitySpawnReason.STRUCTURE);
+        try {
+            villager.setNoAi(true);
+            var brain = villager.getBrain();
+            BlockPos target = start.east(2);
+            GlobalPos destination = GlobalPos.of(helper.getLevel().dimension(), target);
+            brain.setMemory(MemoryModuleType.HOME, destination);
+            brain.setMemory(MemoryModuleType.JOB_SITE, destination);
+            int[] gaveUp = {0};
+            var home = ExtendedWalkTowardsTask.createWithoutPoiRelease(
+                    MemoryModuleType.HOME, 0.5F, 0, 60, ignored -> true, ignored -> gaveUp[0]++);
+            var job = ExtendedWalkTowardsTask.createWithoutPoiRelease(
+                    MemoryModuleType.JOB_SITE, 0.5F, 1, 100, ignored -> false, ignored -> { });
+            long time = helper.getLevel().getGameTime();
+            home.trigger(helper.getLevel(), villager, time);
+            helper.assertTrue(brain.hasMemoryValue(MemoryModuleType.WALK_TARGET), "HOME did not publish");
+            WalkTargetFailureMemory.record(villager, target, time);
+            brain.eraseMemory(MemoryModuleType.WALK_TARGET);
+            job.trigger(helper.getLevel(), villager, time + 25);
+            WalkTarget jobWalk = brain.getMemory(MemoryModuleType.WALK_TARGET).orElseThrow();
+            WalkTargetFailureMemory.record(villager, target, time + 25);
+            home.trigger(helper.getLevel(), villager, time + 26);
+            helper.assertTrue(brain.getMemory(MemoryModuleType.WALK_TARGET).filter(walk -> walk == jobWalk).isPresent(),
+                    "HOME overwrote same-position JOB_SITE movement");
+            villager.setPos(Vec3.atBottomCenterOf(start.east()));
+            job.trigger(helper.getLevel(), villager, time + 39);
+            brain.eraseMemory(MemoryModuleType.WALK_TARGET);
+            villager.setPos(Vec3.atBottomCenterOf(start));
+            home.trigger(helper.getLevel(), villager, time + 40);
+            helper.assertTrue(brain.getMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
+                            .filter(since -> since == time + 14).isPresent(),
+                    "JOB_SITE completion lost or replaced HOME's paused failure age");
+            home.trigger(helper.getLevel(), villager, time + 74);
+            helper.assertTrue(gaveUp[0] == 0 && brain.hasMemoryValue(MemoryModuleType.HOME),
+                    "HOME expired before its remaining deadline");
+            home.trigger(helper.getLevel(), villager, time + 75);
+            helper.assertTrue(gaveUp[0] == 1 && !brain.hasMemoryValue(MemoryModuleType.HOME),
+                    "HOME did not expire at its remaining deadline");
+            job.trigger(helper.getLevel(), villager, time + 76);
+            helper.assertTrue(ExtendedWalkTowardsTask.ownsWalkTarget(villager, MemoryModuleType.JOB_SITE)
+                            && !brain.hasMemoryValue(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE),
+                    "completed JOB_SITE inherited its old failure on a fresh trip");
+        } finally {
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_path_retry_admitted_detour", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void retractOwnedMovementStopsItsAdmittedDetour(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(300, 1, 300));
+        BlockPos target = start.east(2);
+        rememberOriginalTerrain(helper.getLevel(), start, 30);
+        var ownedChunks = new ArrayList<ChunkPos>();
+        prepareFlatArea(helper, start, 30, 3, ownedChunks);
+        FORCED_CHUNKS.addAll(ownedChunks);
+        for (int z = -23; z <= 23; z++) {
+            for (int y = 0; y < 3; y++) {
+                helper.getLevel().setBlock(start.offset(1, y, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                if (dx != 0 || dz != 0) {
+                    for (int y = 0; y < 3; y++) {
+                        helper.getLevel().setBlock(target.offset(dx, y, dz), Blocks.STONE.defaultBlockState(), 3);
+                    }
+                }
+            }
+        }
+        // Native flanking requires a walkable final approach; the long wall,
+        // rather than a fully sealed destination, must exhaust the search.
+        for (int y = 0; y < 3; y++) {
+            helper.getLevel().setBlock(target.east().above(y), Blocks.AIR.defaultBlockState(), 3);
+        }
+        originalPathfindingDistance = Config.getInstance().villagerPathfindingDistance;
+        Config.getInstance().villagerPathfindingDistance = 32;
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(start)).spawn(EntitySpawnReason.STRUCTURE);
+        ACTIVE_VILLAGERS.add(villager);
+        villager.setNoAi(true);
+        villager.setOnGround(true);
+        villager.getAttribute(Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
+        var brain = villager.getBrain();
+        var destination = GlobalPos.of(helper.getLevel().dimension(), target);
+        brain.setMemory(MemoryModuleType.HOME, destination);
+        long time = helper.getLevel().getGameTime();
+        var producer = ExtendedWalkTowardsTask.createWithoutPoiRelease(
+                MemoryModuleType.HOME, 0.5F, 0, 100, ignored -> false, ignored -> { });
+        producer.trigger(helper.getLevel(), villager, time);
+        var sink = new WanderOrTeleportToTargetTask();
+        helper.assertTrue(sink.tryStart(helper.getLevel(), villager, time), "fixture did not admit HOME route");
+        var navigation = (MCAGroundPathNavigation) villager.getNavigation();
+        Path initial = navigation.getPath();
+        helper.assertTrue(initial != null && !initial.canReach()
+                        && brain.getMemory(MemoryModuleType.PATH).filter(path -> path == initial).isPresent(),
+                "fixture did not admit a blocked HOME route");
+        while (!initial.isDone()) initial.advance();
+        navigation.tick();
+        Path flank = navigation.getPath();
+        helper.assertTrue(flank != null && flank != initial && !flank.isDone()
+                        && navigation.isTakingDetourTo(target),
+                "fixture did not replace the admitted route with a native detour: initial="
+                        + initial + ", initial end=" + initial.getEndNode() + ", current=" + flank);
+        sink.tickOrStop(helper.getLevel(), villager, time + 1);
+        helper.assertTrue(brain.getMemory(MemoryModuleType.PATH).filter(path -> path == flank).isPresent(),
+                "fixture did not synchronize the admitted detour into PATH");
+        helper.assertTrue(ExtendedWalkTowardsTask.retractOwnedMovement(villager, MemoryModuleType.HOME),
+                "typed HOME command was not retracted");
+        helper.assertTrue(navigation.getPath() == null && !brain.hasMemoryValue(MemoryModuleType.PATH)
+                        && !brain.hasMemoryValue(MemoryModuleType.WALK_TARGET)
+                        && !brain.hasMemoryValue(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
+                        && brain.getMemory(MemoryModuleType.HOME).filter(destination::equals).isPresent(),
+                "retraction did not remove the admitted detour without erasing HOME");
+        helper.succeed();
+    }
+
+    @AfterBatch(batch = "mca_path_retry_admitted_detour")
+    public static void releaseAdmittedDetour(ServerLevel level) {
+        releaseLifecycleChunks(level);
+    }
+
+    @GameTest(batch = "mca_path_retry_rejected_sink_handoff", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void rejectedSinkPathDoesNotBlockReplacementWalkTarget(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(300, 1, 300));
+        BlockPos firstDestination = start.east(7);
+        BlockPos replacementDestination = start.south(7);
+        rememberOriginalTerrain(helper.getLevel(), start, 12);
+        var ownedChunks = new ArrayList<ChunkPos>();
+        try {
+            prepareFlatArea(helper, start, 12, 3, ownedChunks);
+        } finally {
+            FORCED_CHUNKS.addAll(ownedChunks);
+        }
+        try {
+            VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                    .withAge(0).withPosition(Vec3.atBottomCenterOf(start)).spawn(EntitySpawnReason.STRUCTURE);
+            ACTIVE_VILLAGERS.add(villager);
+            villager.refreshBrain(helper.getLevel());
+            villager.getBrain().removeAllBehaviors();
+            villager.setNoAi(true);
+            villager.setOnGround(true);
+            var brain = villager.getBrain();
+            var navigation = (MCAGroundPathNavigation) villager.getNavigation();
+            WalkTarget firstCommand = new WalkTarget(firstDestination, 0.5F, 0);
+            brain.setMemory(MemoryModuleType.WALK_TARGET, firstCommand);
+
+            Path completed = navigation.createPath(firstDestination, 0);
+            helper.assertTrue(completed != null && completed.canReach()
+                            && navigation.moveTo(completed, 0.5D),
+                    "fixture did not start an ordinary reachable path");
+            while (!completed.isDone()) completed.advance();
+            helper.assertTrue(navigation.getPath() == completed && navigation.isDone()
+                            && !brain.hasMemoryValue(MemoryModuleType.PATH),
+                    "fixture did not retain a completed path with free Brain.PATH");
+
+            MoveToTargetSink rejectedSink = new MoveToTargetSink();
+            long started = helper.getLevel().getGameTime();
+            helper.assertTrue(rejectedSink.tryStart(helper.getLevel(), villager, started),
+                    "fixture could not start the sink for the original command");
+            Path attempted = brain.getMemory(MemoryModuleType.PATH).orElse(null);
+            helper.assertTrue(attempted != null && attempted != completed
+                            && attempted.sameAs(completed)
+                            && navigation.getPath() == completed && navigation.isDone(),
+                    "fixture did not reproduce a rejected equivalent path while retaining the old path");
+
+            WalkTarget replacement = new WalkTarget(replacementDestination, 0.5F, 0);
+            brain.setMemory(MemoryModuleType.WALK_TARGET, replacement);
+            rejectedSink.tickOrStop(helper.getLevel(), villager, started + 1);
+            helper.assertTrue(brain.getMemory(MemoryModuleType.WALK_TARGET).orElse(null) == replacement,
+                    "retiring the rejected sink erased the replacement WALK_TARGET");
+            helper.assertTrue(!brain.hasMemoryValue(MemoryModuleType.PATH),
+                    "retiring the rejected sink left its stale PATH and blocked the replacement");
+
+            MoveToTargetSink replacementSink = new MoveToTargetSink();
+            helper.assertTrue(replacementSink.tryStart(helper.getLevel(), villager, started + 2),
+                    "replacement WALK_TARGET could not start its movement sink");
+            replacementSink.doStop(helper.getLevel(), villager, started + 2);
+        } finally {
+            releaseLifecycleChunks(helper.getLevel());
+        }
+        helper.succeed();
     }
 
     @GameTest(batch = CORE_BATCH, templateNamespace = "minecraft",
@@ -346,6 +539,7 @@ public final class PathRetryLifecycleGameTests {
         boolean[] expectedSinkRan = {false};
         boolean[] routeOpened = {false};
         boolean[] sawFailure = {false};
+        long[] arrivedAt = {-1L};
         PathRequestDiagnostics.SearchSnapshot[] blockedSnapshot = {null};
         helper.onEachTick(() -> {
             long elapsed = helper.getLevel().getGameTime() - startedAt;
@@ -396,7 +590,14 @@ public final class PathRetryLifecycleGameTests {
                 logPhase(lane, "opened route", villager, PathRequestDiagnostics.snapshot(villager));
             }
 
-            if (routeOpened[0] && villager.blockPosition().equals(destination)) {
+            if (routeOpened[0] && arrivedAt[0] == -1L && villager.blockPosition().equals(destination)) {
+                arrivedAt[0] = elapsed;
+            }
+            // Physical movement can enter the target block after the Brain has ticked.
+            // Observe the next Brain tick before checking the producer's completion cleanup.
+            if (arrivedAt[0] != -1L && elapsed > arrivedAt[0]) {
+                helper.assertTrue(villager.blockPosition().equals(destination),
+                        lane + " left HOME before completing its reached movement");
                 PathRequestDiagnostics.SearchSnapshot recovered = PathRequestDiagnostics.snapshot(villager);
                 logPhase(lane, "arrived", villager, recovered);
                 helper.assertTrue(recovered.extendedSearches() > blockedSnapshot[0].extendedSearches(),
@@ -812,5 +1013,443 @@ public final class PathRetryLifecycleGameTests {
                 helper.fail("sealed HOME never expired after resuming from foreign MoveToTargetSink preemption");
             }
         });
+    }
+
+    @GameTest(batch = "mca_path_retry_first_resume_clock", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void firstResumeAdoptsMatchingExistingFailure(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(300, 1, 300));
+        VillagerEntityMCA villager = clockFixture(helper, start);
+        try {
+            BlockPos destination = start.east(8);
+            GlobalPos home = GlobalPos.of(helper.getLevel().dimension(), destination);
+            var brain = villager.getBrain();
+            brain.setMemory(MemoryModuleType.HOME, home);
+            long t = helper.getLevel().getGameTime();
+            WalkTargetFailureMemory.record(villager, home, t);
+            var producer = ExtendedWalkTowardsTask.createWithoutPoiRelease(
+                    MemoryModuleType.HOME, 0.5F, 0, 120, ignored -> true, ignored -> { });
+
+            producer.trigger(helper.getLevel(), villager, t + 19);
+            helper.assertTrue(!brain.hasMemoryValue(MemoryModuleType.WALK_TARGET),
+                    "existing failure must delay first HOME publication for 20 ticks");
+            producer.trigger(helper.getLevel(), villager, t + 20);
+            helper.assertTrue(ExtendedWalkTowardsTask.ownsWalkTarget(villager, MemoryModuleType.HOME),
+                    "HOME did not publish at the initial 20-tick boundary");
+            assertHomeClock(helper, villager, destination, t);
+
+            replaceClockWithForeignSink(helper, villager, producer, start.north(3), t + 25);
+            producer.trigger(helper.getLevel(), villager, t + 55);
+            assertHomeClock(helper, villager, destination, t + 30);
+            helper.assertTrue(brain.hasMemoryValue(MemoryModuleType.HOME),
+                    "HOME was abandoned after its first interruption");
+        } finally {
+            releaseLifecycleChunks(helper.getLevel());
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_path_retry_mismatched_resume_clock", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void firstResumeRejectsMismatchedExistingFailure(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(300, 1, 300));
+        VillagerEntityMCA villager = clockFixture(helper, start);
+        try {
+            BlockPos destination = start.east(8);
+            GlobalPos home = GlobalPos.of(helper.getLevel().dimension(), destination);
+            var brain = villager.getBrain();
+            brain.setMemory(MemoryModuleType.HOME, home);
+            long t = helper.getLevel().getGameTime();
+            // Same coordinates, wrong dimension: positional equality is insufficient.
+            var otherDimension = helper.getLevel().dimension() == net.minecraft.world.level.Level.NETHER
+                    ? net.minecraft.world.level.Level.OVERWORLD : net.minecraft.world.level.Level.NETHER;
+            WalkTargetFailureMemory.record(villager, GlobalPos.of(otherDimension, destination), t);
+            var producer = ExtendedWalkTowardsTask.createWithoutPoiRelease(
+                    MemoryModuleType.HOME, 0.5F, 0, 120, ignored -> true, ignored -> { });
+
+            producer.trigger(helper.getLevel(), villager, t + 1);
+            helper.assertTrue(ExtendedWalkTowardsTask.ownsWalkTarget(villager, MemoryModuleType.HOME),
+                    "foreign dimension's failure delayed initial HOME publication");
+            helper.assertTrue(!brain.hasMemoryValue(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE),
+                    "foreign dimension's timestamp was adopted by HOME");
+        } finally {
+            releaseLifecycleChunks(helper.getLevel());
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_path_retry_repeated_resume_clock", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void repeatedResumeDoesNotDoubleShiftFailure(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(300, 1, 300));
+        VillagerEntityMCA villager = clockFixture(helper, start);
+        try {
+            BlockPos destination = start.east(8);
+            GlobalPos home = GlobalPos.of(helper.getLevel().dimension(), destination);
+            var brain = villager.getBrain();
+            brain.setMemory(MemoryModuleType.HOME, home);
+            int[] gaveUp = {0};
+            var producer = ExtendedWalkTowardsTask.createWithoutPoiRelease(
+                    MemoryModuleType.HOME, 0.5F, 0, 60, ignored -> true, ignored -> gaveUp[0]++);
+            long t = helper.getLevel().getGameTime();
+            producer.trigger(helper.getLevel(), villager, t);
+            helper.assertTrue(ExtendedWalkTowardsTask.ownsWalkTarget(villager, MemoryModuleType.HOME),
+                    "fixture did not publish HOME before recording failure");
+            WalkTargetFailureMemory.record(villager, destination, t);
+
+            replaceClockWithForeignSink(helper, villager, producer, start.north(3), t + 15);
+            producer.trigger(helper.getLevel(), villager, t + 65);
+            assertHomeClock(helper, villager, destination, t + 50);
+            producer.trigger(helper.getLevel(), villager, t + 70);
+            assertHomeClock(helper, villager, destination, t + 50);
+
+            replaceClockWithForeignSink(helper, villager, producer, start.south(3), t + 80);
+            producer.trigger(helper.getLevel(), villager, t + 110);
+            assertHomeClock(helper, villager, destination, t + 80);
+            producer.trigger(helper.getLevel(), villager, t + 111);
+            assertHomeClock(helper, villager, destination, t + 80);
+            producer.trigger(helper.getLevel(), villager, t + 140);
+            helper.assertTrue(gaveUp[0] == 0 && brain.hasMemoryValue(MemoryModuleType.HOME),
+                    "HOME expired at or before its inclusive 60-tick failure limit");
+            producer.trigger(helper.getLevel(), villager, t + 141);
+            helper.assertTrue(gaveUp[0] == 1 && !brain.hasMemoryValue(MemoryModuleType.HOME),
+                    "HOME did not expire after exactly 80 paused ticks");
+        } finally {
+            releaseLifecycleChunks(helper.getLevel());
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_path_retry_same_memory_handoff", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void secondMeetingProducerAdoptsEstablishedShiftedFailure(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(300, 1, 300));
+        VillagerEntityMCA villager = clockFixture(helper, start);
+        try {
+            BlockPos destination = start.east(8);
+            GlobalPos meeting = GlobalPos.of(helper.getLevel().dimension(), destination);
+            var brain = villager.getBrain();
+            brain.setMemory(MemoryModuleType.MEETING_POINT, meeting);
+            // The two distinct OneShots used by MEET and PRE_RAID.
+            var first = SetWalkTargetFromBlockMemory.create(MemoryModuleType.MEETING_POINT, 0.5F, 6, 100, 200);
+            var second = SetWalkTargetFromBlockMemory.create(MemoryModuleType.MEETING_POINT, 0.75F, 2, 150, 200);
+            long now = helper.getLevel().getGameTime();
+            long t = now - 215;
+            first.trigger(helper.getLevel(), villager, t);
+            helper.assertTrue(ExtendedWalkTowardsTask.ownsWalkTarget(villager, MemoryModuleType.MEETING_POINT),
+                    "first MEETING_POINT producer did not publish");
+            WalkTargetFailureMemory.record(villager, destination, t);
+
+            // Open the pause through the real producer, but never run a foreign sink:
+            // the Brain projection should remain T even when think() closes A's pause.
+            brain.setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(start.north(3), 0.5F, 0));
+            first.trigger(helper.getLevel(), villager, t + 135);
+            brain.eraseMemory(MemoryModuleType.WALK_TARGET);
+            villager.getVillagerBrain().think();
+            helper.assertTrue(WalkTargetFailureMemory.hasFailureFor(villager, destination)
+                            && brain.getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
+                            .filter(since -> since == t).isPresent(),
+                    "fixture did not retain the stale projection until the handoff");
+
+            // B has never run. It must adopt A's established T+80, not stale T
+            // (whose 215-tick age would expire the 200-tick MEETING_POINT episode).
+            second.trigger(helper.getLevel(), villager, now);
+            helper.assertTrue(brain.hasMemoryValue(MemoryModuleType.MEETING_POINT)
+                            && ExtendedWalkTowardsTask.ownsWalkTarget(villager, MemoryModuleType.MEETING_POINT)
+                            && brain.getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
+                            .filter(since -> since == t + 80).isPresent(),
+                    "second producer adopted stale failure projection instead of T+80: "
+                            + brain.getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE));
+
+            WalkTargetFailureMemory.record(villager, destination, now + 1);
+            helper.assertTrue(brain.getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
+                            .filter(since -> since == t + 80).isPresent(),
+                    "subsequent failure report changed the established failure clock");
+            second.trigger(helper.getLevel(), villager, t + 280);
+            helper.assertTrue(brain.hasMemoryValue(MemoryModuleType.MEETING_POINT),
+                    "MEETING_POINT expired at or before its inclusive 200-tick failure limit");
+            second.trigger(helper.getLevel(), villager, t + 281);
+            helper.assertTrue(!brain.hasMemoryValue(MemoryModuleType.MEETING_POINT),
+                    "MEETING_POINT did not expire after exactly 80 paused ticks");
+        } finally {
+            releaseLifecycleChunks(helper.getLevel());
+        }
+        helper.succeed();
+    }
+
+    @AfterBatch(batch = "mca_path_retry_same_memory_handoff")
+    public static void releaseSameMemoryHandoff(ServerLevel level) {
+        releaseLifecycleChunks(level);
+    }
+
+
+    private static VillagerEntityMCA clockFixture(GameTestHelper helper, BlockPos start) {
+        rememberOriginalTerrain(helper.getLevel(), start, 12);
+        var ownedChunks = new java.util.ArrayList<ChunkPos>();
+        try {
+            prepareFlatArea(helper, start, 12, 3, ownedChunks);
+        } finally {
+            FORCED_CHUNKS.addAll(ownedChunks);
+        }
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(start)).spawn(EntitySpawnReason.STRUCTURE);
+        ACTIVE_VILLAGERS.add(villager);
+        villager.refreshBrain(helper.getLevel());
+        villager.getBrain().removeAllBehaviors();
+        villager.setNoAi(true);
+        villager.setOnGround(true);
+        return villager;
+    }
+
+    private static void replaceClockWithForeignSink(GameTestHelper helper, VillagerEntityMCA villager,
+                                                    OneShot<VillagerEntityMCA> producer, BlockPos foreign, long time) {
+        var brain = villager.getBrain();
+        brain.setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(foreign, 0.5F, 0));
+        producer.trigger(helper.getLevel(), villager, time);
+        int before = PathRequestDiagnostics.snapshot(villager).sinkRequests();
+        MoveToTargetSink sink = new MoveToTargetSink();
+        helper.assertTrue(sink.tryStart(helper.getLevel(), villager, time),
+                "reachable foreign sink fixture did not start");
+        Path path = villager.getNavigation().getPath();
+        helper.assertTrue(path != null && path.canReach()
+                        && PathRequestDiagnostics.snapshot(villager).sinkRequests() > before,
+                "foreign sink did not make a reachable path attempt");
+        helper.assertTrue(!brain.hasMemoryValue(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE),
+                "foreign sink did not replace the old failure projection");
+        sink.doStop(helper.getLevel(), villager, time);
+        helper.assertTrue(!brain.hasMemoryValue(MemoryModuleType.WALK_TARGET)
+                        && !brain.hasMemoryValue(MemoryModuleType.PATH),
+                "foreign sink failed to release movement memories");
+    }
+
+    private static void assertHomeClock(GameTestHelper helper, VillagerEntityMCA villager,
+                                        BlockPos home, long expected) {
+        helper.assertTrue(WalkTargetFailureMemory.hasFailureFor(villager, home)
+                        && villager.getBrain().getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
+                        .filter(since -> since == expected).isPresent(),
+                "HOME failure clock expected " + expected + ", observed "
+                        + villager.getBrain().getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE));
+    }
+
+    @AfterBatch(batch = "mca_path_retry_first_resume_clock")
+    public static void releaseFirstResumeClock(ServerLevel level) {
+        releaseLifecycleChunks(level);
+    }
+
+    @AfterBatch(batch = "mca_path_retry_mismatched_resume_clock")
+    public static void releaseMismatchedResumeClock(ServerLevel level) {
+        releaseLifecycleChunks(level);
+    }
+
+    @AfterBatch(batch = "mca_path_retry_repeated_resume_clock")
+    public static void releaseRepeatedResumeClock(ServerLevel level) {
+        releaseLifecycleChunks(level);
+    }
+
+    @GameTest(batch = "mca_path_retry_invalidated_age", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void routeInvalidationDoesNotRenewUnreachableEpisode(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(300, 1, 300));
+        BlockPos destination = start.east(2);
+        VillagerEntityMCA villager = invalidationFixture(helper, start, destination);
+        villager.setNoAi(true);
+        var brain = villager.getBrain();
+        int[] gaveUp = {0};
+        var producer = ExtendedWalkTowardsTask.createWithoutPoiRelease(
+                MemoryModuleType.HOME, 0.5F, 0, 70, ignored -> true, ignored -> gaveUp[0]++);
+        long t = helper.getLevel().getGameTime();
+        producer.trigger(helper.getLevel(), villager, t);
+        helper.assertTrue(ExtendedWalkTowardsTask.ownsWalkTarget(villager, MemoryModuleType.HOME),
+                "fixture did not publish the original sealed HOME");
+        attemptStoppedHomeSearch(helper, villager, t);
+        assertInvalidationClock(helper, villager, destination, t);
+        helper.assertTrue(PathRequestDiagnostics.snapshot(villager).extendedSearches() == 1,
+                "fixture did not exhaust its initial extended search");
+
+        helper.onEachTick(() -> {
+            long now = helper.getLevel().getGameTime();
+            long elapsed = now - t;
+            if (elapsed == 20L) {
+                producer.trigger(helper.getLevel(), villager, now);
+                helper.assertTrue(ExtendedWalkTowardsTask.ownsWalkTarget(villager, MemoryModuleType.HOME),
+                        "fixture did not consume the one early retry");
+                attemptStoppedHomeSearch(helper, villager, now);
+            }
+            if (elapsed == 21L) {
+                producer.trigger(helper.getLevel(), villager, now);
+                helper.assertTrue(!brain.hasMemoryValue(MemoryModuleType.WALK_TARGET),
+                        "fixture did not establish ordinary publication suppression");
+                assertInvalidationClock(helper, villager, destination, t);
+            }
+            if (elapsed == 25L) {
+                // Change collision inside the failed search frontier, without opening any
+                // of the eight enclosing columns around HOME. Navigation is stopped.
+                helper.assertTrue(villager.getNavigation().getPath() == null,
+                        "fixture must have no active navigation route before the block update");
+                helper.getLevel().setBlockAndUpdate(start.north(2), Blocks.STONE.defaultBlockState());
+                int before = PathRequestDiagnostics.snapshot(villager).extendedSearches();
+                producer.trigger(helper.getLevel(), villager, now);
+                helper.assertTrue(ExtendedWalkTowardsTask.ownsWalkTarget(villager, MemoryModuleType.HOME),
+                        "collision change did not wake the suppressed HOME producer before its normal retry");
+                attemptStoppedHomeSearch(helper, villager, now);
+                helper.assertTrue(PathRequestDiagnostics.snapshot(villager).extendedSearches() > before,
+                        "woken producer did not run a fresh extended search");
+                helper.assertTrue(villager.blockPosition().equals(start),
+                        "stationary fixture unexpectedly made progress");
+                assertInvalidationClock(helper, villager, destination, t);
+            }
+            if (elapsed == 26L) {
+                // The early escalation was spent at tick 20. A failed repair may
+                // grant one wake-up, but must not grant another free publication.
+                producer.trigger(helper.getLevel(), villager, now);
+                helper.assertTrue(!brain.hasMemoryValue(MemoryModuleType.WALK_TARGET),
+                        "unsuccessful repair rearmed the spent early retry");
+                assertInvalidationClock(helper, villager, destination, t);
+            }
+            if (elapsed == 70L || elapsed == 71L) {
+                producer.trigger(helper.getLevel(), villager, now);
+                if (elapsed == 70L) {
+                    helper.assertTrue(gaveUp[0] == 0 && brain.hasMemoryValue(MemoryModuleType.HOME),
+                            "HOME expired at its inclusive failure limit");
+                    assertInvalidationClock(helper, villager, destination, t);
+                } else {
+                    helper.assertTrue(gaveUp[0] == 1 && !brain.hasMemoryValue(MemoryModuleType.HOME),
+                            "unsuccessful repair renewed the original HOME failure deadline");
+                    releaseLifecycleChunks(helper.getLevel());
+                    helper.succeed();
+                }
+            }
+        });
+    }
+
+    @GameTest(batch = "mca_path_retry_invalidated_repair", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 700)
+    public static void routeInvalidationWithSuccessfulRepairRetainsHome(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(300, 1, 300));
+        BlockPos destination = start.east(2);
+        VillagerEntityMCA villager = invalidationFixture(helper, start, destination);
+        int[] gaveUp = {0};
+
+        @SuppressWarnings("unchecked")
+        Brain<VillagerEntityMCA> brain = (Brain<VillagerEntityMCA>) (Brain<?>) villager.getBrain();
+        GameTestBrain.addActivity(brain, Activity.CORE, 1, ImmutableList.of(new WanderOrTeleportToTargetTask()));
+        GameTestBrain.addActivity(brain, Activity.CORE, 2, ImmutableList.of(
+                ExtendedWalkTowardsTask.createWithoutPoiRelease(
+                        MemoryModuleType.HOME, 1.0F, 0, 600, ignored -> true, ignored -> gaveUp[0]++)));
+        GameTestBrain.addActivity(brain, Activity.IDLE, 20, ImmutableList.of(new DoNothing(100, 100)));
+        brain.setCoreActivities(ImmutableSet.of(Activity.CORE));
+        brain.setDefaultActivity(Activity.IDLE);
+        brain.setSchedule(GameTestBrain.fixedSchedule(Activity.IDLE));
+        brain.setActiveActivityIfPossible(Activity.IDLE);
+
+        long began = helper.getLevel().getGameTime();
+        int[] beforeRepair = {-1};
+        long[] firstArrival = {-1L};
+        helper.onEachTick(() -> {
+            long elapsed = helper.getLevel().getGameTime() - began;
+            if (elapsed == 80L) {
+                helper.assertTrue(WalkTargetFailureMemory.hasFailureFor(villager, destination),
+                        "repair fixture never recorded the sealed HOME failure");
+                beforeRepair[0] = PathRequestDiagnostics.snapshot(villager).extendedSearches();
+                helper.assertTrue(beforeRepair[0] == 1, "repair fixture lacked one original extended search");
+                for (int y = 0; y < 3; y++) {
+                    helper.getLevel().setBlockAndUpdate(destination.east().above(y), Blocks.AIR.defaultBlockState());
+                }
+            }
+            if (beforeRepair[0] >= 0 && firstArrival[0] == -1L && villager.blockPosition().equals(destination)) {
+                firstArrival[0] = elapsed;
+            }
+            if (firstArrival[0] != -1L && elapsed > firstArrival[0]) {
+                helper.assertTrue(villager.blockPosition().equals(destination),
+                        "villager left HOME before completing the repaired movement");
+                helper.assertTrue(PathRequestDiagnostics.snapshot(villager).extendedSearches() > beforeRepair[0],
+                        "repair did not trigger a fresh extended search");
+                helper.assertTrue(!brain.hasMemoryValue(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE),
+                        "arrival retained the unreachable timestamp");
+                helper.assertTrue(gaveUp[0] == 0 && brain.getMemoryInternal(MemoryModuleType.HOME)
+                                .filter(GlobalPos.of(helper.getLevel().dimension(), destination)::equals).isPresent(),
+                        "successful repair abandoned the original HOME");
+                releaseLifecycleChunks(helper.getLevel());
+                helper.succeed();
+            } else if (elapsed >= 620L) {
+                helper.fail("villager did not physically arrive after the route repair: " + villager.blockPosition());
+            }
+        });
+    }
+
+    private static VillagerEntityMCA invalidationFixture(GameTestHelper helper, BlockPos start, BlockPos destination) {
+        originalPathfindingDistance = Config.getInstance().villagerPathfindingDistance;
+        Config.getInstance().villagerPathfindingDistance = 160;
+        rememberOriginalTerrain(helper.getLevel(), start, 30);
+        var ownedChunks = new java.util.ArrayList<ChunkPos>();
+        try {
+            prepareFlatArea(helper, start, 30, 3, ownedChunks);
+        } finally {
+            FORCED_CHUNKS.addAll(ownedChunks);
+        }
+        for (int z = -23; z <= 23; z++) {
+            for (int y = 0; y < 3; y++) {
+                helper.getLevel().setBlock(start.offset(1, y, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                if (dx == 0 && dz == 0) continue;
+                for (int y = 0; y < 3; y++) {
+                    helper.getLevel().setBlock(destination.offset(dx, y, dz), Blocks.STONE.defaultBlockState(), 3);
+                }
+            }
+        }
+
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(start)).spawn(EntitySpawnReason.STRUCTURE);
+        ACTIVE_VILLAGERS.add(villager);
+        villager.refreshBrain(helper.getLevel());
+        @SuppressWarnings("unchecked")
+        Brain<VillagerEntityMCA> brain = (Brain<VillagerEntityMCA>) (Brain<?>) villager.getBrain();
+        brain.stopAll(helper.getLevel(), villager);
+        brain.removeAllBehaviors();
+        villager.setOnGround(true);
+        villager.getAttribute(Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
+        brain.eraseMemory(MemoryModuleType.WALK_TARGET);
+        brain.eraseMemory(MemoryModuleType.PATH);
+        WalkTargetFailureMemory.clear(villager);
+        brain.setMemory(MemoryModuleType.HOME, GlobalPos.of(helper.getLevel().dimension(), destination));
+        return villager;
+    }
+
+    private static void attemptStoppedHomeSearch(GameTestHelper helper, VillagerEntityMCA villager, long time) {
+        var brain = villager.getBrain();
+        int before = PathRequestDiagnostics.snapshot(villager).sinkRequests();
+        MoveToTargetSink sink = new WanderOrTeleportToTargetTask();
+        if (sink.tryStart(helper.getLevel(), villager, time)) {
+            Path path = villager.getNavigation().getPath();
+            helper.assertTrue(path == null || !path.getTarget().equals(brain.getMemory(MemoryModuleType.HOME).orElseThrow().pos()) || !path.canReach(), "sealed HOME became reachable");
+            sink.doStop(helper.getLevel(), villager, time);
+        }
+        helper.assertTrue(PathRequestDiagnostics.snapshot(villager).sinkRequests() > before,
+                "HOME sink never attempted a search");
+        helper.assertTrue(!brain.hasMemoryValue(MemoryModuleType.WALK_TARGET)
+                        && villager.getNavigation().getPath() == null,
+                "fixture must release the failed movement before the next publication");
+    }
+
+    private static void assertInvalidationClock(GameTestHelper helper, VillagerEntityMCA villager,
+                                                BlockPos destination, long expected) {
+        helper.assertTrue(WalkTargetFailureMemory.hasFailureFor(villager, destination)
+                        && villager.getBrain().getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
+                        .filter(since -> since == expected).isPresent(),
+                "unchanged unreachable HOME failure expected " + expected + ", observed "
+                        + villager.getBrain().getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE));
+    }
+
+    @AfterBatch(batch = "mca_path_retry_invalidated_age")
+    public static void releaseInvalidatedAge(ServerLevel level) {
+        releaseLifecycleChunks(level);
+    }
+
+    @AfterBatch(batch = "mca_path_retry_invalidated_repair")
+    public static void releaseInvalidatedRepair(ServerLevel level) {
+        releaseLifecycleChunks(level);
     }
 }

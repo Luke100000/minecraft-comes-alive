@@ -893,7 +893,8 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
         Vec3 pos = victim.position();
         for (VillagerEntityMCA guard : victim.level().getEntitiesOfClass(VillagerEntityMCA.class, new AABB(pos, pos).inflate(32))) {
-            if (!guard.isGuard() || victim.distanceToSqr(guard) > (guard.getTarget() == null ? 1024 : 64)) {
+            if (!guard.isGuard() || victim.distanceToSqr(guard) >
+                    (guard.getBrain().getMemory(MemoryModuleType.ATTACK_TARGET).isEmpty() ? 1024 : 64)) {
                 continue;
             }
             if (attacker instanceof Player player) {
@@ -902,7 +903,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
                 if (bounty > maxWarning) {
                     guard.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, attacker);
                 } else if (bounty == 0 || bounty == maxWarning) {
-                    guard.getBrain().eraseMemory(MemoryModuleType.ATTACK_TARGET);
+                    if (guard.getBrain().isMemoryValue(MemoryModuleType.ATTACK_TARGET, player)) {
+                        guard.getBrain().eraseMemory(MemoryModuleType.ATTACK_TARGET);
+                    }
                     guard.sendChatMessage(player, "villager.warning");
                 }
                 guard.getBrain().setMemory(MemoryModuleTypeMCA.SMALL_BOUNTY, bounty + 1);
@@ -967,6 +970,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             }
 
             tickDespawnDelay();
+            if (isRemoved()) {
+                return;
+            }
 
             residency.tick();
 
@@ -1509,6 +1515,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             return;
         }
 
+        Component deathMessage = getCombatTracker().getDeathMessage();
         super.die(cause);
 
         // NeoForge can cancel LivingDeathEvent inside super.die(). Leave MCA's persistent
@@ -1524,9 +1531,8 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             return;
         }
 
-        //death message
         getResidency().getHomeVillage().flatMap(Village::getCivilRegistry)
-                .ifPresent(r -> r.addText(getCombatTracker().getDeathMessage()));
+                .ifPresent(registry -> registry.addText(deathMessage));
 
         //drop stuff
         InventoryUtils.dropAllItems(this, inventory);
@@ -1544,6 +1550,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         }
 
         //move out
+        if (!requiresHome()) {
+            residency.clearGuestHomeClaims();
+        }
         residency.leaveVillage();
 
         if (interactedWith) {
@@ -1821,7 +1830,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     @Override
     public void onSyncedDataUpdated(List<SynchedEntityData.DataValue<?>> values) {
         super.onSyncedDataUpdated(values);
-        if (values.stream().anyMatch(value -> value.id() == DATA_VISUAL_AGE_ANCHOR.id())) {
+        // Per-accessor notifications may occur before the remaining values in this packet.
+        // Recalculate once from the completed snapshot, using the 26.1.2 visual-age anchor.
+        if (values.stream().anyMatch(value -> value.id() == DATA_VISUAL_AGE_ANCHOR.id() || affectsDimensions(value))) {
             refreshDimensions();
         }
     }
@@ -1986,7 +1997,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         restoreGenderAfterLoad();
         // The persisted tracked flag is restored by CDataManager.load, not by
         // the vanilla super call. Clear an interrupted animation only afterwards.
-        relations.cancelInterruptedProcreationAfterLoad();
+        relations.clearProcreation();
         if (savedVanillaAge.isEmpty()) {
             migrateLegacyLifecycleAge(nbt);
         }
@@ -2021,11 +2032,8 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             getVillagerBrain().randomize();
         }
 
-        ItemStack mourningFlower = getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_FLOWER)
-                .orElse(ItemStack.EMPTY);
-        boolean restoreMourningFlower = !mourningFlower.isEmpty()
-                && getBrain().hasMemoryValue(MemoryModuleTypeMCA.MOURNING_PREVIOUS_MAIN_HAND)
-                && (getMainHandItem().isEmpty() || ItemStack.matches(getMainHandItem(), mourningFlower));
+        ItemStack mourningFlower = Mourning.getReloadableFlower(this);
+        boolean restoreMourningFlower = !mourningFlower.isEmpty();
 
         // Older saves kept the displaced mourning item only in Brain memory.
         // Migrate it into the inventory that now owns real equipment.
@@ -2057,9 +2065,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         // Rebuild equipment from inventory; the setter preserves equipment-only real items.
         clearEquipment();
         if (restoreMourningFlower) {
-            ItemStack flower = InventoryUtils.temporary(mourningFlower.copy());
-            getBrain().setMemory(MemoryModuleTypeMCA.MOURNING_FLOWER, flower.copy());
-            setItemInHand(InteractionHand.MAIN_HAND, flower);
+            Mourning.restoreLoadedFlower(this, mourningFlower);
         }
 
         refreshDimensions();
@@ -2291,6 +2297,11 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
                 setProfession(BuiltInRegistries.VILLAGER_PROFESSION.getOrThrow(VillagerProfession.NONE).value());
                 setDespawnDelay(0);
             } else {
+                if (isSleeping() && residency.mayReleaseHomePoi()) {
+                    stopSleeping();
+                }
+                releasePoi(MemoryModuleType.HOME);
+                residency.clearGuestHomeClaims();
                 this.discard();
             }
         }

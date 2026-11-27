@@ -143,8 +143,8 @@ public class Pregnancy {
     public boolean hasRoomForBabies(Entity spouse, int count) {
         int freeSlots = 0;
         if (spouse instanceof Player player) {
-            for (int slot = 0; slot < player.getInventory().getContainerSize(); slot++) {
-                if (player.getInventory().getItem(slot).isEmpty()) {
+            for (ItemStack stack : player.getInventory().getNonEquipmentItems()) {
+                if (stack.isEmpty()) {
                     freeSlots++;
                 }
             }

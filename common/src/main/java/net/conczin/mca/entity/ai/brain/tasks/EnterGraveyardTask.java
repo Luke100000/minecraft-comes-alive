@@ -101,8 +101,12 @@ public class EnterGraveyardTask extends Behavior<VillagerEntityMCA> {
     }
 
     private static void setMourningPosition(VillagerEntityMCA villager, GlobalPos position) {
+        villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_POSITION)
+                .ifPresent(previous -> {
+                    ExtendedWalkTowardsTask.retractOwnedMovement(villager, MemoryModuleTypeMCA.MOURNING_POSITION);
+                    WalkTargetFailureMemory.clearForProducer(villager, MemoryModuleTypeMCA.MOURNING_POSITION, previous);
+                });
         villager.getBrain().setMemory(MemoryModuleTypeMCA.MOURNING_POSITION, position);
-        WalkTargetFailureMemory.clear(villager);
     }
 
     public static boolean isAtMourningSite(VillagerEntityMCA villager) {

@@ -25,6 +25,7 @@ import net.minecraft.world.phys.Vec3;
 import net.conczin.mca.neoforge.gametest.GameTestHolder;
 import net.conczin.mca.neoforge.gametest.PrefixGameTestTemplate;
 
+import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
 
@@ -147,6 +148,51 @@ public final class ExtendedFindPointOfInterestTaskGameTests {
                         poi -> poi.is(PoiTypes.HOME), bedHead, 0, PoiManager.Occupancy.HAS_SPACE) == 1,
                 "automatic HOME acquisition claimed a physically occupied bed POI ticket");
         helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void fiveCloserOccupiedBedsDoNotHideAReachableHome(GameTestHelper helper) {
+        BlockPos feet = helper.absolutePos(new BlockPos(2, 1, 6));
+        prepareFloor(helper, helper.absolutePos(new BlockPos(1, 1, 2)),
+                helper.absolutePos(new BlockPos(11, 1, 8)));
+        Set<BlockPos> candidates = new HashSet<>();
+        for (int x = 2; x <= 6; x++) {
+            BlockPos foot = helper.absolutePos(new BlockPos(x, 1, 4));
+            placeOccupiedBed(helper, foot, Direction.NORTH);
+            candidates.add(foot.north());
+        }
+        BlockPos freeFoot = helper.absolutePos(new BlockPos(10, 1, 6));
+        BlockPos freeHead = freeFoot.north();
+        BlockState freeBed = Blocks.RED_BED.defaultBlockState().setValue(BedBlock.FACING, Direction.NORTH);
+        helper.getLevel().setBlock(freeFoot, freeBed.setValue(BedBlock.PART, BedPart.FOOT), 3);
+        helper.getLevel().setBlock(freeHead, freeBed.setValue(BedBlock.PART, BedPart.HEAD), 3);
+        candidates.add(freeHead);
+        var pois = helper.getLevel().getPoiManager();
+        var ranked = pois.findAllClosestFirstWithType(poi -> poi.is(PoiTypes.HOME), candidates::contains,
+                feet, ExtendedFindPointOfInterestTask.POI_SORTING_RADIUS, PoiManager.Occupancy.HAS_SPACE)
+                .map(Pair::getSecond).toList();
+        helper.assertTrue(ranked.size() == 6 && ranked.getLast().equals(freeHead),
+                "fixture must rank the free bed after five occupied beds with free POI tickets");
+
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel()).withAge(0)
+                .withPosition(Vec3.atBottomCenterOf(feet)).spawn(EntitySpawnReason.STRUCTURE);
+        villager.setOnGround(true);
+        villager.setNoAi(true);
+        villager.refreshBrain(helper.getLevel());
+        try {
+            Path path = findPathToPois(villager, Set.of(Pair.of(pois.getType(freeHead).orElseThrow(), freeHead)));
+            helper.assertTrue(path != null && path.canReach(), "fixture free bed must be reachable");
+            ExtendedFindPointOfInterestTask task = new ExtendedFindPointOfInterestTask(
+                    poi -> poi.is(PoiTypes.HOME), MemoryModuleType.HOME, false, Optional.empty(),
+                    ignored -> { }, (ignored, pos) -> candidates.contains(pos));
+            task.start(helper.getLevel(), villager, helper.getLevel().getGameTime());
+            helper.assertTrue(villager.getBrain().getMemoryInternal(MemoryModuleType.HOME)
+                            .map(home -> home.pos().equals(freeHead)).orElse(false),
+                    "five occupied beds hid the reachable free HOME");
+            helper.succeed();
+        } finally {
+            villager.discard();
+        }
     }
 
     @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air")

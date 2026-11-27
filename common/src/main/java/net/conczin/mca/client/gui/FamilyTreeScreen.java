@@ -110,6 +110,7 @@ public class FamilyTreeScreen extends Screen {
     private List<FamilyTreeSearchEntry> searchResults = List.of();
     @Nullable
     private FamilyTreeSearchDebouncer.Request expectedSearchRequest;
+    private long activeSearchDeadlineMs;
     private boolean searchOpen;
     private boolean searchPending;
     private boolean canvasDragging;
@@ -121,11 +122,6 @@ public class FamilyTreeScreen extends Screen {
     @Nullable
     private GetFamilyTreeRequest queuedTreeRequest;
     private long activeTreeRequestDeadlineMs;
-    private boolean hasSentSearchLookup;
-    private long lastSearchLookupSentAtMs;
-    @Nullable
-    private FamilyTreeSearchDebouncer.Request queuedSearchLookup;
-    private long activeSearchDeadlineMs;
     @Nullable
     private Component actionFeedback;
     private long actionFeedbackUntilMs;
@@ -277,6 +273,8 @@ public class FamilyTreeScreen extends Screen {
                 if (generation.anchor() != null && !previous.cards().isEmpty()) {
                     animateLayout(previous, generation.anchor());
                 }
+            } else if (response.found()) {
+                refreshCardPresentations();
             }
             return;
         }
@@ -346,7 +344,6 @@ public class FamilyTreeScreen extends Screen {
             return;
         }
         expectedSearchRequest = null;
-        queuedSearchLookup = null;
         activeSearchDeadlineMs = 0L;
         searchPending = false;
         searchResults = List.copyOf(results);
@@ -549,28 +546,10 @@ public class FamilyTreeScreen extends Screen {
         }
     }
 
-    private void dispatchOrQueueSearchLookup(FamilyTreeSearchDebouncer.Request request, long now) {
-        if (expectedSearchRequest == null || expectedSearchRequest.requestId() != request.requestId()) {
-            queuedSearchLookup = null;
-            return;
-        }
-        if (!hasSentSearchLookup || now - lastSearchLookupSentAtMs >= CLIENT_REQUEST_PACE_MS) {
-            queuedSearchLookup = null;
-            hasSentSearchLookup = true;
-            lastSearchLookupSentAtMs = now;
-            activeSearchDeadlineMs = now + REQUEST_TIMEOUT_MS;
-            Network.sendToServer(new FamilyTreeUUIDLookup(request.requestId(), request.query()));
-        } else {
-            queuedSearchLookup = request;
-            activeSearchDeadlineMs = 0L;
-        }
-    }
-
     private void searchFamily(String value) {
         Optional<String> query = integratedSearchQuery(value);
         if (query.isEmpty()) {
             searchDebouncer.clear();
-            queuedSearchLookup = null;
             activeSearchDeadlineMs = 0L;
             expectedSearchRequest = null;
             searchOpen = false;
@@ -578,7 +557,6 @@ public class FamilyTreeScreen extends Screen {
             searchResults = List.of();
             return;
         }
-        queuedSearchLookup = null;
         activeSearchDeadlineMs = 0L;
         searchOpen = true;
         searchPending = true;
@@ -588,7 +566,6 @@ public class FamilyTreeScreen extends Screen {
 
     private void dismissSearchPopup() {
         searchDebouncer.clear();
-        queuedSearchLookup = null;
         activeSearchDeadlineMs = 0L;
         expectedSearchRequest = null;
         searchOpen = false;
@@ -606,10 +583,12 @@ public class FamilyTreeScreen extends Screen {
     public void tick() {
         super.tick();
         long now = nowMs();
-        searchDebouncer.poll(now).ifPresent(request -> queuedSearchLookup = request);
-        if (queuedSearchLookup != null) {
-            dispatchOrQueueSearchLookup(queuedSearchLookup, now);
-        }
+        searchDebouncer.poll(now).ifPresent(request -> {
+            if (request.equals(expectedSearchRequest)) {
+                activeSearchDeadlineMs = now + REQUEST_TIMEOUT_MS;
+                Network.sendToServer(new FamilyTreeUUIDLookup(request.requestId(), request.query()));
+            }
+        });
         if (queuedTreeRequest != null) {
             if (!viewModel.isPendingRequest(queuedTreeRequest.requestId())) {
                 queuedTreeRequest = null;
@@ -634,7 +613,6 @@ public class FamilyTreeScreen extends Screen {
             }
         }
         if (searchPending
-                && queuedSearchLookup == null
                 && activeSearchDeadlineMs > 0L
                 && now >= activeSearchDeadlineMs) {
             expectedSearchRequest = null;

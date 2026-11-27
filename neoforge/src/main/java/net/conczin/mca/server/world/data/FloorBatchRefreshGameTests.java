@@ -292,9 +292,17 @@ public final class FloorBatchRefreshGameTests {
             FailLaterVillage village = new FailLaterVillage(fixture.stacked().save(), helper.getLevel(), false);
             CompoundTag before = village.save();
             fixture.shrinkBothFloors();
-            helper.assertTrue(fixture.manager.fullScan(village) == Building.validationResult.OVERLAP
-                            && village.publications == 2 && village.earlierRefreshObserved,
-                    "publication rejection did not follow an earlier refresh or did not map to OVERLAP");
+            VillageManager savedData = VillageManager.get(helper.getLevel());
+            boolean wasDirty = savedData.isDirty();
+            try {
+                savedData.setDirty(false);
+                helper.assertTrue(fixture.manager.fullScan(village) == Building.validationResult.OVERLAP
+                                && village.publications == 2 && village.earlierRefreshObserved,
+                        "publication rejection did not follow an earlier refresh or did not map to OVERLAP");
+                helper.assertTrue(!savedData.isDirty(), "a rejected full scan scheduled a village save");
+            } finally {
+                savedData.setDirty(wasDirty);
+            }
             helper.assertTrue(before.equals(village.save()), "later publication rejection did not restore saved state");
         }
         helper.succeed();
@@ -584,13 +592,13 @@ public final class FloorBatchRefreshGameTests {
         }
 
         @Override
-        boolean publishFloorRefresh(Structure refreshed, int floorId, java.util.Collection<Building> replacements) {
+        boolean publishFloorRefresh(Structure refreshed, int floorId, java.util.Collection<Building> replacements, boolean inBatch) {
             if (++publications == 2) {
                 earlierRefreshObserved = !getBuilding(101).orElseThrow().getFloorCells().equals(originalSecondCells);
                 if (throwOnFailure) throw failure;
                 return false;
             }
-            return super.publishFloorRefresh(refreshed, floorId, replacements);
+            return super.publishFloorRefresh(refreshed, floorId, replacements, inBatch);
         }
     }
 

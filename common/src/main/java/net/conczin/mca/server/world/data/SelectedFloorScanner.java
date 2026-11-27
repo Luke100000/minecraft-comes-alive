@@ -753,6 +753,7 @@ final class SelectedFloorScanner {
             FloorCeilingResolver ceilings,
             FloorBandClassifier classifier,
             Map<BlockPos, SurfaceCell> enclosedCells) {
+        if (!isLoadedColumn(world, feet)) return Optional.empty();
         // A climbable opening belongs to the enclosed Floor beside it even though the ladder's
         // narrow collision shape is not a walking surface. It stays out of traversal discovery.
         if (StructureConnector.isVerticalTopExit(world, feet)) {

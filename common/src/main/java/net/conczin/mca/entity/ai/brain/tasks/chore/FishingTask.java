@@ -196,6 +196,10 @@ public class FishingTask extends AbstractChoreTask {
         if (bobber == null || bobber.isRemoved()) {
             villager.swing(villager.getDominantHand());
             bobber = MCAFishingBobberEntity.cast(world, villager, currentSite.waterPos());
+            if (bobber == null) {
+                failedTicks = FAILED_COOLDOWN;
+                return;
+            }
             previousCastWater = currentSite.waterPos();
             castBobber = bobber;
             castReachedWater = false;

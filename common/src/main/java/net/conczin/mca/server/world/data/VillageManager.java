@@ -17,6 +17,7 @@ import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
@@ -75,7 +76,14 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         lastVillageId = nbt.getInt("lastVillageId").orElse(0);
         reapers = nbt.getCompound("reapers")
                 .map(tag -> new ReaperSpawner(this, tag)).orElseGet(() -> new ReaperSpawner(this));
-        ListTag villageList = nbt.getList("villages").orElseGet(ListTag::new);
+        Tag savedVillages = nbt.get("villages");
+        if (!(savedVillages instanceof ListTag villageList)
+                || !villageList.stream().allMatch(CompoundTag.class::isInstance)) {
+            unreadableSavedData = true;
+            setDirty(false);
+            MCA.LOGGER.error("Invalid village collection in mca_villages.dat. Refusing to overwrite the original save.");
+            return;
+        }
         try {
             for (int i = 0; i < villageList.size(); i++) {
                 try {
@@ -269,8 +277,9 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 .stream()
                 .filter(entry -> entry.getValue().retryAt() <= time)
                 .min(Comparator
-                        .comparingInt((Map.Entry<OriginGeometryRefreshKey, OriginGeometryRefreshRetry> entry) ->
-                                entry.getKey().villageId())
+                        .comparingLong((Map.Entry<OriginGeometryRefreshKey, OriginGeometryRefreshRetry> entry) ->
+                                entry.getValue().retryAt())
+                        .thenComparingInt(entry -> entry.getKey().villageId())
                         .thenComparingInt(entry -> entry.getKey().structureId()))
                 .orElse(null);
         if (due == null) return;
@@ -706,6 +715,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
     public Building.validationResult fullScan(Village village) {
         if (village == null) return Building.validationResult.NOT_IN_BUILDING;
+        // Floors see preceding updates. Only the completed batch schedules a save.
         Village.BuildingStateSnapshot snapshot = village.snapshotBuildingState();
 
         try {
@@ -718,7 +728,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                         village.restoreBuildingState(snapshot);
                         return update.result();
                     }
-                    if (!village.publishFloorRefresh(update.refreshedStructure(), floorId, update.replacementRooms())) {
+                    if (!village.publishFloorRefresh(update.refreshedStructure(), floorId, update.replacementRooms(), true)) {
                         village.restoreBuildingState(snapshot);
                         return Building.validationResult.OVERLAP;
                     }

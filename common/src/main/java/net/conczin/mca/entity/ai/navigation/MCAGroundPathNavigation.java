@@ -77,6 +77,10 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
     private boolean recomputingPath;
     private boolean probingPath;
     private Detour detour;
+    @Nullable
+    private WalkTarget admittedWalkTarget;
+    @Nullable
+    private Path admittedBrainPath;
 
     private enum DetourPhase { FLANKING, CROSSING }
 
@@ -661,6 +665,12 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
 
     @Override
     public boolean moveTo(@Nullable Path path, double speed) {
+        admittedWalkTarget = null;
+        admittedBrainPath = null;
+        return moveToPath(path, speed);
+    }
+
+    private boolean moveToPath(@Nullable Path path, double speed) {
         Path previous = this.path;
         if (!super.moveTo(path, speed)) {
             return false;
@@ -672,6 +682,42 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         }
         continueSharedPathStep(previous);
         return true;
+    }
+
+    /** Called by MoveToTargetSink only after navigation accepts its command. */
+    public void rememberAdmittedWalkTarget(WalkTarget command, Path brainPath) {
+        admittedWalkTarget = command;
+        admittedBrainPath = brainPath;
+    }
+
+    public void syncAdmittedPathMemory(WalkTarget command) {
+        if (admittedWalkTarget == command) {
+            admittedBrainPath = this.mob.getBrain().getMemoryInternal(MemoryModuleType.PATH).orElse(null);
+        }
+    }
+
+    public boolean retractWalkTarget(WalkTarget command) {
+        if (admittedWalkTarget != command) {
+            return false;
+        }
+        Path rememberedPath = this.mob.getBrain().getMemoryInternal(MemoryModuleType.PATH).orElse(null);
+        if (rememberedPath != null && (rememberedPath == admittedBrainPath || rememberedPath == this.path)) {
+            this.mob.getBrain().eraseMemory(MemoryModuleType.PATH);
+        }
+        forgetAdmittedWalkTarget(command);
+        this.stop();
+        return true;
+    }
+
+    public void forgetAdmittedWalkTarget(WalkTarget command) {
+        if (admittedWalkTarget == command) {
+            admittedWalkTarget = null;
+            admittedBrainPath = null;
+        }
+    }
+
+    public boolean hasAdmittedWalkTarget(WalkTarget command) {
+        return admittedWalkTarget == command;
     }
 
     @Override
@@ -986,6 +1032,16 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
 
     @Override
     public void stop() {
+        if (admittedWalkTarget != null) {
+            Path rememberedPath = this.mob.getBrain().getMemoryInternal(MemoryModuleType.PATH).orElse(null);
+            // PATH also locks out other MoveToTargetSink behaviors until the
+            // running sink stops. Retain exact retired ownership for retraction.
+            if (rememberedPath != null && (rememberedPath == admittedBrainPath || rememberedPath == this.path)) {
+                admittedBrainPath = rememberedPath;
+            } else {
+                forgetAdmittedWalkTarget(admittedWalkTarget);
+            }
+        }
         clearDetour();
         super.stop();
     }
@@ -1000,6 +1056,11 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         }
         WalkTarget walkTarget = this.mob.getBrain()
                 .getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
+        if (admittedWalkTarget != null && admittedWalkTarget != walkTarget) {
+            // A replacement command has not yet been admitted to this physical route.
+            clearDetour();
+            return;
+        }
         if (!ExtendedWalkTowardsTask.isPersistentJourney(walkTarget)) {
             clearDetour();
             return;
@@ -1046,7 +1107,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         if (nextPath.canReach()) {
             WalkTargetFailureMemory.clear(this.mob);
         }
-        this.moveTo(nextPath, walkTarget.getSpeedModifier());
+        this.moveToPath(nextPath, walkTarget.getSpeedModifier());
     }
 
     private boolean continueDetour(WalkTarget walkTarget) {
@@ -1063,7 +1124,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                 if (destinationPath.canReach()) {
                     WalkTargetFailureMemory.clear(this.mob);
                 }
-                this.moveTo(destinationPath, walkTarget.getSpeedModifier());
+                this.moveToPath(destinationPath, walkTarget.getSpeedModifier());
                 return true;
             }
             return beginDetour(walkTarget, destination);
@@ -1086,7 +1147,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         if (destinationPath != null && destinationPath.canReach()) {
             clearDetour();
             WalkTargetFailureMemory.clear(this.mob);
-            this.moveTo(destinationPath, walkTarget.getSpeedModifier());
+            this.moveToPath(destinationPath, walkTarget.getSpeedModifier());
             return true;
         }
 
@@ -1096,13 +1157,13 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                 && isUsefulPartialBeyondDetourOrigin(destinationPath, this.detour.origin,
                         destinationPath.getTarget())) {
             this.detour.phase = DetourPhase.CROSSING;
-            this.moveTo(destinationPath, walkTarget.getSpeedModifier());
+            this.moveToPath(destinationPath, walkTarget.getSpeedModifier());
             return true;
         }
 
         if (this.detour.phase == DetourPhase.CROSSING) {
             if (isUsefulPartialForWalkTarget(destinationPath, walkTarget)) {
-                this.moveTo(destinationPath, walkTarget.getSpeedModifier());
+                this.moveToPath(destinationPath, walkTarget.getSpeedModifier());
                 return true;
             }
             clearDetour();
@@ -1113,7 +1174,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
             Path crossing = tryCrossObstacle(this.detour.physicalTarget);
             if (crossing != null) {
                 this.detour.phase = DetourPhase.CROSSING;
-                this.moveTo(crossing, walkTarget.getSpeedModifier());
+                this.moveToPath(crossing, walkTarget.getSpeedModifier());
                 return true;
             }
         }
@@ -1124,7 +1185,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
             return false;
         }
 
-        this.moveTo(continuation, walkTarget.getSpeedModifier());
+        this.moveToPath(continuation, walkTarget.getSpeedModifier());
         return true;
     }
 
@@ -1180,7 +1241,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                 }
                 if (path.canReach()) {
                     this.detour = new Detour(destination, physicalTarget, origin, candidate.subtract(origin), progress);
-                    this.moveTo(path, walkTarget.getSpeedModifier());
+                    this.moveToPath(path, walkTarget.getSpeedModifier());
                     return true;
                 }
                 if (partialPath == null) {
@@ -1194,7 +1255,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         if (partialPath != null) {
             this.detour = new Detour(destination, physicalTarget, origin, partialCandidate.subtract(origin),
                     horizontalDistance(origin, partialPath.getEndNode().asBlockPos()));
-            this.moveTo(partialPath, walkTarget.getSpeedModifier());
+            this.moveToPath(partialPath, walkTarget.getSpeedModifier());
             return true;
         }
         return false;

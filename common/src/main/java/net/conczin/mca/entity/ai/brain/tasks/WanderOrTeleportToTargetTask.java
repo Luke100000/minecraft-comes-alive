@@ -66,6 +66,8 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
         if (walkTarget != null
                 && path != null
                 && entity.getNavigation().isDone()
+                && (!(entity.getNavigation() instanceof MCAGroundPathNavigation navigation)
+                        || navigation.hasAdmittedWalkTarget(walkTarget))
                 && !MultiTargetPositionTracker.isReached(entity, walkTarget.getTarget(), walkTarget.getCloseEnoughDist())
                 && !entity.getBrain().hasMemoryValue(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)) {
             WalkTargetFailureMemory.record(entity, walkTarget.getTarget().currentBlockPosition(), gameTime);
@@ -88,7 +90,7 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
                         path, entity, walkTarget
                 )) {
             boolean priorFailure = entity instanceof VillagerEntityMCA villager
-                    && WalkTargetFailureMemory.hasFailureFor(villager, walkTarget.getTarget().currentBlockPosition())
+                    && WalkTargetFailureMemory.hasFailureForCommand(villager, walkTarget)
                     && villager.getBrain().getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
                     .filter(since -> since < gameTime).isPresent();
             if (!priorFailure) {

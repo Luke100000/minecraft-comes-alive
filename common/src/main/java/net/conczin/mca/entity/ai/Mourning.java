@@ -5,6 +5,7 @@ import net.conczin.mca.block.TombstoneBlock;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.brain.VillagerTasksMCA;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
+import net.conczin.mca.entity.ai.brain.tasks.ExtendedWalkTowardsTask;
 import net.conczin.mca.registry.TagsMCA;
 import net.conczin.mca.server.world.data.Building;
 import net.conczin.mca.server.world.data.GraveyardManager;
@@ -60,7 +61,7 @@ public final class Mourning {
             return;
         }
 
-        villager.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_POSITION);
+        clearOwnedMovement(villager);
         villager.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_RETRY_AT);
 
         if (isTemporarilyBlocked(villager)) {
@@ -71,21 +72,59 @@ public final class Mourning {
             return;
         }
 
+        activate(villager);
+    }
+
+    public static boolean canResumeScheduled(VillagerEntityMCA villager) {
+        if (!Config.getInstance().enableMourning) {
+            pause(villager);
+            return false;
+        }
+
+        if (villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_SITE)
+                .filter(site -> site.dimension().equals(villager.level().dimension())).isEmpty()) {
+            return false;
+        }
+        if (villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_RETRY_AT)
+                .filter(deadline -> villager.level().getGameTime() < deadline).isPresent()) {
+            return false;
+        }
+        if (isTemporarilyBlocked(villager)) {
+            return false;
+        }
+        if (isKnownInvalidSite(villager)) {
+            finish(villager);
+            return false;
+        }
+        if (isAssignedGraveUnsafe(villager)) {
+            deferUnsafe(villager);
+            return false;
+        }
+        return true;
+    }
+
+    public static void resumeScheduled(VillagerEntityMCA villager) {
+        clearOwnedMovement(villager);
+        villager.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_RETRY_AT);
+        activate(villager);
+    }
+
+    private static void activate(VillagerEntityMCA villager) {
         clearMovement(villager);
         villager.getBrain().eraseMemory(MemoryModuleType.BREED_TARGET);
         villager.getBrain().eraseMemory(MemoryModuleType.INTERACTION_TARGET);
         villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_SITE)
                 .filter(site -> site.dimension().equals(villager.level().dimension()))
                 .ifPresent(site -> {
-                    villager.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, new BlockPosTracker(site.pos()));
+                    lookAtGrave(villager);
                     villager.getBrain().setActiveActivityIfPossible(ActivitiesMCA.GRIEVE);
                 });
     }
 
     public static void clear(VillagerEntityMCA villager) {
         restorePreviousHand(villager);
+        clearOwnedMovement(villager);
         villager.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_SITE);
-        villager.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_POSITION);
         villager.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_AMBIENT);
         villager.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_RETRY_AT);
     }
@@ -123,7 +162,7 @@ public final class Mourning {
 
     private static void retry(VillagerEntityMCA villager, long delay) {
         restorePreviousHand(villager);
-        clearMovement(villager);
+        clearOwnedMovement(villager);
         villager.getBrain().setMemory(
                 MemoryModuleTypeMCA.MOURNING_RETRY_AT,
                 villager.level().getGameTime() + delay
@@ -143,8 +182,35 @@ public final class Mourning {
 
     public static void finish(VillagerEntityMCA villager) {
         clear(villager);
-        clearMovement(villager);
         leaveGrievingActivity(villager);
+    }
+
+    public static void equipFlower(VillagerEntityMCA villager, ItemStack flower) {
+        if (villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_PREVIOUS_MAIN_HAND).isPresent()) {
+            return;
+        }
+
+        ItemStack previousMainHand = villager.getMainHandItem().copy();
+        ItemStack mourningFlower = InventoryUtils.temporary(flower);
+        villager.getBrain().setMemory(MemoryModuleTypeMCA.MOURNING_PREVIOUS_MAIN_HAND, previousMainHand);
+        villager.getBrain().setMemory(MemoryModuleTypeMCA.MOURNING_FLOWER, mourningFlower.copy());
+        villager.setItemInHand(InteractionHand.MAIN_HAND, mourningFlower);
+    }
+
+    public static ItemStack getReloadableFlower(VillagerEntityMCA villager) {
+        ItemStack mourningFlower = villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_FLOWER)
+                .orElse(ItemStack.EMPTY);
+        return !mourningFlower.isEmpty()
+                && villager.getBrain().hasMemoryValue(MemoryModuleTypeMCA.MOURNING_PREVIOUS_MAIN_HAND)
+                && (villager.getMainHandItem().isEmpty()
+                    || ItemStack.matches(villager.getMainHandItem(), mourningFlower))
+                ? mourningFlower : ItemStack.EMPTY;
+    }
+
+    public static void restoreLoadedFlower(VillagerEntityMCA villager, ItemStack savedFlower) {
+        ItemStack flower = InventoryUtils.temporary(savedFlower.copy());
+        villager.getBrain().setMemory(MemoryModuleTypeMCA.MOURNING_FLOWER, flower.copy());
+        villager.setItemInHand(InteractionHand.MAIN_HAND, flower);
     }
 
     private static void restorePreviousHand(VillagerEntityMCA villager) {
@@ -177,28 +243,33 @@ public final class Mourning {
     }
 
     private static void clearOwnedMovement(VillagerEntityMCA villager) {
-        boolean ownsWalkTarget = villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_POSITION)
-                .filter(position -> position.dimension().equals(villager.level().dimension()))
-                .flatMap(position -> villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
-                        .filter(walkTarget -> walkTarget.getTarget().currentBlockPosition().equals(position.pos())))
-                .isPresent();
-        if (ownsWalkTarget) {
-            villager.getBrain().eraseMemory(MemoryModuleType.PATH);
-            villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
-            WalkTargetFailureMemory.clear(villager);
-            villager.getNavigation().stop();
-        }
-
-        boolean ownsLookTarget = villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_SITE)
-                .filter(site -> site.dimension().equals(villager.level().dimension()))
-                .flatMap(site -> villager.getBrain().getMemoryInternal(MemoryModuleType.LOOK_TARGET)
-                        .filter(lookTarget -> lookTarget.currentBlockPosition().equals(site.pos())))
-                .isPresent();
-        if (ownsLookTarget) {
+        ExtendedWalkTowardsTask.retractOwnedMovement(villager, MemoryModuleTypeMCA.MOURNING_POSITION);
+        villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_POSITION)
+                .ifPresent(position -> WalkTargetFailureMemory.clearForProducer(
+                        villager, MemoryModuleTypeMCA.MOURNING_POSITION, position));
+        if (villager.getBrain().getMemoryInternal(MemoryModuleType.LOOK_TARGET)
+                .filter(MourningLookTarget.class::isInstance).isPresent()) {
             villager.getBrain().eraseMemory(MemoryModuleType.LOOK_TARGET);
         }
 
         villager.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_POSITION);
+    }
+
+    public static void lookAtGrave(VillagerEntityMCA villager) {
+        villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_SITE)
+                .filter(site -> site.dimension().equals(villager.level().dimension()))
+                .map(GlobalPos::pos)
+                .filter(grave -> villager.getBrain().getMemoryInternal(MemoryModuleType.LOOK_TARGET)
+                        .filter(target -> target.currentBlockPosition().equals(grave))
+                        .isEmpty())
+                .ifPresent(grave -> villager.getBrain().setMemory(
+                        MemoryModuleType.LOOK_TARGET, new MourningLookTarget(grave)));
+    }
+
+    private static final class MourningLookTarget extends BlockPosTracker {
+        private MourningLookTarget(BlockPos grave) {
+            super(grave);
+        }
     }
 
     private static void leaveGrievingActivity(VillagerEntityMCA villager) {

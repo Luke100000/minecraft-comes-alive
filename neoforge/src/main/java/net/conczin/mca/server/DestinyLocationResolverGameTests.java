@@ -204,6 +204,34 @@ public final class DestinyLocationResolverGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "mca_destiny_concurrency", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void differentPlayersKeepIndependentRumorRequestsForSameVillager(GameTestHelper helper) {
+        ServerLevel world = helper.getLevel().getServer().overworld();
+        var structures = world.registryAccess().lookupOrThrow(Registries.STRUCTURE);
+        var village = HolderSet.direct(structures.get(Identifier.parse("minecraft:village_plains")).orElseThrow());
+        BlockPos origin = helper.absolutePos(BlockPos.ZERO);
+        UUID villager = UUID.randomUUID();
+        UUID firstPlayer = UUID.randomUUID();
+        UUID secondPlayer = UUID.randomUUID();
+        try (var locator = new AsyncStructureLocator(world.getServer())) {
+            var destiny = locator.locate(firstPlayer, world, origin, village, 0);
+            var first = locator.locateRumor(villager, firstPlayer, world, origin, village, 0);
+            var second = locator.locateRumor(villager, secondPlayer, world, origin, village, 0);
+            helper.assertTrue(!first.isDone() && !second.isDone() && !destiny.isDone(),
+                    "all requests should remain pending until server-thread delivery");
+
+            var repeatedFirst = locator.locateRumor(villager, firstPlayer, world, origin, village, 0);
+            helper.assertTrue(first.isCancelled(), "repeating a rumour for the same pair should replace it");
+            helper.assertTrue(!second.isDone() && !repeatedFirst.isDone() && !destiny.isDone(),
+                    "replacing a rumour must leave other players and Destiny alone");
+
+            locator.cancel(firstPlayer);
+            helper.assertTrue(destiny.isCancelled() && !repeatedFirst.isDone(),
+                    "cancelling Destiny must leave the player's rumour pending");
+            helper.succeed();
+        }
+    }
+
     @GameTest(batch = "mca_destiny_concurrency", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 1200)
     public static void concurrentStructureSearchesDoNotHeadOfLineBlock(GameTestHelper helper) {
         var server = helper.getLevel().getServer();

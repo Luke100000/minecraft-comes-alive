@@ -142,6 +142,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private LiteContent deleteConfirmationContent;
     private LiteContent reportConfirmationContent;
     private ButtonWidget deleteConfirmButton;
+    private ToggleableTooltipIconButtonWidget detailLikeButton;
     private final Set<String> pendingMutations = new HashSet<>();
 
     // Editor
@@ -300,7 +301,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         }
 
         boolean matchesAccount(long session, String token) {
-            return session == account && Objects.equals(token, Auth.getToken());
+            return session == account && Auth.isCurrentToken(token);
         }
 
         boolean matchesAccount(Snapshot snapshot) {
@@ -365,6 +366,9 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     }
 
     private void loadPage() {
+        if (page != Page.LIBRARY) {
+            return;
+        }
         ContentQuery query = createQuery();
         if (query.equals(loadedQuery) || query.equals(pendingQuery)) {
             return;
@@ -784,7 +788,9 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         if (!search.equals(filteredString)) {
             filteredString = search;
             selectionPage = 0;
-            refreshContentList();
+            if (page == Page.LIBRARY) {
+                refreshContentList();
+            }
         }
     }
 
@@ -924,6 +930,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
     private void rebuild() {
         clearWidgets();
+        detailLikeButton = null;
 
         timeSinceLastRebuild = 0;
 
@@ -1404,20 +1411,22 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
         // like
         if (authenticated) {
-            widgets.add(new ToggleableTooltipIconButtonWidget(0, 0, 16, 3 * 16,
+            ToggleableTooltipIconButtonWidget likeButton = new ToggleableTooltipIconButtonWidget(0, 0, 16, 3 * 16,
                     isLiked(content),
                     Component.translatable("gui.skin_library.like"),
                     v -> {
                         ToggleableTooltipButtonWidget button = (ToggleableTooltipButtonWidget) v;
-                        boolean liked = !button.toggle;
+                        boolean liked = !isLiked(content);
                         setLike(content, liked, success -> {
-                            if (!success) {
-                                return;
+                            if (success && !advanced) {
+                                button.toggle = liked;
                             }
-                            button.toggle = liked;
-                            refreshContentList();
                         });
-                    }));
+                    });
+            widgets.add(likeButton);
+            if (advanced) {
+                detailLikeButton = likeButton;
+            }
         }
 
         // edit
@@ -1806,6 +1815,9 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         // add to visual list
         contents.clear();
         contents.addAll(newList);
+        if (subscriptionFilter == SubscriptionFilter.LIKED) {
+            contents.removeIf(content -> Boolean.FALSE.equals(likeOverrides.get(content.content_id())));
+        }
 
         // last page reached, go one back
         if (contents.isEmpty() && selectionPage > 0 && pendingQuery == null) {
@@ -2063,7 +2075,9 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
             int contentId = sent instanceof ContentIdResponse(int createdId) ? createdId : snapshot.contentId();
             Response fetched = Api.requestWithToken(Api.HttpMethod.GET, ContentResponse.class,
                     "v3/content/mca/" + contentId, null, null, token);
-            return new UploadResult(sent, fetched);
+            Content content = fetched instanceof ContentResponse(Content value) ? value : null;
+            SkinCache.updateAfterUpload(contentId, content, () -> requestEpoch.matchesAccount(context));
+            return new UploadResult(sent, content == null ? null : content.lite());
         }).whenComplete((result, failure) -> Minecraft.getInstance().executeIfPossible(() -> {
             if (!requestEpoch.matchesAccount(context)) {
                 return;
@@ -2080,23 +2094,18 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                 }
                 return;
             }
+            if (!currentEditor) {
+                return;
+            }
             if (result.sent() instanceof ContentIdResponse || result.sent() instanceof SuccessResponse) {
-                int contentId = result.sent() instanceof ContentIdResponse(int createdId) ? createdId : snapshot.contentId();
-                if (result.fetched() instanceof ContentResponse(Content content) && content != null) {
-                    SkinCache.store(content);
-                    if (currentEditor) {
-                        invalidateRemotePage();
-                        focusedContent = content.lite();
-                        setPage(Page.DETAIL);
-                    }
+                invalidateRemotePage();
+                if (result.content() != null) {
+                    focusedContent = result.content();
+                    setPage(Page.DETAIL);
                 } else {
-                    SkinCache.enforceSync(contentId);
-                    if (currentEditor) {
-                        invalidateRemotePage();
-                        setPage(Page.LIBRARY);
-                    }
+                    setPage(Page.LIBRARY);
                 }
-            } else if (currentEditor) {
+            } else {
                 setError(Component.translatable(result.sent() instanceof ErrorResponse response && response.code() == 428
                         ? "gui.skin_library.upload_duplicate" : "gui.skin_library.upload_failed"));
             }
@@ -2122,7 +2131,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private record UploadSnapshot(Api.HttpMethod method, String endpoint, int contentId, boolean newContent, Map<String, Object> body) {
     }
 
-    private record UploadResult(Response sent, Response fetched) {
+    private record UploadResult(Response sent, LiteContent content) {
     }
 
     private static UploadSnapshot snapshotUpload(Workspace workspace, String title) throws IOException {
@@ -2207,16 +2216,19 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     }
 
     private void setLike(LiteContent content, boolean add, Consumer<Boolean> completion) {
+        int contentId = content.content_id();
         runMutation(add ? Api.HttpMethod.POST : Api.HttpMethod.DELETE,
-                contentMutationTarget(content.content_id()), "v1/like/mca/" + content.content_id(), null, response -> {
+                contentMutationTarget(contentId), "v1/like/mca/" + contentId, null, () -> {
+            // List responses are cached for a minute, so remember the change locally.
+            likeOverrides.put(contentId, add);
+            if (page == Page.LIBRARY) {
+                refreshContentList();
+            } else if (page == Page.DETAIL && selectedId(focusedContent) == contentId && detailLikeButton != null) {
+                detailLikeButton.toggle = isLiked(focusedContent);
+            }
+        }, response -> {
             boolean success = response instanceof SuccessResponse;
-            if (success) {
-                // List responses are cached for a minute, so remember the change locally.
-                likeOverrides.put(content.content_id(), add);
-                if (!add && subscriptionFilter == SubscriptionFilter.LIKED) {
-                    removeContentLocally(content.content_id());
-                }
-            } else {
+            if (!success) {
                 setError(Component.translatable("gui.skin_library.upload_failed"));
             }
             completion.accept(success);
@@ -2238,6 +2250,11 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     }
 
     private void runMutation(Api.HttpMethod method, String target, String path, Map<String, ?> body, Consumer<Response> resultHandler) {
+        runMutation(method, target, path, body, null, resultHandler);
+    }
+
+    private void runMutation(Api.HttpMethod method, String target, String path, Map<String, ?> body,
+                             Runnable onAccountSuccess, Consumer<Response> resultHandler) {
         String token = Auth.getToken();
         if (token == null) {
             setError(Component.translatable("gui.skin_library.upload_failed"));
@@ -2259,6 +2276,9 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
             }
             pendingMutations.remove(target);
             updateDeleteConfirmState();
+            if (onAccountSuccess != null && response instanceof SuccessResponse) {
+                onAccountSuccess.run();
+            }
             if (!requestEpoch.matchesPage(context, page)
                     || (page == Page.DETAIL && selectedId(focusedContent) != focusedId)
                     || (page == Page.DELETE && selectedId(deleteConfirmationContent) != deletionId)

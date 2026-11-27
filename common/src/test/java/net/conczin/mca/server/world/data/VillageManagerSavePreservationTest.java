@@ -10,6 +10,8 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.NbtUtils;
+import net.minecraft.nbt.StringTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.util.datafix.DataFixers;
 import net.minecraft.world.level.storage.SavedDataStorage;
@@ -32,6 +34,38 @@ class VillageManagerSavePreservationTest {
     static void bootstrap() {
         SharedConstants.tryDetectVersion();
         Bootstrap.bootStrap();
+    }
+
+    @Test
+    void wrongTypeVillageCollectionNeverOverwritesTheOriginalSave() throws Exception {
+        assertMalformedVillageCollectionPreserved(StringTag.valueOf("not-a-village-list"));
+    }
+
+    @Test
+    void nonCompoundVillageCollectionNeverOverwritesTheOriginalSave() throws Exception {
+        ListTag villages = new ListTag();
+        villages.add(StringTag.valueOf("not-a-village"));
+        assertMalformedVillageCollectionPreserved(villages);
+    }
+
+    private void assertMalformedVillageCollectionPreserved(Tag malformedVillages) throws IOException {
+        CompoundTag data = new CompoundTag();
+        data.put("villages", malformedVillages);
+        CompoundTag root = new CompoundTag();
+        root.put("data", data);
+        NbtUtils.addCurrentDataVersion(root);
+        Path file = dataFolder.resolve("mca_villages.dat");
+        NbtIo.writeCompressed(root, file);
+        byte[] originalBytes = Files.readAllBytes(file);
+
+        SavedDataStorage storage = storage();
+        VillageManager manager = VillageManager.loadSafely(null, storage, dataFolder);
+        assertTrue(manager.hasUnreadableSavedData(), "Malformed village collection must protect the source save");
+        manager.setDirty();
+        storage.saveAndJoin();
+        assertFalse(Files.exists(dataFolder.resolve("mca/mca_villages.dat")));
+        assertArrayEquals(originalBytes, Files.readAllBytes(file),
+                "Malformed village collection must not be replaced by an empty manager");
     }
 
     @Test
@@ -110,6 +144,25 @@ class VillageManagerSavePreservationTest {
         storage.saveAndJoin();
         assertFalse(Files.exists(dataFolder.resolve("mca/mca_villages.dat")));
         assertArrayEquals(originalBytes, Files.readAllBytes(file), "Partial loading must preserve the original save");
+    }
+
+    @Test
+    void malformedCanonicalExternalBuildingListPreservesOriginalSave() throws Exception {
+        CompoundTag malformed = healthyVillageTag();
+        ListTag externalBuildings = new ListTag();
+        externalBuildings.add(StringTag.valueOf("unexpected external building"));
+        malformed.put("externalBuildings", externalBuildings);
+
+        Path file = writeVillage(malformed);
+        byte[] originalBytes = Files.readAllBytes(file);
+        SavedDataStorage storage = storage();
+        VillageManager manager = VillageManager.loadSafely(null, storage, dataFolder);
+
+        assertTrue(manager.getOrEmpty(42).isEmpty(), "Malformed canonical village must be isolated");
+        manager.setDirty();
+        storage.saveAndJoin();
+        assertFalse(Files.exists(dataFolder.resolve("mca/mca_villages.dat")));
+        assertArrayEquals(originalBytes, Files.readAllBytes(file), "Malformed nested list must stay on disk");
     }
 
     @Test

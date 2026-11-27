@@ -57,6 +57,7 @@ public final class MCAFishingBobberEntity extends Projectile {
         super(type, level);
     }
 
+    @Nullable
     public static MCAFishingBobberEntity cast(ServerLevel world, VillagerEntityMCA owner, BlockPos targetWater) {
         MCAFishingBobberEntity bobber = new MCAFishingBobberEntity(EntitiesMCA.FISHING_BOBBER, world);
         bobber.setOwner(owner);
@@ -66,7 +67,10 @@ public final class MCAFishingBobberEntity extends Projectile {
                 owner
         ) * 20.0F));
         bobber.launchAt(owner, targetWater);
-        world.addFreshEntity(bobber);
+        if (!world.addFreshEntity(bobber)) {
+            bobber.discard();
+            return null;
+        }
         world.playSound(
                 null,
                 owner.getX(),
