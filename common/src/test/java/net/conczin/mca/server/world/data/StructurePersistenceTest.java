@@ -6,10 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class StructurePersistenceTest {
     @Test
@@ -74,6 +71,6 @@ class StructurePersistenceTest {
         StructureFloor loaded = StructureFloor.load(tag);
 
         assertEquals(66, loaded.anchorY());
-        assertEquals(0, FloorGrouping.prospectiveNumber(List.of(loaded), loaded, 68).number().orElseThrow());
+        assertEquals(0, RoomWorkflow.prospectiveFloorNumber(List.of(loaded), loaded, 68).number().orElseThrow());
     }
 }

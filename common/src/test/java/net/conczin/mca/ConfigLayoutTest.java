@@ -1,18 +1,61 @@
 package net.conczin.mca;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import net.conczin.mca.config.ConfigSchema;
 import net.conczin.mca.config.ConfigScope;
 import net.conczin.mca.config.ConfigValue;
 import net.neoforged.neoforge.common.ModConfigSpec;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ConfigLayoutTest {
+    @Test
+    void everyConfigurationEntryHasAnEnglishLabelAndTooltip() throws IOException {
+        JsonObject translations;
+        try (var reader = new InputStreamReader(Objects.requireNonNull(
+                ConfigLayoutTest.class.getResourceAsStream("/assets/mca_config/lang/en_us.json")),
+                StandardCharsets.UTF_8)) {
+            translations = JsonParser.parseReader(reader).getAsJsonObject();
+        }
+
+        List<String> missing = new ArrayList<>();
+        for (ConfigScope scope : ConfigScope.values()) {
+            ConfigSchema schema = Config.schema(scope);
+            for (ConfigSchema.Entry<?> entry : schema.entries()) {
+                String key = entry.translation();
+                if (key == null) {
+                    key = "mca.configuration." + entry.path().getLast();
+                }
+                for (String required : List.of(key, key + ".tooltip")) {
+                    if (!translations.has(required) || translations.get(required).getAsString().isBlank()) {
+                        missing.add(scope + ": " + required);
+                    }
+                }
+            }
+            for (ConfigSchema.Section section : schema.sections()) {
+                String key = section.translation();
+                if (key == null) {
+                    key = "mca.configuration.section." + section.path().getLast();
+                }
+                if (!translations.has(key) || translations.get(key).getAsString().isBlank()) {
+                    missing.add(scope + ": " + key);
+                }
+            }
+        }
+        assertTrue(missing.isEmpty(), () -> "Missing English configuration translations: " + missing);
+    }
+
     @Test
     void nativeBooleanSettingsUseEditableBooleanValues() {
         for (ConfigScope scope : ConfigScope.values()) {

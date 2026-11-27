@@ -1,7 +1,7 @@
 package net.conczin.mca.server.world.data;
 
-import net.minecraft.core.BlockPos;
 import net.minecraft.SharedConstants;
+import net.minecraft.core.BlockPos;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.world.level.Level;
 import org.junit.jupiter.api.BeforeAll;
@@ -21,14 +21,62 @@ class RoomWorkflowTest {
     }
 
     @Test
+    void expectedRoomMismatchReturnsTargetChanged() {
+        BlockPos source = new BlockPos(4, 8, 12);
+        StructureFloor floor = new StructureFloor(3, 0,
+                new FloorGeometry(List.of(new FloorGeometry.Cell(source, 15)), Map.of()));
+        Structure structure = new Structure(7, source, List.of(floor));
+        Building room = new Building(source);
+        room.setId(21);
+        room.setStructureId(7);
+        room.setFloorId(3);
+        var before = room.save();
+        CountingManager manager = new CountingManager(new StaleRoomVillage(structure, floor, room));
+        RoomWorkflow workflow = new RoomWorkflow(manager, null);
+        // A delayed type confirmation must recheck the expected Room just like the initial request.
+        for (String selectedType : new String[]{null, "library"}) {
+            var outcome = workflow.scanRoom(source, 99, selectedType);
+            assertEquals(RoomWorkflow.Status.FAILED, outcome.status());
+            assertEquals(Building.validationResult.TARGET_CHANGED, outcome.result());
+            assertEquals(99, outcome.expectedTargetId());
+        }
+        assertEquals(0, manager.updateCommits);
+        assertEquals(before, room.save());
+    }
+
+    @Test
+    void missingExpectedRoomReturnsTargetChanged() {
+        CountingManager manager = new CountingManager(null);
+        RoomWorkflow workflow = new RoomWorkflow(manager, null);
+        var outcome = workflow.scanRoom(BlockPos.ZERO, 99, null);
+        assertEquals(RoomWorkflow.Status.FAILED, outcome.status());
+        assertEquals(Building.validationResult.TARGET_CHANGED, outcome.result());
+        assertEquals(0, manager.updateCommits);
+        assertEquals(Building.validationResult.NOT_IN_BUILDING,
+                workflow.scanRoom(BlockPos.ZERO, -1, null).result());
+    }
+
+    @Test
+    void inheritanceTargetMismatchReturnsTargetChanged() {
+        CountingManager manager = new CountingManager(null);
+        RoomWorkflow workflow = new RoomWorkflow(manager, null);
+        var outcome = workflow.updateInheritance(BlockPos.ZERO, 99, true, null);
+        assertEquals(RoomWorkflow.Status.FAILED, outcome.status());
+        assertEquals(Building.validationResult.TARGET_CHANGED, outcome.result());
+        assertEquals(0, manager.updateCommits);
+        assertEquals(Building.validationResult.NOT_IN_BUILDING,
+                workflow.updateInheritance(BlockPos.ZERO, -1, true, null).result());
+    }
+
+    @Test
     void ambiguousAddBuildingDefersCommitAndConfirmationReusesSameWorkflow() throws Exception {
         BlockPos source = new BlockPos(4, 8, 12);
-        StubManager manager = new StubManager(new BuildingScanResult(
+        StubManager manager = new StubManager(new RoomWorkflow.Addition(
                 Building.validationResult.SUCCESS,
                 source,
                 new Building(source),
                 List.of("library", "music_store"),
-                null));
+                null, null, RoomWorkflow.Plan.addBuilding(source)));
 
         RoomWorkflow workflow = new RoomWorkflow(manager, null);
 
@@ -112,27 +160,27 @@ class RoomWorkflowTest {
         assertEquals(-1, outcome.expectedTargetId());
     }
 
-    private static BuildingScanResult scan(BlockPos source, List<String> types) {
-        return new BuildingScanResult(
+    private static RoomWorkflow.Addition scan(BlockPos source, List<String> types) {
+        return new RoomWorkflow.Addition(
                 Building.validationResult.SUCCESS,
                 source,
                 new Building(source),
                 types,
-                null);
+                null, null, RoomWorkflow.Plan.addBuilding(source));
     }
 
     private static final class StubManager extends VillageManager {
-        private final BuildingScanResult scan;
+        private final RoomWorkflow.Addition scan;
         private int commitCalls;
         private String lastForcedType;
 
-        private StubManager(BuildingScanResult scan) {
+        private StubManager(RoomWorkflow.Addition scan) {
             super(null);
             this.scan = scan;
         }
 
         @Override
-        public Building.validationResult commitRoomAddition(BuildingScanResult scan, String forcedType) {
+        Building.validationResult commitRoomAddition(RoomWorkflow.Addition scan, String forcedType) {
             commitCalls++;
             lastForcedType = forcedType;
             return Building.validationResult.SUCCESS;
@@ -141,6 +189,7 @@ class RoomWorkflowTest {
 
     private static final class CountingManager extends VillageManager {
         private final Village village;
+        private int updateCommits;
 
         private CountingManager(Village village) {
             super(null);
@@ -149,7 +198,13 @@ class RoomWorkflowTest {
 
         @Override
         public Optional<Village> findNearestVillage(BlockPos pos, int margin) {
-            return Optional.of(village);
+            return Optional.ofNullable(village);
+        }
+
+        @Override
+        Building.validationResult commitRegisteredRoomUpdate(RoomWorkflow.RoomUpdate update, String forcedType) {
+            updateCommits++;
+            return Building.validationResult.SUCCESS;
         }
     }
 

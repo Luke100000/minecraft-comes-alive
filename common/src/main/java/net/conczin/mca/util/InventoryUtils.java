@@ -1,16 +1,23 @@
 package net.conczin.mca.util;
 
+import net.conczin.mca.registry.DataComponentsMCA;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.Attributes;
-import net.minecraft.world.item.*;
+import net.minecraft.world.item.ArmorItem;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.ProjectileWeaponItem;
+import net.minecraft.world.item.SwordItem;
 import net.minecraft.world.item.component.ItemAttributeModifiers;
+import net.minecraft.world.level.block.Block;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Comparator;
@@ -20,6 +27,28 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 public interface InventoryUtils {
+    static void insertOrDropAt(SimpleContainer inventory, ItemStack stack, ServerLevel world, BlockPos sourcePos) {
+        ItemStack remainder = inventory.addItem(stack);
+        if (!remainder.isEmpty()) {
+            Block.popResource(world, sourcePos, remainder);
+        }
+    }
+
+    static ItemStack temporary(ItemStack stack) {
+        if (!stack.isEmpty()) {
+            stack.set(DataComponentsMCA.TEMPORARY, true);
+        }
+        return stack;
+    }
+
+    static boolean isTemporary(ItemStack stack) {
+        return stack.getOrDefault(DataComponentsMCA.TEMPORARY, false);
+    }
+
+    static boolean containsReference(Container inventory, ItemStack stack) {
+        return getFirstSlotContainingItem(inventory, item -> item == stack) >= 0;
+    }
+
     static Stream<ItemStack> stream(Container inventory) {
         return IntStream.range(0, inventory.getContainerSize()).mapToObj(inventory::getItem);
     }

@@ -1,30 +1,25 @@
 package net.conczin.mca.server.world.data;
 
+import net.conczin.mca.FamilyTreeTestSupport;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.entity.ai.relationship.RelationshipState;
-import net.conczin.mca.FamilyTreeTestSupport;
 import net.conczin.mca.network.FamilyTreeView;
 import net.minecraft.Util;
-import net.minecraft.nbt.CompoundTag;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.entity.npc.VillagerProfession;
 import net.minecraft.world.level.Level;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
+import static net.conczin.mca.FamilyTreeTestSupport.uuid;
 import static net.conczin.mca.network.FamilyTreeView.Direction.ANCESTORS;
 import static net.conczin.mca.network.FamilyTreeView.Direction.DESCENDANTS;
-import static net.conczin.mca.FamilyTreeTestSupport.uuid;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class FamilyTreeViewBuilderTest {
     private static final UUID ROOT = uuid(1);
@@ -89,6 +84,26 @@ class FamilyTreeViewBuilderTest {
         ), view.nodes().keySet());
         assertEquals(Set.of(), view.continuations());
         assertEquals(Set.of(), view.unavailable());
+    }
+
+    @Test
+    void oneGenerationViewLeavesBothGrandparentsAndGrandchildrenForExplicitExpansion() {
+        FamilyTree tree = tree();
+        FamilyTreeNode root = node(tree, ROOT, Gender.MALE);
+        FamilyTreeNode father = node(tree, FATHER, Gender.MALE);
+        FamilyTreeNode grandfather = node(tree, PATERNAL_GRANDFATHER, Gender.MALE);
+        FamilyTreeNode child = node(tree, CHILD, Gender.FEMALE);
+        FamilyTreeNode grandchild = node(tree, GRANDCHILD, Gender.MALE);
+        root.setFather(father);
+        father.setFather(grandfather);
+        child.setFather(root);
+        grandchild.setFather(child);
+
+        FamilyTreeView view = FamilyTreeViewBuilder.build(tree, ROOT, 1, 1).orElseThrow();
+
+        assertEquals(Set.of(ROOT, FATHER, CHILD), view.nodes().keySet());
+        assertTrue(view.continuations().contains(new FamilyTreeView.Continuation(FATHER, ANCESTORS)));
+        assertTrue(view.continuations().contains(new FamilyTreeView.Continuation(CHILD, DESCENDANTS)));
     }
 
     @Test
@@ -164,6 +179,97 @@ class FamilyTreeViewBuilderTest {
     }
 
     @Test
+    void descendantsPartnerOffersUnloadedAncestorsWithoutFetchingThem() {
+        FamilyTree tree = tree();
+        FamilyTreeNode damian = node(tree, ROOT, Gender.MALE);
+        FamilyTreeNode than = node(tree, MOTHER, Gender.FEMALE);
+        FamilyTreeNode lilija = node(tree, CHILD, Gender.FEMALE);
+        FamilyTreeNode alexander = node(tree, PARTNER, Gender.MALE);
+        FamilyTreeNode natalia = node(tree, FATHER, Gender.FEMALE);
+        FamilyTreeNode alihan = node(tree, PATERNAL_GRANDFATHER, Gender.MALE);
+        damian.updatePartner(than);
+        than.updatePartner(damian);
+        lilija.setFather(damian);
+        lilija.setMother(than);
+        lilija.updatePartner(alexander);
+        alexander.updatePartner(lilija);
+        alexander.setMother(natalia);
+        alexander.setFather(alihan);
+
+        FamilyTreeView view = FamilyTreeViewBuilder.build(tree, ROOT, 4, 4).orElseThrow();
+
+        assertEquals(Set.of(ROOT, MOTHER, CHILD, PARTNER), view.nodes().keySet());
+        assertEquals(Set.of(new FamilyTreeView.Continuation(PARTNER, ANCESTORS)), view.continuations());
+        assertEquals(Set.of(), view.unavailable());
+        assertEquals(FATHER, view.nodes().get(PARTNER).mother());
+        assertEquals(PATERNAL_GRANDFATHER, view.nodes().get(PARTNER).father());
+
+        FamilyTreeView expansion = FamilyTreeViewBuilder.build(tree, PARTNER, 2, 0).orElseThrow();
+        assertTrue(expansion.nodes().keySet().containsAll(Set.of(FATHER, PATERNAL_GRANDFATHER)));
+    }
+
+    @Test
+    void descendantsPartnerWithMissingParentRecordIsUnavailableNotExpandable() {
+        FamilyTree tree = tree();
+        FamilyTreeNode root = node(tree, ROOT, Gender.MALE);
+        FamilyTreeNode child = node(tree, CHILD, Gender.FEMALE);
+        FamilyTreeNode partner = node(tree, PARTNER, Gender.MALE);
+        FamilyTreeNode missing = node(tree, DANGLING, Gender.FEMALE);
+        child.setFather(root);
+        child.updatePartner(partner);
+        partner.updatePartner(child);
+        partner.setMother(missing);
+        tree.remove(DANGLING);
+
+        FamilyTreeView view = FamilyTreeViewBuilder.build(tree, ROOT, 4, 4).orElseThrow();
+
+        assertEquals(Set.of(ROOT, CHILD, PARTNER), view.nodes().keySet());
+        assertEquals(Set.of(), view.continuations());
+        assertEquals(Set.of(DANGLING), view.unavailable());
+    }
+
+    @Test
+    void partnerShownOnlyAsContextMarksOmittedChildrenAsIncomplete() {
+        FamilyTree tree = tree();
+        FamilyTreeNode root = node(tree, ROOT, Gender.MALE);
+        FamilyTreeNode father = node(tree, FATHER, Gender.MALE);
+        FamilyTreeNode sibling = node(tree, SIBLING, Gender.FEMALE);
+        FamilyTreeNode partner = node(tree, PARTNER, Gender.MALE);
+        FamilyTreeNode child = node(tree, CHILD, Gender.FEMALE);
+        root.setFather(father);
+        sibling.setFather(father);
+        sibling.updatePartner(partner);
+        partner.updatePartner(sibling);
+        child.setFather(partner);
+
+        FamilyTreeView view = FamilyTreeViewBuilder.build(tree, ROOT, 0, 0).orElseThrow();
+
+        assertTrue(view.nodes().containsKey(PARTNER));
+        assertFalse(view.nodes().containsKey(CHILD));
+        assertTrue(view.continuations().contains(new FamilyTreeView.Continuation(PARTNER, DESCENDANTS)),
+                "A displayed node with omitted children cannot claim to be complete");
+    }
+
+    @Test
+    void fullViewStillOffersPartnersUnloadedParentWithoutExceedingNodeBudget() {
+        FamilyTree tree = tree();
+        FamilyTreeNode root = node(tree, ROOT, Gender.MALE);
+        FamilyTreeNode partner = node(tree, PARTNER, Gender.FEMALE);
+        root.updatePartner(partner);
+        partner.updatePartner(root);
+        partner.setMother(node(tree, MOTHER, Gender.FEMALE));
+        for (int index = 0; index < 300; index++) {
+            node(tree, uuid(1_000 + index), Gender.MALE).setFather(root);
+        }
+
+        FamilyTreeView view = FamilyTreeViewBuilder.build(tree, ROOT, 0, 1).orElseThrow();
+
+        assertEquals(256, view.nodes().size());
+        assertFalse(view.nodes().containsKey(MOTHER));
+        assertTrue(view.continuations().contains(new FamilyTreeView.Continuation(PARTNER, ANCESTORS)));
+    }
+
+    @Test
     void orphanMetadataUsesFullTreePastTheBoundedView() {
         FamilyTree tree = tree();
         FamilyTreeNode root = node(tree, ROOT, Gender.MALE);
@@ -207,6 +313,47 @@ class FamilyTreeViewBuilderTest {
         assertEquals(Set.of(ROOT, CHILD), view.nodes().keySet());
         assertEquals(Set.of(new FamilyTreeView.Continuation(CHILD, DESCENDANTS)), view.continuations());
         assertEquals(Set.of(), view.unavailable());
+    }
+
+    @Test
+    void siblingWithOmittedChildOffersContinuationWithoutLoadingNiece() {
+        FamilyTree tree = tree();
+        FamilyTreeNode root = node(tree, ROOT, Gender.MALE);
+        FamilyTreeNode father = node(tree, FATHER, Gender.MALE);
+        FamilyTreeNode sibling = node(tree, SIBLING, Gender.FEMALE);
+        FamilyTreeNode childlessSibling = node(tree, DESCENDANT_2, Gender.MALE);
+        FamilyTreeNode niece = node(tree, GRANDCHILD, Gender.FEMALE);
+        root.setFather(father);
+        sibling.setFather(father);
+        childlessSibling.setFather(father);
+        niece.setMother(sibling);
+
+        FamilyTreeView view = FamilyTreeViewBuilder.build(tree, ROOT, 1, 1).orElseThrow();
+
+        assertTrue(view.nodes().containsKey(SIBLING));
+        assertFalse(view.nodes().containsKey(GRANDCHILD));
+        assertTrue(view.continuations().contains(new FamilyTreeView.Continuation(SIBLING, DESCENDANTS)));
+        assertTrue(view.nodes().get(SIBLING).children().isEmpty(),
+                "Bounded snapshots must rely on explicit continuations instead of a 1-child sentinel");
+        assertFalse(view.continuations().contains(new FamilyTreeView.Continuation(DESCENDANT_2, DESCENDANTS)));
+    }
+
+    @Test
+    void siblingWithMissingChildIsUnavailableAndNotExpandable() {
+        FamilyTree tree = tree();
+        FamilyTreeNode root = node(tree, ROOT, Gender.MALE);
+        FamilyTreeNode father = node(tree, FATHER, Gender.MALE);
+        FamilyTreeNode sibling = node(tree, SIBLING, Gender.FEMALE);
+        FamilyTreeNode missingChild = node(tree, GRANDCHILD, Gender.FEMALE);
+        root.setFather(father);
+        sibling.setFather(father);
+        missingChild.setMother(sibling);
+        tree.remove(GRANDCHILD);
+
+        FamilyTreeView view = FamilyTreeViewBuilder.build(tree, ROOT, 1, 1).orElseThrow();
+
+        assertTrue(view.unavailable().contains(GRANDCHILD));
+        assertFalse(view.continuations().contains(new FamilyTreeView.Continuation(SIBLING, DESCENDANTS)));
     }
 
     @Test
@@ -332,6 +479,75 @@ class FamilyTreeViewBuilderTest {
     }
 
     @Test
+    void singleGenerationDescendantsIncludesDirectChildrenButNotGrandchildrenOrSiblings() {
+        FamilyTree tree = tree();
+        FamilyTreeNode root = node(tree, ROOT, Gender.MALE);
+        FamilyTreeNode parent = node(tree, FATHER, Gender.MALE);
+        FamilyTreeNode sibling = node(tree, SIBLING, Gender.FEMALE);
+        FamilyTreeNode child = node(tree, CHILD, Gender.MALE);
+        FamilyTreeNode grandchild = node(tree, GRANDCHILD, Gender.MALE);
+        root.setFather(parent);
+        sibling.setFather(parent);
+        child.setFather(root);
+        grandchild.setFather(child);
+
+        FamilyTreeView view = FamilyTreeViewBuilder.buildGeneration(
+                tree, ROOT, DESCENDANTS, id -> Optional.empty()).orElseThrow();
+
+        assertEquals(Set.of(ROOT, CHILD), view.nodes().keySet());
+        assertTrue(view.continuations().contains(new FamilyTreeView.Continuation(CHILD, DESCENDANTS)));
+        assertFalse(view.nodes().containsKey(GRANDCHILD));
+        assertFalse(view.nodes().containsKey(SIBLING));
+    }
+
+    @Test
+    void singleGenerationAncestorsIncludesOnlyParentsWithoutGrandparentsOrSiblings() {
+        FamilyTree tree = tree();
+        FamilyTreeNode root = node(tree, ROOT, Gender.MALE);
+        FamilyTreeNode father = node(tree, FATHER, Gender.MALE);
+        FamilyTreeNode mother = node(tree, MOTHER, Gender.FEMALE);
+        FamilyTreeNode grandfather = node(tree, PATERNAL_GRANDFATHER, Gender.MALE);
+        FamilyTreeNode sibling = node(tree, SIBLING, Gender.FEMALE);
+        root.setFather(father);
+        root.setMother(mother);
+        father.setFather(grandfather);
+        sibling.setFather(father);
+
+        FamilyTreeView view = FamilyTreeViewBuilder.buildGeneration(
+                tree, ROOT, ANCESTORS, id -> Optional.empty()).orElseThrow();
+
+        assertEquals(Set.of(ROOT, FATHER, MOTHER), view.nodes().keySet());
+        assertTrue(view.continuations().contains(new FamilyTreeView.Continuation(FATHER, ANCESTORS)));
+        assertFalse(view.nodes().containsKey(PATERNAL_GRANDFATHER));
+        assertFalse(view.nodes().containsKey(SIBLING));
+    }
+
+    @Test
+    void singleGenerationCapsAtNodeBudgetAndOffersContinuation() {
+        FamilyTree tree = tree();
+        FamilyTreeNode root = node(tree, ROOT, Gender.MALE);
+        for (int index = 0; index < 200; index++) {
+            FamilyTreeNode child = node(tree, uuid(1_000 + index), Gender.MALE);
+            child.setFather(root);
+            child.updatePartner(node(tree, uuid(2_000 + index), Gender.FEMALE));
+        }
+
+        var first = FamilyTreeViewBuilder.buildGenerationPage(
+                tree, ROOT, DESCENDANTS, Optional.empty(), id -> Optional.empty()).orElseThrow();
+        var next = FamilyTreeViewBuilder.buildGenerationPage(
+                tree, ROOT, DESCENDANTS, first.nextCursor(), id -> Optional.empty()).orElseThrow();
+
+        assertEquals(255, first.view().nodes().size(), "The first page should include the children's partners");
+        assertEquals(Optional.of(uuid(1126)), first.nextCursor());
+        assertTrue(first.view().continuations().contains(new FamilyTreeView.Continuation(ROOT, DESCENDANTS)));
+        assertEquals(147, next.view().nodes().size());
+        assertTrue(next.view().nodes().containsKey(uuid(1199)));
+        assertTrue(next.view().nodes().containsKey(uuid(2199)));
+        assertFalse(next.view().nodes().containsKey(uuid(1126)));
+        assertTrue(next.nextCursor().isEmpty());
+    }
+
+    @Test
     void builtViewOwnsDetachedBoundedNodeSnapshots() {
         FamilyTree tree = tree();
         FamilyTreeNode root = node(tree, ROOT, Gender.MALE);
@@ -345,7 +561,8 @@ class FamilyTreeViewBuilderTest {
         root.addChild(uuid(9_999));
 
         assertEquals(ROOT.toString(), snapshot.getName());
-        assertTrue(snapshot.children().size() <= 1);
+        assertTrue(snapshot.children().isEmpty());
+        assertTrue(view.continuations().contains(new FamilyTreeView.Continuation(ROOT, DESCENDANTS)));
         assertTrue(!snapshot.children().contains(uuid(9_999)));
     }
 
@@ -382,6 +599,32 @@ class FamilyTreeViewBuilderTest {
         detachedRoot.setName("mutated after view construction");
 
         assertEquals(ROOT.toString(), view.nodes().get(ROOT).getName());
+    }
+
+    @Test
+    void viewSnapshotPreservesCompleteNodeDataAndOwnsItsRelationships() {
+        FamilyTree tree = tree();
+        FamilyTreeNode source = node(tree, ROOT, Gender.FEMALE);
+        FamilyTreeNode father = node(tree, FATHER, Gender.MALE);
+        FamilyTreeNode partner = node(tree, PARTNER, Gender.MALE);
+        source.setFather(father);
+        source.updatePartner(partner);
+        source.setProfession(VillagerProfession.LIBRARIAN);
+        source.setDeceased(true);
+        source.addChild(CHILD);
+        CompoundTag original = source.save().copy();
+
+        FamilyTreeView view = new FamilyTreeView(Map.of(ROOT, source), Set.of(), Set.of(), Set.of(), Map.of());
+        FamilyTreeNode snapshot = view.nodes().get(ROOT);
+        assertEquals(original, snapshot.save(), "Snapshot must retain all persisted fields");
+
+        source.setName("Changed live record");
+        source.setProfession(VillagerProfession.NONE);
+        source.children().clear();
+        assertEquals(original, snapshot.save(), "Snapshot must not share mutable source state");
+
+        snapshot.addChild(uuid(777));
+        assertFalse(source.children().contains(uuid(777)), "Snapshot relationship edits must not affect source");
     }
 
     @Test

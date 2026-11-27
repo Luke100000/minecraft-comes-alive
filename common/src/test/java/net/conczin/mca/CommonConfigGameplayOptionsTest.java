@@ -24,6 +24,17 @@ class CommonConfigGameplayOptionsTest {
     }
 
     @Test
+    void immersiveMelodiesDefaultsAndServerOverrides() {
+        assertEquals(0.05, Config.SERVER.immersiveMelodiesChance.getDefault());
+        assertEquals("*", Config.SERVER.immersiveMelodiesNamespace.getDefault());
+        assertTrue(Config.SERVER.immersiveMelodiesChance.accepts(0.0));
+        assertTrue(Config.SERVER.immersiveMelodiesChance.accepts(1.0));
+        assertFalse(Config.SERVER.immersiveMelodiesChance.accepts(-0.1));
+        assertFalse(Config.SERVER.immersiveMelodiesChance.accepts(1.1));
+        assertTrue(Config.SERVER.immersiveMelodiesNamespace.accepts("minecraft"));
+    }
+
+    @Test
     void destinyDiscoveryDefaultsToAutomaticWithNoBlacklist() {
         assertTrue(Config.SERVER.autoDiscoverDestinyLocations.getDefault());
         assertEquals(List.of(), Config.SERVER.destinySpawnLocationBlacklist.getDefault());

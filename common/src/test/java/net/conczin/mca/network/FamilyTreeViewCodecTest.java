@@ -20,18 +20,16 @@ import net.minecraft.world.level.Level;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.util.Map;
 import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+import static net.conczin.mca.FamilyTreeTestSupport.uuid;
 import static net.conczin.mca.network.FamilyTreeView.Direction.ANCESTORS;
 import static net.conczin.mca.network.FamilyTreeView.Direction.DESCENDANTS;
-import static net.conczin.mca.FamilyTreeTestSupport.uuid;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.*;
 
 class FamilyTreeViewCodecTest {
     private static final UUID ROOT = uuid(1);
@@ -64,13 +62,14 @@ class FamilyTreeViewCodecTest {
                 Set.of(ROOT),
                 Map.of()
         );
-        GetFamilyTreeResponse response = new GetFamilyTreeResponse(41L, ROOT, true, view);
+        GetFamilyTreeResponse response = new GetFamilyTreeResponse(41L, ROOT, true, view, Optional.of(uuid(3)));
 
         GetFamilyTreeResponse decoded = roundTrip(GetFamilyTreeResponse.STREAM_CODEC, response);
 
         assertEquals(41L, decoded.requestId());
         assertEquals(ROOT, decoded.uuid());
         assertTrue(decoded.found());
+        assertEquals(Optional.of(uuid(3)), decoded.nextCursor());
         assertEquals(Set.of(ROOT), decoded.view().nodes().keySet());
         assertEquals(VillagerProfession.FARMER, decoded.view().nodes().get(ROOT).getProfession());
         assertEquals(rootNode.save(), decoded.view().nodes().get(ROOT).save());
@@ -102,9 +101,17 @@ class FamilyTreeViewCodecTest {
     }
 
     @Test
-    void defaultRequestLoadsFourGenerationsPerDirection() {
-        assertEquals(4, GetFamilyTreeRequest.DEFAULT_ANCESTOR_DEPTH);
-        assertEquals(4, GetFamilyTreeRequest.DEFAULT_DESCENDANT_DEPTH);
+    void singleGenerationRequestRoundTrips() {
+        GetFamilyTreeRequest request = new GetFamilyTreeRequest(ROOT, 0, 1, 71L, true, Optional.of(uuid(3)));
+
+        assertEquals(request, roundTrip(GetFamilyTreeRequest.STREAM_CODEC, request));
+        assertTrue(request.oneGeneration());
+    }
+
+    @Test
+    void defaultRequestLoadsOnlyOneGenerationPerDirection() {
+        assertEquals(1, GetFamilyTreeRequest.DEFAULT_ANCESTOR_DEPTH);
+        assertEquals(1, GetFamilyTreeRequest.DEFAULT_DESCENDANT_DEPTH);
         assertEquals(8, GetFamilyTreeRequest.MAX_DEPTH);
     }
 
@@ -116,15 +123,36 @@ class FamilyTreeViewCodecTest {
             ByteBufCodecs.VAR_INT.encode(buffer, 99);
             ByteBufCodecs.VAR_INT.encode(buffer, -7);
             ByteBufCodecs.VAR_LONG.encode(buffer, 44L);
+            ByteBufCodecs.BOOL.encode(buffer, false);
+            ByteBufCodecs.optional(UUIDUtil.STREAM_CODEC).encode(buffer, Optional.empty());
 
             GetFamilyTreeRequest decoded = GetFamilyTreeRequest.STREAM_CODEC.decode(buffer);
 
             assertEquals(GetFamilyTreeRequest.MAX_DEPTH, decoded.ancestorDepth());
             assertEquals(0, decoded.descendantDepth());
             assertEquals(44L, decoded.requestId());
+            assertFalse(decoded.oneGeneration());
         } finally {
             buffer.release();
         }
+    }
+
+    @Test
+    void serverPacketRateLimitsEnforcePerPlayerHundredMillisecondCooldown() {
+        UUID playerA = uuid(90_001);
+        UUID playerB = uuid(90_002);
+
+        assertEquals(100L, FamilyTreeUUIDLookup.RATE_LIMIT_MS);
+        assertTrue(FamilyTreeUUIDLookup.allowRequest(playerA, 1_000L));
+        assertFalse(FamilyTreeUUIDLookup.allowRequest(playerA, 1_099L));
+        assertTrue(FamilyTreeUUIDLookup.allowRequest(playerB, 1_050L), "Rate limit must be isolated per player");
+        assertTrue(FamilyTreeUUIDLookup.allowRequest(playerA, 1_100L));
+
+        assertEquals(100L, GetFamilyTreeRequest.RATE_LIMIT_MS);
+        assertTrue(GetFamilyTreeRequest.allowRequest(playerA, 1_000L));
+        assertFalse(GetFamilyTreeRequest.allowRequest(playerA, 1_099L));
+        assertTrue(GetFamilyTreeRequest.allowRequest(playerB, 1_050L), "Rate limit must be isolated per player");
+        assertTrue(GetFamilyTreeRequest.allowRequest(playerA, 1_100L));
     }
 
     @Test
@@ -166,6 +194,37 @@ class FamilyTreeViewCodecTest {
         assertEquals(73L, decoded.requestId());
         assertEquals("root", decoded.search());
         assertEquals(java.util.List.of(entry), decoded.list());
+    }
+
+    @Test
+    void searchRequestRejectsOversizedOutboundQueries() {
+        String tooLong = "x".repeat(65);
+        assertThrows(RuntimeException.class, () -> roundTrip(
+                FamilyTreeUUIDLookup.STREAM_CODEC,
+                new FamilyTreeUUIDLookup(74L, tooLong)
+        ));
+    }
+
+    @Test
+    void searchRequestRejectsOversizedInboundQueries() {
+        FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
+        try {
+            ByteBufCodecs.VAR_LONG.encode(buffer, 75L);
+            ByteBufCodecs.STRING_UTF8.encode(buffer, "x".repeat(65));
+
+            assertThrows(RuntimeException.class, () -> FamilyTreeUUIDLookup.STREAM_CODEC.decode(buffer));
+        } finally {
+            buffer.release();
+        }
+    }
+
+    @Test
+    void searchRequestAcceptsQueriesAtTheLimit() {
+        String query = "x".repeat(64);
+        assertEquals(query, roundTrip(
+                FamilyTreeUUIDLookup.STREAM_CODEC,
+                new FamilyTreeUUIDLookup(76L, query)
+        ).search());
     }
 
     @Test

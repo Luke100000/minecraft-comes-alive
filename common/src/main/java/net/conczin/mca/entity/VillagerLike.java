@@ -18,24 +18,26 @@ import net.conczin.mca.resources.data.skin.HairStyle;
 import net.conczin.mca.resources.data.skin.LayeredHair;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
 import net.conczin.mca.server.world.data.PlayerSaveData;
+import net.conczin.mca.util.InventoryUtils;
 import net.conczin.mca.util.network.datasync.*;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.syncher.EntityDataAccessor;
+import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.FastColor;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.EquipmentSlot;
-import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.entity.npc.VillagerDataHolder;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.DyeColor;
@@ -391,6 +393,20 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         return getAgeState();
     }
 
+    default boolean affectsDimensions(EntityDataAccessor<?> accessor) {
+        CDataManager<?> data = getTypeDataManager();
+        return data.isParam(AGE_STATE, accessor)
+                || Genetics.affectsDimensions(data, accessor)
+                || Traits.affectsDimensions(data, accessor);
+    }
+
+    default boolean affectsDimensions(SynchedEntityData.DataValue<?> value) {
+        CDataManager<?> data = getTypeDataManager();
+        return data.isParam(AGE_STATE, value)
+                || Genetics.affectsDimensions(data, value)
+                || Traits.affectsDimensions(data, value);
+    }
+
     default void updateAttributes() {
         float speed = 1.0f;
         if (getTraits().hasTrait(Traits.ATHLETIC)) {
@@ -576,6 +592,33 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         setHairStyleId("");
     }
 
+    default void restoreGenderAfterLoad() {
+        if (getGenetics().getGender() == Gender.UNASSIGNED) {
+            EntityType<?> type = asEntity().getType();
+            getGenetics().setGender(type == EntitiesMCA.FEMALE_VILLAGER || type == EntitiesMCA.FEMALE_ZOMBIE_VILLAGER
+                    ? Gender.FEMALE : Gender.MALE);
+        }
+    }
+
+    default void restoreMissingAppearance(CompoundTag data) {
+        if (asEntity().level().isClientSide) {
+            return;
+        }
+
+        if (!data.contains("Skin", Tag.TAG_STRING)) {
+            randomizeSkin();
+        }
+        if (!data.contains("Hair", Tag.TAG_STRING)
+                && !data.contains("HairStyle", Tag.TAG_STRING)
+                && !data.contains("HairBase", Tag.TAG_STRING)
+                && !data.contains("HairBangs", Tag.TAG_STRING)
+                && !data.contains("HairBack", Tag.TAG_STRING)
+                && !data.contains("HairFront", Tag.TAG_STRING)
+                && !data.contains("HairExtra", Tag.TAG_STRING)) {
+            randomizeHair();
+        }
+    }
+
     default void validateClothes() {
         if (!asEntity().level().isClientSide) {
             migrateLegacyHairStyle();
@@ -650,6 +693,14 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
             return null;
         }
 
+        // Discard does not wake a sleeper or release its HOME. Finish that lifecycle
+        // before copying position so the replacement also starts at the safe wake-up spot.
+        if (source.isSleeping()) {
+            source.stopSleeping();
+        }
+        if (source instanceof Villager villager) {
+            villager.releasePoi(MemoryModuleType.HOME);
+        }
         Entity vehicle = source.getVehicle();
         converted.copyPosition(source);
         converted.setBaby(source.isBaby());
@@ -666,7 +717,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
             converted.setCanPickUpLoot(source.canPickUpLoot());
             for (EquipmentSlot slot : EquipmentSlot.values()) {
                 ItemStack stack = source.getItemBySlot(slot);
-                if (!stack.isEmpty()) {
+                if (!stack.isEmpty() && !InventoryUtils.isTemporary(stack)) {
                     converted.setItemSlot(slot, stack.copyAndClear());
                     converted.setDropChance(slot, (float) dropChanceGetter.applyAsDouble(slot));
                 }
@@ -695,6 +746,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     default void readNbtForConversion(CompoundTag input) {
         this.getTypeDataManager().load((E) asEntity(), input);
         readAdditionalConversionData(input);
+        asEntity().refreshDimensions();
     }
 
     default void writeAdditionalConversionData(CompoundTag output) {

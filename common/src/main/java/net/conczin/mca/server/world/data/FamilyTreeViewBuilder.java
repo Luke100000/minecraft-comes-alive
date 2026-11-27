@@ -3,20 +3,84 @@ package net.conczin.mca.server.world.data;
 import net.conczin.mca.network.FamilyTreeView;
 import net.minecraft.core.GlobalPos;
 
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.function.Function;
 
 public final class FamilyTreeViewBuilder {
     public static final int MAX_DEPTH = 8;
+    // Reserve a card for the anchor and room for one partner per card in the page.
+    private static final int GENERATION_PAGE_SIZE = FamilyTreeView.MAX_NODES / 2 - 1;
+
+    public record GenerationPage(FamilyTreeView view, Optional<UUID> nextCursor) {
+    }
 
     private FamilyTreeViewBuilder() {
+    }
+
+    public static Optional<FamilyTreeView> buildGeneration(
+            FamilyTree tree,
+            UUID anchor,
+            FamilyTreeView.Direction direction
+    ) {
+        return buildGeneration(tree, anchor, direction, id -> Optional.empty());
+    }
+
+    public static Optional<FamilyTreeView> buildGeneration(
+            FamilyTree tree,
+            UUID anchor,
+            FamilyTreeView.Direction direction,
+            Function<UUID, Optional<GlobalPos>> graveLookup
+    ) {
+        return buildGenerationPage(tree, anchor, direction, Optional.empty(), graveLookup)
+                .map(GenerationPage::view);
+    }
+
+    public static Optional<GenerationPage> buildGenerationPage(
+            FamilyTree tree, UUID anchor, FamilyTreeView.Direction direction, Optional<UUID> after,
+            Function<UUID, Optional<GlobalPos>> graveLookup
+    ) {
+        Optional<FamilyTreeNode> source = tree.getOrEmpty(anchor);
+        if (source.isEmpty()) {
+            return Optional.empty();
+        }
+
+        FamilyTreeNode root = source.orElseThrow();
+        List<UUID> relativeIds = (direction == FamilyTreeView.Direction.ANCESTORS
+                ? root.streamParents() : root.streamChildren()).sorted().distinct().toList();
+
+        Map<UUID, FamilyTreeNode> nodes = new LinkedHashMap<>();
+        Set<FamilyTreeView.Continuation> continuations = new LinkedHashSet<>();
+        Set<UUID> unavailable = new LinkedHashSet<>();
+        nodes.put(root.id(), root);
+        UUID lastRelative = null;
+        UUID nextCursor = null;
+        int count = 0;
+        for (UUID relativeId : relativeIds) {
+            if (after.isPresent() && relativeId.compareTo(after.orElseThrow()) <= 0) continue;
+            if (count == GENERATION_PAGE_SIZE) {
+                addContinuation(continuations, root.id(), direction);
+                nextCursor = lastRelative;
+                break;
+            }
+            Optional<FamilyTreeNode> relative = tree.getOrEmpty(relativeId);
+            if (relative.isEmpty()) {
+                addUnavailable(unavailable, relativeId);
+            } else {
+                nodes.putIfAbsent(relativeId, relative.orElseThrow());
+            }
+            lastRelative = relativeId;
+            count++;
+        }
+
+        // Partners are display context at the same generation, never another ancestry walk.
+        includePartners(tree, nodes, unavailable, continuations);
+        unavailable.removeAll(nodes.keySet());
+        Map<UUID, FamilyTreeNode> snapshots = snapshotNodes(tree, nodes, continuations, unavailable);
+        Map<UUID, GlobalPos> graves = new LinkedHashMap<>();
+        snapshots.keySet().forEach(id -> graveLookup.apply(id).ifPresent(grave -> graves.put(id, grave)));
+        FamilyTreeView view = new FamilyTreeView(snapshots, continuations, unavailable,
+                collectOrphans(tree, snapshots.values()), graves);
+        return Optional.of(new GenerationPage(view, Optional.ofNullable(nextCursor)));
     }
 
     public static Optional<FamilyTreeView> build(FamilyTree tree, UUID root, int ancestorDepth, int descendantDepth) {
@@ -77,7 +141,7 @@ public final class FamilyTreeViewBuilder {
         includePartners(tree, nodes, unavailable, continuations);
 
         unavailable.removeAll(nodes.keySet());
-        Map<UUID, FamilyTreeNode> snapshots = snapshotNodes(tree, nodes, continuations);
+        Map<UUID, FamilyTreeNode> snapshots = snapshotNodes(tree, nodes, continuations, unavailable);
         Set<UUID> orphans = collectOrphans(tree, snapshots.values());
         Map<UUID, GlobalPos> graves = new LinkedHashMap<>();
         snapshots.keySet().forEach(id -> graveLookup.apply(id).ifPresent(grave -> graves.put(id, grave)));
@@ -157,6 +221,21 @@ public final class FamilyTreeViewBuilder {
                 } else if (!nodes.containsKey(childId) && !tryAddNode(nodes, childId, siblingNode.orElseThrow())) {
                     addContinuation(continuations, parentId, FamilyTreeView.Direction.DESCENDANTS);
                     break;
+                } else {
+                    // A sibling is visible in the initial bounded view, but their children
+                    // are only loaded when the existing descendant control is expanded.
+                    Iterator<UUID> children = siblingNode.orElseThrow().streamChildren().iterator();
+                    while (children.hasNext()) {
+                        UUID grandchildId = children.next();
+                        if (nodes.containsKey(grandchildId)) {
+                            continue;
+                        }
+                        if (tree.getOrEmpty(grandchildId).isPresent()) {
+                            addContinuation(continuations, childId, FamilyTreeView.Direction.DESCENDANTS);
+                        } else {
+                            addUnavailable(unavailable, grandchildId);
+                        }
+                    }
                 }
             }
         }
@@ -278,22 +357,31 @@ public final class FamilyTreeViewBuilder {
     private static Map<UUID, FamilyTreeNode> snapshotNodes(
             FamilyTree tree,
             Map<UUID, FamilyTreeNode> nodes,
-            Set<FamilyTreeView.Continuation> continuations
+            Set<FamilyTreeView.Continuation> continuations,
+            Set<UUID> unavailable
     ) {
         Map<UUID, FamilyTreeNode> snapshots = new LinkedHashMap<>(nodes.size());
         for (FamilyTreeNode node : nodes.values()) {
+            // Partners and siblings can enter the view without an ancestry walk.
+            // Describe their omitted parents without expanding the bounded response.
+            for (UUID parentId : node.streamParents().toList()) {
+                if (!nodes.containsKey(parentId)) {
+                    if (tree.getOrEmpty(parentId).isPresent()) {
+                        addContinuation(continuations, node.id(), FamilyTreeView.Direction.ANCESTORS);
+                    } else {
+                        addUnavailable(unavailable, parentId);
+                    }
+                }
+            }
             Set<UUID> children = new LinkedHashSet<>();
-            node.streamChildren().filter(nodes::containsKey).forEach(children::add);
-            boolean hasMoreDescendants = continuations.contains(new FamilyTreeView.Continuation(
-                    node.id(),
-                    FamilyTreeView.Direction.DESCENDANTS
-            ));
-            if (hasMoreDescendants) {
-                node.streamChildren()
-                        .filter(childId -> !nodes.containsKey(childId))
-                        .filter(childId -> tree.getOrEmpty(childId).isPresent())
-                        .findFirst()
-                        .ifPresent(children::add);
+            for (UUID childId : node.streamChildren().toList()) {
+                if (nodes.containsKey(childId)) {
+                    children.add(childId);
+                } else if (tree.getOrEmpty(childId).isPresent()) {
+                    addContinuation(continuations, node.id(), FamilyTreeView.Direction.DESCENDANTS);
+                } else {
+                    addUnavailable(unavailable, childId);
+                }
             }
             snapshots.put(node.id(), FamilyTreeNode.detachedCopy(node, children));
         }

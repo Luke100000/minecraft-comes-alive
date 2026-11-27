@@ -6,6 +6,7 @@ import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.Chore;
 import net.conczin.mca.entity.ai.TaskUtils;
+import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.conczin.mca.util.InventoryUtils;
 import net.conczin.mca.util.RegistryHelper;
 import net.minecraft.core.BlockPos;
@@ -24,12 +25,15 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class ChoppingTask extends AbstractChoreTask {
     private static final double MAX_WORK_DISTANCE_SQUARED = 6.0;
 
+    private final Set<BlockPos> unreachableTrees = new HashSet<>();
     private int chopTicks, targetTreeTicks;
     private BlockPos targetTree;
 
@@ -49,36 +53,35 @@ public class ChoppingTask extends AbstractChoreTask {
 
     @Override
     protected void stop(ServerLevel world, VillagerEntityMCA villager, long time) {
-        ItemStack stack = villager.getItemInHand(villager.getDominantHand());
-        if (!stack.isEmpty()) {
-            villager.setItemInHand(villager.getDominantHand(), ItemStack.EMPTY);
-        }
+        targetTree = null;
+        chopTicks = 0;
+        targetTreeTicks = 0;
+        unreachableTrees.clear();
+        releaseChoreHand(villager, Chore.CHOP);
     }
 
     @Override
     protected void start(ServerLevel world, VillagerEntityMCA villager, long time) {
         super.start(world, villager, time);
 
-        if (!villager.hasItemInSlot(villager.getDominantSlot())) {
-            int i = InventoryUtils.getFirstSlotContainingItem(villager.getInventory(), Chore.CHOP::matchesTool);
-            if (i == -1) {
-                abandonJobWithMessage("chore.chopping.noaxe");
-            } else {
-                villager.setItemInHand(villager.getDominantHand(), villager.getInventory().getItem(i));
-            }
-        }
+        equipChoreTool(villager, Chore.CHOP, "chore.chopping.noaxe");
     }
 
     @Override
     protected void tick(ServerLevel world, VillagerEntityMCA villager, long time) {
         if (this.villager == null) this.villager = villager;
+        super.tick(world, villager, time);
+        if (villager.getVillagerBrain().getCurrentJob() != Chore.CHOP) return;
 
-        if (!InventoryUtils.contains(villager.getInventory(), Chore.CHOP::matchesTool) && !villager.hasItemInSlot(villager.getDominantSlot())) {
-            abandonJobWithMessage("chore.chopping.noaxe");
-        } else if (!villager.hasItemInSlot(villager.getDominantSlot())) {
-            int i = InventoryUtils.getFirstSlotContainingItem(villager.getInventory(), Chore.CHOP::matchesTool);
-            ItemStack stack = villager.getInventory().getItem(i);
-            villager.setItemInHand(villager.getDominantHand(), stack);
+        if (!equipChoreTool(villager, Chore.CHOP, "chore.chopping.noaxe")) return;
+
+        if (targetTree != null
+                && villager.distanceToSqr(Vec3.atBottomCenterOf(targetTree)) > MAX_WORK_DISTANCE_SQUARED
+                && WalkTargetFailureMemory.hasFailureFor(villager, targetTree)) {
+            unreachableTrees.add(targetTree.immutable());
+            targetTree = null;
+            chopTicks = 0;
+            targetTreeTicks = 0;
         }
 
         if (targetTree == null) {
@@ -87,25 +90,29 @@ public class ChoppingTask extends AbstractChoreTask {
 
             // valid "trees" are logs on the ground with leaves around them
             nearbyLogs.stream()
+                    .filter(log -> !unreachableTrees.contains(log) && !WalkTargetFailureMemory.hasFailureFor(villager, log))
                     .filter(log -> isTreeStartLog(world, log))
                     .forEach(nearbyTrees::add);
             targetTree = TaskUtils.getNearestPoint(villager.blockPosition(), nearbyTrees);
 
-            if (targetTree != null) {
-                ItemStack stack = villager.getItemInHand(villager.getDominantHand());
-                BlockPos pos = targetTree;
-                BlockState state;
-                while ((state = world.getBlockState(pos)).is(BlockTags.LOGS)) {
-                    targetTreeTicks += (int) (getTicksFor(state, 60) / stack.getDestroySpeed(state));
-                    pos = pos.offset(0, 1, 0);
-                }
+            if (targetTree == null) {
+                unreachableTrees.clear();
+                failedTicks = FAILED_COOLDOWN;
+                return;
             }
 
-            failedTicks = FAILED_COOLDOWN;
-            return;
+            chopTicks = 0;
+            targetTreeTicks = 0;
+            ItemStack stack = villager.getItemInHand(villager.getDominantHand());
+            BlockPos pos = targetTree;
+            BlockState state;
+            while ((state = world.getBlockState(pos)).is(BlockTags.LOGS)) {
+                targetTreeTicks += (int) (getTicksFor(state, 60) / stack.getDestroySpeed(state));
+                pos = pos.offset(0, 1, 0);
+            }
         }
 
-        villager.moveTowardsPersistent(targetTree, 0.5F, 1);
+        moveTowardsChorePosition(targetTree, 0.5F, 1);
 
         BlockState state = world.getBlockState(targetTree);
         if (state.is(BlockTags.LOGS)) {
@@ -118,14 +125,20 @@ public class ChoppingTask extends AbstractChoreTask {
                     chopTicks = 0;
 
                     destroyTree(world, targetTree);
+                    if (!world.getBlockState(targetTree).is(BlockTags.LOGS)) {
+                        targetTree = null;
+                        targetTreeTicks = 0;
+                        unreachableTrees.clear();
+                    }
                 }
             }
         } else {
             targetTree = null;
+            chopTicks = 0;
             targetTreeTicks = 0;
+            unreachableTrees.clear();
         }
 
-        super.tick(world, villager, time);
     }
 
     /**
@@ -159,8 +172,8 @@ public class ChoppingTask extends AbstractChoreTask {
 
         while ((state = world.getBlockState(pos)).is(BlockTags.LOGS)) {
             if (world.destroyBlock(pos, false, villager)) {
+                InventoryUtils.insertOrDropAt(villager.getInventory(), new ItemStack(state.getBlock(), 1), world, pos);
                 pos = pos.offset(0, 1, 0);
-                villager.getInventory().addItem(new ItemStack(state.getBlock(), 1));
                 stack.hurtAndBreak(1, villager, EquipmentSlot.MAINHAND);
             } else {
                 break;

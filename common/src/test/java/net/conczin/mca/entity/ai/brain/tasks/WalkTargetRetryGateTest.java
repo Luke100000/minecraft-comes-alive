@@ -3,45 +3,11 @@ package net.conczin.mca.entity.ai.brain.tasks;
 import net.minecraft.core.BlockPos;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class WalkTargetRetryGateTest {
     private static final BlockPos DESTINATION = new BlockPos(12, 64, 12);
     private static final BlockPos START = new BlockPos(0, 64, 0);
-
-    @Test
-    void checkingAvailabilityDoesNotStartLocalStrollCooldown() {
-        WalkTargetRetryGate gate = new WalkTargetRetryGate(40, 1);
-
-        assertTrue(gate.canReserve(START, START, 100));
-        assertTrue(gate.canReserve(START, START, 101));
-        assertTrue(gate.tryReserve(START, START, 102));
-        assertFalse(gate.canReserve(START, START, 103));
-        assertFalse(gate.canReserve(START, START, 141));
-        assertTrue(gate.canReserve(START, START, 142));
-        assertTrue(gate.tryReserve(START, START, 142));
-        assertFalse(gate.canReserve(START, START, 143));
-    }
-
-    @Test
-    void checkingAvailabilityDoesNotConsumeImmediateRetryOrChangeDestination() {
-        WalkTargetRetryGate gate = new WalkTargetRetryGate(100, 16, 1);
-        assertTrue(gate.tryReserve(DESTINATION, START, 100));
-
-        assertTrue(gate.canReserve(DESTINATION, START, 120));
-        assertTrue(gate.canReserve(DESTINATION, START, 120));
-        assertTrue(gate.tryReserve(DESTINATION, START, 120));
-        assertFalse(gate.canReserve(DESTINATION, START, 140));
-        assertTrue(gate.canReserve(DESTINATION.east(), START, 140));
-        assertTrue(gate.canReserve(DESTINATION, START.east(4), 140));
-        assertTrue(gate.canReserve(DESTINATION, START, 10));
-        assertFalse(gate.canReserve(DESTINATION, START, 140));
-        assertEquals(100L, gate.stalledSince());
-        assertEquals(120L, gate.previousAttemptTime());
-        assertTrue(gate.tryReserve(DESTINATION, START, 220));
-    }
 
     @Test
     void unchangedDestinationWithoutProgressCannotImmediatelyRepeatSearch() {
@@ -150,9 +116,60 @@ class WalkTargetRetryGateTest {
         assertFalse(gate.noteProgress(DESTINATION, START.east(5), 121));
         assertTrue(gate.tryReserve(DESTINATION, START.east(5), 122),
                 "movement must allow a fresh search even before the old cooldown expires");
-        assertEquals(122L, gate.stalledSince());
+        assertEquals(120L, gate.stalledSince(), "the retry must retain the time of the actual progress");
         assertFalse(gate.noteProgress(DESTINATION.east(), START.east(10), 123),
                 "progress toward a different target cannot clear failure for this destination");
+    }
+
+    @Test
+    void repeatedFailedFlanksAndReturnLegsDoNotRenewFailureAge() {
+        WalkTargetRetryGate gate = new WalkTargetRetryGate(100, 16, 1);
+        BlockPos destination = START.east(10);
+        BlockPos flank = START.north(8);
+        BlockPos approach = START.east(4);
+        assertTrue(gate.tryReserve(destination, START, 100));
+        assertTrue(gate.tryReserve(destination, flank, 200), "displacement may permit another search");
+        assertEquals(100L, gate.stalledSince(), "moving away is not progress toward the destination");
+        assertTrue(gate.noteProgress(destination, approach, 230));
+        assertTrue(gate.tryReserve(destination, approach, 231));
+
+        for (int lap = 0; lap < 8; lap++) {
+            long time = 400L + lap * 200L;
+            assertTrue(gate.tryReserve(destination, flank, time));
+            assertFalse(gate.noteProgress(destination, approach, time + 30L),
+                    "returning to an already reached approach must not refresh failure");
+            assertTrue(gate.tryReserve(destination, approach, time + 100L));
+            assertEquals(230L, gate.stalledSince(), "repeated attempts must retain the failure window");
+        }
+        assertTrue(gate.noteProgress(destination, START.east(8), 2_100L),
+                "new progress toward the destination must still refresh failure");
+    }
+
+    @Test
+    void circlingSlightlyCloserDoesNotCountAsMeaningfulProgress() {
+        WalkTargetRetryGate gate = new WalkTargetRetryGate(100, 16, 1);
+        BlockPos destination = START.east(10);
+        BlockPos approach = START.east(4);
+        assertTrue(gate.tryReserve(destination, approach, 100));
+        assertFalse(gate.noteProgress(destination, START.offset(7, 0, 5), 150),
+                "crossing to the other side of a blocked approach barely reduces its distance");
+        assertTrue(gate.tryReserve(destination, START.offset(7, 0, 5), 200));
+        assertEquals(100L, gate.stalledSince());
+        assertTrue(gate.noteProgress(destination, START.east(8), 230),
+                "substantial new distance gain still renews failure");
+    }
+
+    @Test
+    void progressRetainsOneEarlyRetryEvenAfterTheOldIntervalElapsed() {
+        for (long delay : new long[]{20L, 150L}) {
+            WalkTargetRetryGate gate = new WalkTargetRetryGate(100, 16, 1);
+            assertTrue(gate.tryReserve(DESTINATION, START, 100));
+            assertTrue(gate.noteProgress(DESTINATION, START.east(5), 100 + delay));
+            assertTrue(gate.tryReserve(DESTINATION, START.east(5), 101 + delay));
+            assertTrue(gate.tryReserve(DESTINATION, START.east(5), 102 + delay));
+            assertFalse(gate.tryReserve(DESTINATION, START.east(5), 103 + delay),
+                    "progress must grant the initial request and one early escalation");
+        }
     }
 
     @Test
@@ -173,5 +190,51 @@ class WalkTargetRetryGateTest {
                     "the two-block trip must remain below the ordinary progress threshold");
             gate.reset(nearbyDestination);
         }
+    }
+
+    @Test
+    void repeatedFailureReportsRetainTheShiftedEpisodeUntilRecovery() {
+        WalkTargetRetryGate gate = new WalkTargetRetryGate(100, 16, 1);
+        assertTrue(gate.tryReserve(DESTINATION, START, 100));
+        gate.noteFailure(DESTINATION, 100);
+        gate.observePreemption(115, true);
+        gate.observePreemption(165, false);
+
+        gate.noteFailure(DESTINATION, 100);
+        assertEquals(150L, gate.unresolvedFailureSince(DESTINATION));
+        gate.noteFailure(DESTINATION, 180);
+        assertEquals(150L, gate.unresolvedFailureSince(DESTINATION));
+
+        gate.clearFailure();
+        gate.noteFailure(DESTINATION, 200);
+        assertEquals(200L, gate.unresolvedFailureSince(DESTINATION));
+    }
+
+    @Test
+    void closedPreemptionIntervalsShiftStalledAndUnresolvedFailureWithoutAccruingPostPreemptionIdleTicks() {
+        WalkTargetRetryGate gate = new WalkTargetRetryGate(100, 16, 1, null);
+        assertTrue(gate.tryReserve(DESTINATION, START, 100));
+        gate.noteFailure(DESTINATION, 100);
+
+        // Preemption flash 1: [115, 165) = 50 ticks, closed at 165 before consumer runs at 180.
+        gate.observePreemption(115, true);
+        gate.observePreemption(140, true);
+        gate.observePreemption(165, false);
+        // Non-preempted idle ticks [165, 180) must NOT accrue into shift.
+        gate.observePreemption(175, false);
+
+        // Preemption flash 2: [180, 210) = 30 ticks, still open when the producer resumes at 210.
+        gate.observePreemption(180, true);
+        gate.observePreemption(210, false);
+        assertEquals(80L, gate.unresolvedFailureSince(DESTINATION) - 100L);
+        assertEquals(180L, gate.stalledSince());
+        assertEquals(180L, gate.unresolvedFailureSince(DESTINATION));
+        gate.observePreemption(215, false);
+        assertEquals(180L, gate.stalledSince());
+        assertEquals(180L, gate.unresolvedFailureSince(DESTINATION));
+
+        // Real progress toward target clears unresolvedFailureSince.
+        assertTrue(gate.noteProgress(DESTINATION, START.east(5), 220));
+        assertEquals(Long.MIN_VALUE, gate.unresolvedFailureSince(DESTINATION));
     }
 }

@@ -1,10 +1,20 @@
 package net.conczin.mca.network.c2s;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.handler.codec.DecoderException;
 import net.conczin.mca.MCA;
 import net.conczin.mca.network.HandleablePayload;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.s2c.BuildingPolymorphMessage;
-import net.conczin.mca.server.world.data.*;
+import net.conczin.mca.registry.ItemsMCA;
+import net.conczin.mca.resources.Rank;
+import net.conczin.mca.resources.Tasks;
+import net.conczin.mca.server.world.data.Building;
+import net.conczin.mca.server.world.data.RoomWorkflow;
+import net.conczin.mca.server.world.data.Village;
+import net.conczin.mca.server.world.data.VillageManager;
+import net.conczin.mca.util.MaxSizeHashMap;
+import net.minecraft.Util;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
@@ -13,15 +23,26 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.level.ServerPlayer;
 
-import java.util.Locale;
-import java.util.Optional;
+import java.util.*;
 
 public record ReportBuildingMessage(Action action, String data, int expectedTargetId) implements HandleablePayload {
     public static final CustomPacketPayload.Type<ReportBuildingMessage> TYPE =
             new CustomPacketPayload.Type<>(MCA.locate("report_building"));
+    public static final int MAX_DATA_LENGTH = 64;
+    static final long FULL_SCAN_COOLDOWN_MS = 2_000L;
+    private static final Map<UUID, Long> FULL_SCAN_COOLDOWNS = Collections.synchronizedMap(new MaxSizeHashMap<>(256));
+
+    static final StreamCodec<ByteBuf, Action> ACTION_CODEC = ByteBufCodecs.idMapper(id -> {
+        if (id < 0 || id >= Action.VALUES.length) {
+            throw new DecoderException("Invalid blueprint action ordinal: " + id);
+        }
+        return Action.VALUES[id];
+    }, Action::ordinal);
+
     public static final StreamCodec<FriendlyByteBuf, ReportBuildingMessage> STREAM_CODEC = StreamCodec.composite(
-            ByteBufCodecs.idMapper(i -> Action.VALUES[i], Action::ordinal), ReportBuildingMessage::action,
-            ByteBufCodecs.optional(ByteBufCodecs.STRING_UTF8).map(opt -> opt.orElse(null), java.util.Optional::ofNullable), ReportBuildingMessage::data,
+            ACTION_CODEC, ReportBuildingMessage::action,
+            ByteBufCodecs.optional(ByteBufCodecs.stringUtf8(MAX_DATA_LENGTH))
+                    .map(opt -> opt.orElse(null), Optional::ofNullable), ReportBuildingMessage::data,
             ByteBufCodecs.VAR_INT, ReportBuildingMessage::expectedTargetId,
             ReportBuildingMessage::new);
 
@@ -33,9 +54,37 @@ public record ReportBuildingMessage(Action action, String data, int expectedTarg
         this(action, data, -1);
     }
 
+    static boolean canUseBlueprint(ServerPlayer player) {
+        return player != null && !player.isSpectator() && player.isHolding(ItemsMCA.BLUEPRINT);
+    }
+
+    static boolean hasVillagePermission(ServerPlayer player, Village village, Rank required) {
+        if (player == null) return false;
+        if (player.hasPermissions(2) || village == null) return true;
+        if (Tasks.getInstance() == null || Tasks.getInstance().tasks.isEmpty()) return true;
+        return Tasks.getRank(village, player).isAtLeast(required);
+    }
+
+    static Village editTarget(VillageManager manager, BlockPos source, Action action) {
+        return switch (action) {
+            case SCAN_ROOM, ADD_BUILDING, ADD_ATTACHMENT, SET_ROOM_INHERITANCE ->
+                    RoomWorkflow.findTargetVillage(manager, source);
+            default -> manager.findNearestVillage(source, Village.PLAYER_BORDER_MARGIN).orElse(null);
+        };
+    }
+
     @Override
     public void handleServer(ServerPlayer player) {
+        if (!canUseBlueprint(player)) {
+            return;
+        }
         VillageManager manager = VillageManager.get(player.serverLevel());
+        Village nearestVillage = editTarget(manager, player.blockPosition(), action);
+        if (!hasVillagePermission(player, nearestVillage, Rank.PEASANT)) {
+            player.displayClientMessage(Component.translatable("gui.blueprint.rankTooLow"), true);
+            return;
+        }
+
         RoomWorkflow workflow = new RoomWorkflow(manager, player.serverLevel());
         try {
             switch (action) {
@@ -44,10 +93,18 @@ public record ReportBuildingMessage(Action action, String data, int expectedTarg
                                 action, expectedTargetId >= 0 ? expectedTargetId : parseTargetBuildingId(data));
                 case SET_MAIN_ROOM -> displayEditResult(player,
                         manager.setMainRoom(player.blockPosition(), expectedTargetId), "blueprint.mainRoomSet");
-                case AUTO_SCAN -> manager.findNearestVillage(player).ifPresent(Village::toggleAutoScan);
-                case FULL_SCAN -> fullScan(manager, player);
-                case FORCE_TYPE -> displayEditResult(player,
-                        manager.forceRoomType(player.blockPosition(), data, expectedTargetId), null);
+                case AUTO_SCAN -> {
+                    if (nearestVillage != null) nearestVillage.toggleAutoScan();
+                }
+                case FULL_SCAN -> fullScan(manager, player, nearestVillage);
+                case FORCE_TYPE -> {
+                    if (isAllowedForcedType(data)) {
+                        displayEditResult(player,
+                                manager.forceRoomType(player.blockPosition(), data, expectedTargetId), null);
+                    } else {
+                        MCA.LOGGER.warn("Ignoring invalid forced building type '{}' from {}", data, player);
+                    }
+                }
                 case REMOVE_ROOM -> displayEditResult(player,
                         manager.removeRoom(player.blockPosition(), expectedTargetId), "blueprint.roomRemoved");
                 case REMOVE_FLOOR -> {
@@ -86,7 +143,13 @@ public record ReportBuildingMessage(Action action, String data, int expectedTarg
             MCA.LOGGER.warn("Ignoring invalid building scan action {} from {}", action, player);
             return;
         }
-        displayWorkflowOutcome(player, outcome, action);
+        Action effectiveAction = action == Action.ADD_BUILDING && outcome.prospectiveFloorNumber() != Integer.MIN_VALUE
+                ? Action.ADD_ATTACHMENT : action;
+        displayWorkflowOutcome(player, outcome, effectiveAction, action);
+    }
+
+    static boolean isAllowedForcedType(String type) {
+        return type == null || "blocked".equals(type);
     }
 
     private static int parseTargetBuildingId(String value) {
@@ -130,8 +193,13 @@ public record ReportBuildingMessage(Action action, String data, int expectedTarg
     record FloorRemovalTarget(int floorNumber, int structureId, int floorId) {
     }
 
-    private static void fullScan(VillageManager manager, ServerPlayer player) {
-        Village village = manager.findNearestVillage(player).orElse(null);
+    private static void fullScan(VillageManager manager, ServerPlayer player, Village village) {
+        long now = Util.getMillis();
+        Long nextAllowed = FULL_SCAN_COOLDOWNS.get(player.getUUID());
+        if (nextAllowed != null && now < nextAllowed) {
+            return;
+        }
+        FULL_SCAN_COOLDOWNS.put(player.getUUID(), now + FULL_SCAN_COOLDOWN_MS);
         if (village == null) {
             player.displayClientMessage(Component.translatable("blueprint.noBuilding"), true);
             return;
@@ -151,35 +219,34 @@ public record ReportBuildingMessage(Action action, String data, int expectedTarg
                 && outcome.result() == Building.validationResult.NOT_IN_BUILDING) {
             return;
         }
-        displayWorkflowOutcome(player, outcome, Action.SET_ROOM_INHERITANCE);
+        displayWorkflowOutcome(player, outcome, Action.SET_ROOM_INHERITANCE, Action.SET_ROOM_INHERITANCE);
     }
 
     private static void displayWorkflowOutcome(ServerPlayer player,
                                                RoomWorkflow.Outcome outcome,
-                                               Action action) {
+                                               Action polymorphAction,
+                                               Action feedbackAction) {
         if (outcome.status() == RoomWorkflow.Status.REQUIRES_TYPE_SELECTION) {
-            requestType(outcome.matchingTypes(), outcome.source(), player, action, outcome.expectedTargetId());
+            requestType(outcome.matchingTypes(), outcome.source(), player, polymorphAction, outcome.expectedTargetId());
             return;
         }
+        String key = workflowFeedbackKey(outcome, feedbackAction);
+        if (key != null) player.displayClientMessage(Component.translatable(key), true);
+    }
+
+    static String workflowFeedbackKey(RoomWorkflow.Outcome outcome, Action action) {
+        if (outcome.status() == RoomWorkflow.Status.REQUIRES_TYPE_SELECTION) return null;
         if (outcome.status() == RoomWorkflow.Status.FAILED) {
             if (action == Action.SCAN_ROOM
                     && outcome.expectedTargetId() < 0
                     && outcome.result() == Building.validationResult.IDENTICAL) {
-                player.displayClientMessage(Component.translatable("blueprint.roomAlreadyAdded"), true);
-                return;
+                return "blueprint.roomAlreadyAdded";
             }
-            if ((action == Action.SCAN_ROOM || action == Action.SET_ROOM_INHERITANCE)
-                    && outcome.result() == Building.validationResult.NOT_IN_BUILDING) {
-                if (outcome.expectedTargetId() >= 0) {
-                    player.displayClientMessage(Component.translatable("blueprint.roomUpdateConflict"), true);
-                }
-                return;
-            }
-            displayScanResult(player, outcome.result());
-            return;
+            if (outcome.result() == Building.validationResult.TARGET_CHANGED) return "blueprint.targetChanged";
+            return "blueprint.scan." + outcome.result().name().toLowerCase(Locale.ENGLISH);
         }
 
-        String successKey = switch (action) {
+        return switch (action) {
             case ADD_BUILDING -> outcome.prospectiveFloorNumber() == Integer.MIN_VALUE
                     ? "blueprint.buildingAdded"
                     : outcome.prospectiveFloorNumber() < 0 ? "blueprint.basementAdded" : "blueprint.floorAdded";
@@ -189,21 +256,15 @@ public record ReportBuildingMessage(Action action, String data, int expectedTarg
                     ? "blueprint.roomUpdated" : "blueprint.roomAdded";
             default -> null;
         };
-        if (successKey != null) displayScanResult(player, Building.validationResult.SUCCESS, successKey);
     }
 
-
-    private static void requestType(java.util.List<String> matchingTypes,
+    private static void requestType(List<String> matchingTypes,
                                     BlockPos source,
                                     ServerPlayer player,
                                     Action action,
                                     int expectedTargetId) {
         Network.sendToPlayer(new BuildingPolymorphMessage(
                 matchingTypes, source, action, expectedTargetId), player);
-    }
-
-    private static void displayScanResult(ServerPlayer player, Building.validationResult result) {
-        displayScanResult(player, result, null);
     }
 
     private static void displayScanResult(ServerPlayer player,
@@ -226,6 +287,7 @@ public record ReportBuildingMessage(Action action, String data, int expectedTarg
             case MAIN_ROOM -> "blueprint.cannotRemoveMainRoom";
             case NO_STRUCTURE -> "blueprint.mainRoomNoStructure";
             case TARGET_CHANGED -> "blueprint.targetChanged";
+            case INVALID_TYPE -> "blueprint.scan.invalid_type";
         };
         if (key != null) player.displayClientMessage(Component.translatable(key), true);
     }

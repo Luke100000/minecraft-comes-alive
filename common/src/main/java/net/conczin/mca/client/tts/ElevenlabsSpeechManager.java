@@ -1,11 +1,11 @@
 package net.conczin.mca.client.tts;
 
+import com.google.gson.JsonObject;
 import net.conczin.mca.Config;
 import net.minecraft.world.entity.Entity;
 
 import java.io.OutputStream;
 import java.util.List;
-
 
 public class ElevenlabsSpeechManager extends RealtimeSpeechManager {
     public ElevenlabsSpeechManager() {
@@ -20,11 +20,23 @@ public class ElevenlabsSpeechManager extends RealtimeSpeechManager {
         play(text, pitch, entity, cacheable, voices.get(tone));
     }
 
+    static String buildSpeakPayload(String text, String modelId) {
+        JsonObject voiceSettings = new JsonObject();
+        voiceSettings.addProperty("stability", 0.3);
+        voiceSettings.addProperty("similarity_boost", 0.5);
+        voiceSettings.addProperty("style", 0.05);
+        voiceSettings.addProperty("use_speaker_boost", true);
+
+        JsonObject payload = new JsonObject();
+        payload.addProperty("text", text);
+        payload.addProperty("model_id", modelId);
+        payload.add("voice_settings", voiceSettings);
+        return payload.toString();
+    }
+
+    @Override
     public void downloadAudio(OutputStream output, String voiceId, String text) {
-        String payload = String.format(
-                "{\"text\": \"%s\", \"model_id\": \"%s\", \"voice_settings\": {\"stability\": 0.3, \"similarity_boost\": 0.5, \"style\": 0.05, \"use_speaker_boost\": true}}",
-                text, Config.CLIENT.elevenlabsModel.get()
-        );
+        String payload = buildSpeakPayload(text, Config.CLIENT.elevenlabsModel.get());
         RealtimeSpeechManager.download(output, this.url + voiceId + "?output_format=pcm_22050", payload, Config.CLIENT.elevenlabsPrivateAPIkey.get());
     }
 }

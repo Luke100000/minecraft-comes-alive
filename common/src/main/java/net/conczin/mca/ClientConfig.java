@@ -154,6 +154,7 @@ public final class ClientConfig {
     )), () -> "", value -> Config.isMapEntry(value, String.class, String.class));
         defaultMapsVersion = builder
                 .comment("Internal migration version for upstream player renderer blacklist defaults.")
+                .translation("mca.configuration.playerRendererDefaultsVersion")
                 .defineInRange("defaultMapsVersion", 0, 0, 1);
         scaleEyeHeightWithPlayerHeight = builder
 

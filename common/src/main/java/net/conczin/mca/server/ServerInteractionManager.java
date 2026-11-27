@@ -2,6 +2,7 @@ package net.conczin.mca.server;
 
 import it.unimi.dsi.fastutil.objects.Object2LongArrayMap;
 import net.conczin.mca.Config;
+import net.conczin.mca.MCA;
 import net.conczin.mca.entity.PlayerDimensions;
 import net.conczin.mca.entity.ai.relationship.EntityRelationship;
 import net.conczin.mca.entity.ai.relationship.RelationshipState;
@@ -11,15 +12,18 @@ import net.conczin.mca.network.s2c.OpenDestinyGuiRequest;
 import net.conczin.mca.network.s2c.PlayerDataMessage;
 import net.conczin.mca.network.s2c.ShowToastRequest;
 import net.conczin.mca.server.world.data.PlayerSaveData;
+import net.conczin.mca.server.world.data.VillageManager;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.player.Player;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class ServerInteractionManager {
 
@@ -35,6 +39,9 @@ public class ServerInteractionManager {
      */
     private final Object2LongArrayMap<UUID> procreateMap = new Object2LongArrayMap<>();
 
+    private final Set<UUID> activeDestinySessions = ConcurrentHashMap.newKeySet();
+    private final Set<UUID> pendingDestinyTeleports = ConcurrentHashMap.newKeySet();
+
 
     private ServerInteractionManager() {
     }
@@ -44,7 +51,50 @@ public class ServerInteractionManager {
     }
 
     public static void launchDestiny(ServerPlayer player) {
+        UUID playerId = player.getUUID();
+        INSTANCE.clearDestinySession(playerId);
+        INSTANCE.activeDestinySessions.add(playerId);
         Network.sendToPlayer(new OpenDestinyGuiRequest(player), player);
+    }
+
+    public boolean hasActiveDestinySession(ServerPlayer player) {
+        return player != null && activeDestinySessions.contains(player.getUUID());
+    }
+
+    public boolean hasPendingDestinyTeleport(ServerPlayer player) {
+        return player != null && pendingDestinyTeleports.contains(player.getUUID());
+    }
+
+    public boolean beginDestinyTeleport(UUID playerId) {
+        if (!activeDestinySessions.remove(playerId)) {
+            return false;
+        }
+        pendingDestinyTeleports.add(playerId);
+        return true;
+    }
+
+    public boolean consumePendingDestinyTeleport(UUID playerId) {
+        return pendingDestinyTeleports.remove(playerId);
+    }
+
+    public boolean closeDestinyUi(UUID playerId) {
+        return activeDestinySessions.remove(playerId);
+    }
+
+    public void clearDestinySession(UUID playerId) {
+        activeDestinySessions.remove(playerId);
+        pendingDestinyTeleports.remove(playerId);
+        MinecraftServer server = MCA.getServer().orElse(null);
+        if (server != null && !server.isSameThread()) {
+            server.execute(() -> clearDestinySession(playerId));
+            return;
+        }
+        if (server != null) {
+            AsyncStructureLocator locator = MCA.getStructureLocator();
+            if (locator != null) {
+                locator.cancel(playerId);
+            }
+        }
     }
 
     public void tick() {
@@ -56,8 +106,29 @@ public class ServerInteractionManager {
     }
 
     public void onPlayerJoin(ServerPlayer player) {
+        if (VillageManager.get(player.serverLevel()).hasUnreadableSavedData()) {
+            player.sendSystemMessage(Component.translatableWithFallback("mca.error.village_data_unreadable",
+                    "MCA could not load village data in this dimension. Village changes cannot be saved. Stop playing and restore a backup or check the server log.")
+                    .withStyle(ChatFormatting.RED));
+            if (player.getServer().getPlayerList().isOp(player.getGameProfile())) {
+                player.sendSystemMessage(Component.literal(
+                        "MCA village save file (relative to the server world save folder): "
+                                + VillageManager.getRelativeSavePath(player.serverLevel()))
+                        .withStyle(ChatFormatting.RED));
+            }
+        }
         PlayerSaveData playerData = PlayerSaveData.get(player);
-        if (!playerData.isEntityDataSet()) {
+        if (playerData.hasUnreadableSavedData()) {
+            player.sendSystemMessage(Component.translatableWithFallback("mca.error.player_data_unreadable",
+                    "MCA could not load your player data. Player changes cannot be saved. Stop playing and restore a backup or check the server log.")
+                    .withStyle(ChatFormatting.RED));
+            if (player.getServer().getPlayerList().isOp(player.getGameProfile())) {
+                player.sendSystemMessage(Component.literal(
+                        "MCA player save file (relative to the server world save folder): "
+                                + PlayerSaveData.getRelativeSavePath(player.getUUID()))
+                        .withStyle(ChatFormatting.RED));
+            }
+        } else if (!playerData.isEntityDataSet()) {
             if (Config.SERVER.launchIntoDestiny.get()) {
                 launchDestiny(player);
 

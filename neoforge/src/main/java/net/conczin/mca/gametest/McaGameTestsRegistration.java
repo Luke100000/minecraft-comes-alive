@@ -4,32 +4,56 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.block.TombstoneBlockGameTests;
 import net.conczin.mca.entity.VillagerBedAlignmentGameTests;
 import net.conczin.mca.entity.VillagerCarryPositionGameTests;
+import net.conczin.mca.entity.VillageDefenseGameTests;
 import net.conczin.mca.entity.VillagerChildSuffocationGameTests;
+import net.conczin.mca.entity.VillagerNbtSummonAppearanceGameTests;
+import net.conczin.mca.entity.VillagerInitializationGameTests;
 import net.conczin.mca.entity.VillagerVoicePitchGameTests;
+import net.conczin.mca.entity.VillagerEquipmentOwnershipGameTests;
+import net.conczin.mca.entity.ai.ProcreationInventoryGameTests;
+import net.conczin.mca.entity.ai.BedOccupancyLifecycleGameTests;
+import net.conczin.mca.entity.ai.BedPoiCompatibilityGameTests;
 import net.conczin.mca.entity.ai.ResidencyGoHomeGameTests;
 import net.conczin.mca.entity.ai.ResidencySetHomeGameTests;
 import net.conczin.mca.entity.ai.brain.ForcedHomeOccupiedBedGameTests;
 import net.conczin.mca.entity.ai.brain.sensor.GuardEnemiesSensorGameTests;
+import net.conczin.mca.entity.ai.brain.sensor.CreeperSafetyGameTests;
+import net.conczin.mca.entity.ai.brain.sensor.SleepingVillagerSensorGameTests;
 import net.conczin.mca.entity.ai.brain.sensor.VillagerMCABabiesSensorGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.ArcherArrowFriendlyFireGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.ArcherBowTrajectoryGameTests;
+import net.conczin.mca.entity.ai.brain.tasks.ArcherTerrainCombatGameTests;
+import net.conczin.mca.entity.ai.brain.tasks.ArcherCombatStabilityGameTests;
+import net.conczin.mca.entity.ai.brain.tasks.ArcherLiveRegressionGameTests;
+import net.conczin.mca.entity.ai.brain.tasks.ArcherRetreatSafetyGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.ArcherCombatMovementGameTests;
+import net.conczin.mca.entity.ai.brain.tasks.ArcherCombatPolicyGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.ArcherSpiderCombatGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.DoorInteractionGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.EnterBuildingGameTests;
+import net.conczin.mca.entity.ai.brain.tasks.EnterBuildingRetryGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.GuardEquipmentGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.HomelessShelterGameTests;
+import net.conczin.mca.entity.ai.brain.tasks.ShelterLookupGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.ShelterDistributionGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.ExtendedFindPointOfInterestTaskGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.ExtendedWalkTowardsTaskGameTests;
+import net.conczin.mca.entity.ai.brain.tasks.FollowTaskGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.ValidateNearbyPoiGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.WanderOrTeleportToTargetTaskGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.chore.AbstractChoreTaskGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.chore.ChoppingTaskGameTests;
+import net.conczin.mca.entity.ai.brain.tasks.chore.ChoreCombatHandoffGameTests;
+import net.conczin.mca.entity.ai.brain.tasks.chore.ChoreReviewRegressionGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.chore.ChorePathfindingGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.chore.FishingTaskGameTests;
+import net.conczin.mca.entity.ai.brain.tasks.chore.FishingSiteGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.chore.HarvestingTaskGameTests;
+import net.conczin.mca.entity.ai.brain.tasks.chore.HuntingTaskGameTests;
 import net.conczin.mca.entity.ai.navigation.AutonomousPathfindingGameTests;
+import net.conczin.mca.entity.ai.navigation.CaveVineNavigationGameTests;
+import net.conczin.mca.entity.ai.navigation.CampfireNavigationGameTests;
+import net.conczin.mca.entity.ai.navigation.HollowBlockNavigationGameTests;
 import net.conczin.mca.entity.ai.navigation.FenceGateInteractionGameTests;
 import net.conczin.mca.entity.ai.navigation.HomeArrivalGameTests;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigationGameTests;
@@ -37,12 +61,26 @@ import net.conczin.mca.entity.ai.navigation.MCAWalkNodeEvaluatorLookupGameTests;
 import net.conczin.mca.entity.ai.navigation.McaSparkFullBrainProfileGameTests;
 import net.conczin.mca.entity.ai.navigation.McaSparkPathProfileGameTests;
 import net.conczin.mca.entity.ai.navigation.NavigationRecoveryGameTests;
+import net.conczin.mca.entity.ai.navigation.NavigationOutcomeGameTests;
 import net.conczin.mca.entity.ai.navigation.NavigationPhysicalSafetyGameTests;
 import net.conczin.mca.entity.ai.navigation.PathRetryLifecycleGameTests;
 import net.conczin.mca.entity.ai.navigation.StairWallPathfindingGameTests;
+import net.conczin.mca.entity.ai.navigation.StairDoorNavigationGameTests;
+import net.conczin.mca.entity.ai.navigation.StairSteppingGameTests;
+import net.conczin.mca.entity.ai.navigation.PathUpdateGameTests;
+import net.conczin.mca.network.BabyNamingValidationGameTests;
+import net.conczin.mca.network.EditorAuthorizationGameTests;
+import net.conczin.mca.network.WhistleAuthorizationGameTests;
 import net.conczin.mca.server.DestinyLocationResolverGameTests;
+import net.conczin.mca.server.command.AdminCooldownGameTests;
 import net.conczin.mca.server.world.data.CopiedOpenHouseGameTests;
 import net.conczin.mca.server.world.data.FloorScannerGameTests;
+import net.conczin.mca.server.world.data.FloorBatchRefreshGameTests;
+import net.conczin.mca.server.world.data.IndoorRoomCacheGameTests;
+import net.conczin.mca.server.world.data.MourningFailureGameTests;
+import net.conczin.mca.server.world.data.PlayerSaveDataDimensionGameTests;
+import net.conczin.mca.server.world.data.PlayerSaveDataSafetyGameTests;
+import net.conczin.mca.server.world.data.SavedDataDiskRecoveryGameTests;
 import net.conczin.mca.server.world.data.ReportedFloorInteractionGameTests;
 import net.conczin.mca.server.world.data.ReportedStairHouseGameTests;
 import net.conczin.mca.server.world.data.TaigaFloorPerformanceGameTests;
@@ -66,49 +104,87 @@ public final class McaGameTestsRegistration {
             TombstoneBlockGameTests.class,
             VillagerBedAlignmentGameTests.class,
             VillagerCarryPositionGameTests.class,
+            VillageDefenseGameTests.class,
             VillagerChildSuffocationGameTests.class,
+            VillagerNbtSummonAppearanceGameTests.class,
+            VillagerInitializationGameTests.class,
             VillagerVoicePitchGameTests.class,
+            VillagerEquipmentOwnershipGameTests.class,
+            ProcreationInventoryGameTests.class,
+            BedOccupancyLifecycleGameTests.class,
+            BedPoiCompatibilityGameTests.class,
             ResidencyGoHomeGameTests.class,
             ResidencySetHomeGameTests.class,
             ForcedHomeOccupiedBedGameTests.class,
             GuardEnemiesSensorGameTests.class,
+            CreeperSafetyGameTests.class,
+            SleepingVillagerSensorGameTests.class,
             VillagerMCABabiesSensorGameTests.class,
             ArcherArrowFriendlyFireGameTests.class,
             ArcherBowTrajectoryGameTests.class,
+            ArcherTerrainCombatGameTests.class,
+            ArcherCombatStabilityGameTests.class,
+            ArcherLiveRegressionGameTests.class,
+            ArcherRetreatSafetyGameTests.class,
             ArcherCombatMovementGameTests.class,
+            ArcherCombatPolicyGameTests.class,
             ArcherSpiderCombatGameTests.class,
             DoorInteractionGameTests.class,
             EnterBuildingGameTests.class,
+            EnterBuildingRetryGameTests.class,
             GuardEquipmentGameTests.class,
             HomelessShelterGameTests.class,
+            ShelterLookupGameTests.class,
             ShelterDistributionGameTests.class,
             ExtendedFindPointOfInterestTaskGameTests.class,
             ExtendedWalkTowardsTaskGameTests.class,
+            FollowTaskGameTests.class,
             ValidateNearbyPoiGameTests.class,
             WanderOrTeleportToTargetTaskGameTests.class,
             AbstractChoreTaskGameTests.class,
             ChoppingTaskGameTests.class,
+            ChoreCombatHandoffGameTests.class,
+            ChoreReviewRegressionGameTests.class,
             ChorePathfindingGameTests.class,
             FishingTaskGameTests.class,
+            FishingSiteGameTests.class,
             HarvestingTaskGameTests.class,
+            HuntingTaskGameTests.class,
             AutonomousPathfindingGameTests.class,
+            CaveVineNavigationGameTests.class,
+            CampfireNavigationGameTests.class,
+            HollowBlockNavigationGameTests.class,
             FenceGateInteractionGameTests.class,
             HomeArrivalGameTests.class,
             MCAGroundPathNavigationGameTests.class,
+            PathUpdateGameTests.class,
             MCAWalkNodeEvaluatorLookupGameTests.class,
             McaSparkFullBrainProfileGameTests.class,
             McaSparkPathProfileGameTests.class,
             NavigationRecoveryGameTests.class,
+            NavigationOutcomeGameTests.class,
             NavigationPhysicalSafetyGameTests.class,
             PathRetryLifecycleGameTests.class,
             StairWallPathfindingGameTests.class,
+            StairDoorNavigationGameTests.class,
+            StairSteppingGameTests.class,
+            BabyNamingValidationGameTests.class,
+            EditorAuthorizationGameTests.class,
+            WhistleAuthorizationGameTests.class,
             DestinyLocationResolverGameTests.class,
+            AdminCooldownGameTests.class,
             CopiedOpenHouseGameTests.class,
             FloorScannerGameTests.class,
+            FloorBatchRefreshGameTests.class,
+            IndoorRoomCacheGameTests.class,
             ReportedFloorInteractionGameTests.class,
             ReportedStairHouseGameTests.class,
             TaigaFloorPerformanceGameTests.class,
-            VillageMourningGameTests.class
+            VillageMourningGameTests.class,
+            MourningFailureGameTests.class,
+            PlayerSaveDataDimensionGameTests.class,
+            PlayerSaveDataSafetyGameTests.class,
+            SavedDataDiskRecoveryGameTests.class
     );
 
     private McaGameTestsRegistration() {

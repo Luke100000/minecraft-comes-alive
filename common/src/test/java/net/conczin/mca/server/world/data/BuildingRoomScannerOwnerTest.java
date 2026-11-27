@@ -9,9 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class BuildingRoomScannerOwnerTest {
     @Test
@@ -50,20 +48,14 @@ class BuildingRoomScannerOwnerTest {
         var right = component(Set.of(cell(2, 64, 0), cell(2, 64, 1),
                 cell(2, 64, 2), cell(2, 64, 3)));
         List<RoomPartitioner.Component> components = List.of(left, right);
-        BlockPos source = new BlockPos(0, 64, 0);
-        List<BuildingRoomScanner.Result> rooms = List.of(
-                BuildingRoomScanner.materialize(source, 100, components, left),
-                BuildingRoomScanner.materialize(source, 100, components, right));
+        RoomPoiEvidence.Index index = RoomPoiEvidence.index(components);
 
-        assertEquals(2, rooms.size());
-        assertEquals(Building.validationResult.SUCCESS, rooms.get(0).status());
-        assertEquals(Building.validationResult.SUCCESS, rooms.get(1).status());
-        Set<BlockPos> leftPoi = visitedPoiCells(rooms.get(0));
-        Set<BlockPos> rightPoi = visitedPoiCells(rooms.get(1));
+        Set<BlockPos> leftPoi = visitedPoiCells(index, left);
+        Set<BlockPos> rightPoi = visitedPoiCells(index, right);
         assertTrue(leftPoi.contains(new BlockPos(1, 65, 0)));
         assertFalse(rightPoi.contains(new BlockPos(1, 65, 0)));
-        assertEquals(RoomPoiEvidence.candidates(List.of(left, right), left), leftPoi);
-        assertEquals(RoomPoiEvidence.candidates(List.of(left, right), right), rightPoi);
+        assertEquals(RoomPoiEvidence.candidates(components, left), leftPoi);
+        assertEquals(RoomPoiEvidence.candidates(components, right), rightPoi);
     }
 
     @Test
@@ -140,9 +132,10 @@ class BuildingRoomScannerOwnerTest {
         return new FloorGeometry.Cell(new BlockPos(x, y, z), y + 4);
     }
 
-    private static Set<BlockPos> visitedPoiCells(BuildingRoomScanner.Result result) {
+    private static Set<BlockPos> visitedPoiCells(RoomPoiEvidence.Index index,
+                                                  RoomPartitioner.Component component) {
         Set<BlockPos> cells = new HashSet<>();
-        result.visitPoiCells(pos -> cells.add(pos.immutable()));
+        index.forEachCandidate(component, pos -> cells.add(pos.immutable()));
         return cells;
     }
 

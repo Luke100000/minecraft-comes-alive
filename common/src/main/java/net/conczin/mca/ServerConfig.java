@@ -51,6 +51,8 @@ public final class ServerConfig {
     public final ConfigValue<Boolean> villagerRestockNotification;
     public final ConfigValue<Boolean> showNotificationsAsChat;
     public final ConfigValue<Boolean> giveAdvancementBooks;
+    public final ConfigValue<Double> immersiveMelodiesChance;
+    public final ConfigValue<String> immersiveMelodiesNamespace;
     public final ConfigValue<Integer> heartsToBeConsideredAsFriend;
     public final ConfigValue<Boolean> enableVillagerMailingPlayers;
     public final ConfigValue<Boolean> enableGenderCheckForPlayers;
@@ -499,6 +501,16 @@ public final class ServerConfig {
                 .translation("mca.configuration.allowAnyNightOwl")
                 .worldRestart()
                 .define("allowAnyNightOwl", false);
+        immersiveMelodiesChance = builder
+
+                .comment("Chance (0-1) that a villager plays Immersive Melodies during a socializing attempt. Set to 0 to disable it.")
+                .translation("mca.configuration.immersiveMelodiesChance")
+                .defineInRange("immersiveMelodiesChance", 0.05, 0.0, 1.0);
+        immersiveMelodiesNamespace = builder
+
+                .comment("Namespace of Immersive Melodies songs villagers may play. Use * to allow all server-known melodies.")
+                .translation("mca.configuration.immersiveMelodiesNamespace")
+                .define("immersiveMelodiesNamespace", "*");
         heartsForPardonHit = builder
 
                 .comment("For every X hearts, players may hit a villager once without guards attacking them.")
@@ -642,6 +654,7 @@ public final class ServerConfig {
                 )), () -> "", Config::isProfessionConversionEntry);
         defaultMapsVersion = builder
                 .comment("Internal migration version for upstream profession conversion defaults.")
+                .translation("mca.configuration.professionConversionDefaultsVersion")
                 .defineInRange("defaultMapsVersion", 0, 0, 1);
         builder.pop();
 

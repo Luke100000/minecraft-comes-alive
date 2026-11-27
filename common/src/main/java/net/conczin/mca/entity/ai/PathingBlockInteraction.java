@@ -1,7 +1,5 @@
 package net.conczin.mca.entity.ai;
 
-import java.lang.reflect.Method;
-
 import net.conczin.mca.Config;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -22,6 +20,8 @@ import net.minecraft.world.level.block.state.properties.BlockSetType;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.gameevent.GameEvent;
 import org.jetbrains.annotations.Nullable;
+
+import java.lang.reflect.Method;
 
 /**
  * Shared contract for blocks MCA navigation may expect villagers to operate.
@@ -56,6 +56,16 @@ public final class PathingBlockInteraction {
     public static boolean isHandOpenableTrapDoor(BlockState state) {
         return state.getBlock() instanceof TrapDoorBlock trapDoor
                 && trapDoor.getType().canOpenByHand();
+    }
+
+    /** An upright panel is a doorway only while crossing its own path node, along its blocking axis. */
+    public static boolean canFoldUprightTrapdoor(BlockState state, BlockPos node, @Nullable BlockPos adjacent) {
+        if (!isHandOpenableTrapDoor(state) || !state.getValue(TrapDoorBlock.OPEN)
+                || adjacent == null || adjacent.getY() != node.getY()) return false;
+        int dx = Math.abs(node.getX() - adjacent.getX());
+        int dz = Math.abs(node.getZ() - adjacent.getZ());
+        return dx + dz == 1 && state.getValue(TrapDoorBlock.FACING).getAxis()
+                == (dx == 1 ? Direction.Axis.X : Direction.Axis.Z);
     }
 
     public static boolean isFenceGate(BlockState state) {
@@ -102,6 +112,11 @@ public final class PathingBlockInteraction {
         if (movementAxis == null) {
             return true;
         }
+        if (isHandOpenableTrapDoor(state)) {
+            // An open trapdoor stands upright. Across its facing axis the panel
+            // blocks a doorway, so the villager must fold it down to walk past.
+            return state.getValue(TrapDoorBlock.FACING).getAxis() != movementAxis;
+        }
         if (state.getBlock() instanceof DoorBlock) {
             return state.getValue(DoorBlock.FACING).getAxis() == movementAxis;
         }
@@ -109,6 +124,16 @@ public final class PathingBlockInteraction {
             return state.getValue(BlockStateProperties.HORIZONTAL_FACING).getAxis() == movementAxis;
         }
         return true;
+    }
+
+    public static boolean shouldBeOpenForMovement(BlockState state, BlockPos node, @Nullable BlockPos adjacent) {
+        Direction.Axis axis = null;
+        if (adjacent != null && adjacent.getY() == node.getY()) {
+            boolean changesX = adjacent.getX() != node.getX();
+            boolean changesZ = adjacent.getZ() != node.getZ();
+            if (changesX != changesZ) axis = changesX ? Direction.Axis.X : Direction.Axis.Z;
+        }
+        return shouldBeOpenForMovement(state, axis);
     }
 
     public static boolean setOpen(@Nullable Entity entity, Level level, BlockState state, BlockPos pos, boolean open) {

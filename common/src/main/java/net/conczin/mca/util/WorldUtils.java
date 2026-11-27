@@ -18,13 +18,19 @@ import net.minecraft.world.level.ServerLevelAccessor;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.storage.DimensionDataStorage;
+
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 public interface WorldUtils {
     static List<Entity> getCloseEntities(Level world, Entity e, double range) {
@@ -51,10 +57,32 @@ public interface WorldUtils {
                 dataId);
     }
 
-    @SuppressWarnings("deprecation")
+    @SuppressWarnings("DataFlowIssue")
+    static <T extends SavedData> T loadDataSafely(
+            DimensionDataStorage storage,
+            Path dataFolder,
+            String dataId,
+            Supplier<T> emptyFactory,
+            BiFunction<CompoundTag, HolderLookup.Provider, T> loader,
+            Consumer<T> markUnreadable
+    ) {
+        return storage.computeIfAbsent(new SavedData.Factory<>(() -> {
+            T data = emptyFactory.get();
+            if (Files.exists(dataFolder.resolve(dataId + ".dat"))) {
+                markUnreadable.accept(data);
+            }
+            return data;
+        }, loader, null), dataId);
+    }
+
     static void spawnEntity(Level world, Mob entity, MobSpawnType reason) {
+        trySpawnEntity(world, entity, reason);
+    }
+
+    @SuppressWarnings("deprecation")
+    static boolean trySpawnEntity(Level world, Mob entity, MobSpawnType reason) {
         entity.finalizeSpawn((ServerLevelAccessor) world, world.getCurrentDifficultyAt(entity.blockPosition()), reason, null);
-        world.addFreshEntity(entity);
+        return world.addFreshEntity(entity);
     }
 
     //a wrapper for the unnecessary complex query provided by minecraft

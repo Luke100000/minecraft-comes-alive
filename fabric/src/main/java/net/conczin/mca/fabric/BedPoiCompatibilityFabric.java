@@ -4,6 +4,7 @@ import net.conczin.mca.entity.ai.BedPoiCompatibility;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.entity.ai.village.poi.PoiType;
 import net.minecraft.world.entity.ai.village.poi.PoiTypes;
 import net.minecraft.world.level.block.state.BlockState;
@@ -17,17 +18,16 @@ final class BedPoiCompatibilityFabric {
     }
 
     static void init() {
-        ServerLifecycleEvents.SERVER_STARTING.register(server -> {
-            Holder.Reference<PoiType> home = BuiltInRegistries.POINT_OF_INTEREST_TYPE
-                    .getHolder(PoiTypes.HOME)
-                    .orElseThrow();
-            Set<BlockState> unregisteredStates = BedPoiCompatibility.unregisteredModdedHomeStates();
+        ServerLifecycleEvents.SERVER_STARTING.register(server ->
+                BedPoiCompatibility.registerMissingHomePois(BedPoiCompatibilityFabric::registerPoiStates));
+    }
 
-            PoiTypes.registerBlockStates(home, unregisteredStates);
+    private static void registerPoiStates(ResourceKey<PoiType> typeKey, Set<BlockState> states) {
+        Holder.Reference<PoiType> type = BuiltInRegistries.POINT_OF_INTEREST_TYPE.getHolder(typeKey).orElseThrow();
+        PoiTypes.registerBlockStates(type, states);
 
-            Set<BlockState> matchingStates = new HashSet<>(home.value().matchingStates());
-            matchingStates.addAll(unregisteredStates);
-            home.value().matchingStates = Set.copyOf(matchingStates);
-        });
+        Set<BlockState> matchingStates = new HashSet<>(type.value().matchingStates());
+        matchingStates.addAll(states);
+        type.value().matchingStates = Set.copyOf(matchingStates);
     }
 }

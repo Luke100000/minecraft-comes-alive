@@ -19,17 +19,14 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.npc.VillagerProfession;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
+import java.text.Normalizer;
+import java.util.*;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 public final class FamilyTreeNode {
+    private static final Pattern COMBINING_MARKS = Pattern.compile("\\p{M}");
     public static final StreamCodec<ByteBuf, FamilyTreeNode> STREAM_CODEC = StreamCodec.of(
             (out, value) -> {
                 ByteBufCodecs.COMPOUND_TAG.encode(out, value.save());
@@ -50,6 +47,8 @@ public final class FamilyTreeNode {
     private UUID partner = Util.NIL_UUID;
     private RelationshipState relationshipState = RelationshipState.SINGLE;
     private boolean deceased;
+    @Nullable
+    private transient String normalizedSearchName;
 
     public FamilyTreeNode(FamilyTree rootNode, UUID id, String name, boolean isPlayer, Gender gender, UUID father, UUID mother) {
         this.rootNode = rootNode;
@@ -96,8 +95,14 @@ public final class FamilyTreeNode {
         copy.partner = source.partner;
         copy.relationshipState = source.relationshipState;
         copy.deceased = source.deceased;
+        copy.normalizedSearchName = source.normalizedSearchName;
         copy.children.addAll(children);
         return copy;
+    }
+
+    /** A standalone snapshot that does not share mutable family relationships with its source. */
+    public FamilyTreeNode detachedCopy() {
+        return detachedCopy(this, children);
     }
 
     public static boolean isValid(@Nullable UUID uuid) {
@@ -199,7 +204,26 @@ public final class FamilyTreeNode {
 
     public void setName(String name) {
         this.name = name;
+        this.normalizedSearchName = null;
         markDirty();
+    }
+
+    public String normalizedSearchName() {
+        String cached = normalizedSearchName;
+        if (cached == null) {
+            cached = normalizeSearchName(name);
+            normalizedSearchName = cached;
+        }
+        return cached;
+    }
+
+    static String normalizeSearchName(@Nullable String value) {
+        if (value == null || value.isEmpty()) {
+            return "";
+        }
+        String normalized = Normalizer.normalize(value, Normalizer.Form.NFD);
+        return COMBINING_MARKS.matcher(normalized).replaceAll("")
+                .toLowerCase(Locale.ROOT);
     }
 
     public VillagerProfession getProfession() {
@@ -212,14 +236,16 @@ public final class FamilyTreeNode {
     }
 
     public ResourceLocation getProfessionId() {
-        return ResourceLocation.tryParse(profession);
+        ResourceLocation id = ResourceLocation.tryParse(profession);
+        return id != null ? id : BuiltInRegistries.VILLAGER_PROFESSION.getKey(VillagerProfession.NONE);
     }
 
     public String getProfessionName() {
+        ResourceLocation id = getProfessionId();
         String professionName = (
-                getProfessionId().getNamespace().equalsIgnoreCase("minecraft") ?
-                        (getProfessionId().getPath().equals("none") ? "mca.none" : getProfessionId().getPath()) :
-                        getProfessionId().toString()
+                id.getNamespace().equalsIgnoreCase("minecraft") ?
+                        (id.getPath().equals("none") ? "mca.none" : id.getPath()) :
+                        id.toString()
         ).replace(":", ".");
 
         return MCA.isBlankString(professionName) ? "mca.none" : professionName;

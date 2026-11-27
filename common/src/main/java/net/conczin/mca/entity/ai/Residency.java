@@ -1,10 +1,12 @@
 package net.conczin.mca.entity.ai;
 
-import net.conczin.mca.MCA;
 import net.conczin.mca.Config;
+import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.conczin.mca.entity.ai.brain.tasks.ExtendedWalkTowardsTask;
 import net.conczin.mca.entity.ai.navigation.BedApproachTarget;
+import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
 import net.conczin.mca.server.world.data.GraveyardManager;
 import net.conczin.mca.server.world.data.Village;
 import net.conczin.mca.server.world.data.VillageManager;
@@ -22,9 +24,9 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.village.poi.PoiManager;
 import net.minecraft.world.entity.ai.village.poi.PoiType;
 import net.minecraft.world.entity.ai.village.poi.PoiTypes;
+import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.entity.npc.VillagerProfession;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.pathfinder.Path;
 
 import java.util.Comparator;
@@ -39,7 +41,6 @@ public class Residency {
     private static final CDataParameter<Integer> VILLAGE = CParameter.create("HomeVillage", -1);
     private static final int WORKPLACE_SEARCH_RADIUS = 8;
     private final VillagerEntityMCA entity;
-    private final BedDebugLog bedDebugLog = new BedDebugLog();
 
     public Residency(VillagerEntityMCA entity) {
         this.entity = entity;
@@ -167,6 +168,7 @@ public class Residency {
     private void reconcileVillageMembership(boolean authoritativeHomeClaim) {
         if (entity.requiresHome()) {
             VillageManager manager = VillageManager.get((ServerLevel) entity.level());
+            if (manager.hasUnreadableSavedData()) return;
             Optional<Village> current = getHomeVillage();
             Optional<Village> target = getHome()
                     .filter(home -> home.dimension() == entity.level().dimension())
@@ -197,10 +199,8 @@ public class Residency {
         if (!entity.getBrain().isMemoryValue(MemoryModuleType.HOME, invalidHome)) {
             return;
         }
-        if (ExtendedWalkTowardsTask.clearOwnedWalkTarget(entity, MemoryModuleType.HOME)) {
-            entity.getNavigation().stop();
-            entity.getBrain().eraseMemory(MemoryModuleType.PATH);
-        }
+        ExtendedWalkTowardsTask.retractOwnedMovement(entity, MemoryModuleType.HOME);
+        WalkTargetFailureMemory.clearForProducer(entity, MemoryModuleType.HOME, invalidHome);
         entity.getBrain().eraseMemory(MemoryModuleType.HOME);
         entity.getBrain().eraseMemory(MemoryModuleTypeMCA.FORCED_HOME);
         if (invalidHome.dimension() == entity.level().dimension()
@@ -213,12 +213,13 @@ public class Residency {
      * Removes MCA village membership without changing HOME or its POI ticket.
      */
     public void leaveVillage() {
+        if (VillageManager.get((ServerLevel) entity.level()).hasUnreadableSavedData()) return;
         getHomeVillage().ifPresent(village -> village.removeResident(entity));
         entity.setTrackedValue(VILLAGE, -1);
     }
 
     public void tick() {
-        bedDebugLog.tick(entity);
+        if (VillageManager.get((ServerLevel) entity.level()).hasUnreadableSavedData()) return;
         //report buildings close by
         if (entity.requiresHome() && (entity.tickCount == 1 || entity.tickCount % 600 == 0)) {
             Optional<Village> village = getHomeVillage();
@@ -270,6 +271,7 @@ public class Residency {
     }
 
     public void setHome(ServerPlayer player) {
+        if (VillageManager.get((ServerLevel) entity.level()).hasUnreadableSavedData()) return;
         if (!entity.requiresHome()) {
             entity.sendChatMessage(player, "interaction.sethome.temporary");
             return;
@@ -284,8 +286,8 @@ public class Residency {
                     ? "interaction.sethome.already_assigned"
                     : "interaction.sethome.success");
         } else {
-            getHomeVillage().map(v -> v.getBuildingAt(entity.blockPosition())).filter(Optional::isPresent).map(Optional::get).filter(b -> b.getBuildingType().noBeds()).ifPresentOrElse(building -> {
-                entity.sendChatMessage(player, "interaction.sethome.bedfail." + building.getBuildingType().name());
+            getHomeVillage().flatMap(v -> v.getBuildingAt(entity.blockPosition()).map(v::getEffectiveBuildingType)).filter(bt -> bt.noBeds()).ifPresentOrElse(buildingType -> {
+                entity.sendChatMessage(player, "interaction.sethome.bedfail." + buildingType.name());
             }, () -> {
                 entity.sendChatMessage(player, "interaction.sethome.bedfail");
             });
@@ -366,9 +368,23 @@ public class Residency {
 
     /** Unlike the memory-based check, this also works after vanilla erased HOME. */
     public boolean mayReleaseHomePoiAt(ServerLevel level, BlockPos position) {
-        return VillageManager.get(level).findNearestVillage(position, Village.BORDER_MARGIN)
-                .map(village -> village.ownsResidentHome(entity.getUUID(), position))
-                .orElse(true);
+        VillageManager manager = VillageManager.get(level);
+        Optional<Village> village = manager.findNearestVillage(position, Village.BORDER_MARGIN);
+        if (village.isPresent()) {
+            return village.get().ownsResidentHome(entity.getUUID(), position);
+        }
+
+        // Outside registered MCA villages, POI tickets have no entity identity. A competing
+        // villager remembering this HOME means we cannot safely release its anonymous ticket.
+        for (Villager villager : manager.getLoadedVillagers()) {
+            if (villager != entity
+                    && villager.getBrain().getMemoryInternal(MemoryModuleType.HOME)
+                    .filter(home -> home.dimension().equals(level.dimension()) && home.pos().equals(position))
+                    .isPresent()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private boolean canReachBed(ServerLevel level, BlockPos home) {
@@ -377,7 +393,7 @@ public class Residency {
                     if (target.isReached(entity, 0)) {
                         return true;
                     }
-                    Path path = entity.getNavigation().createPath(target.getPathTargets(entity), 0);
+                    Path path = MCAGroundPathNavigation.probePath(entity.getNavigation(), target.getPathTargets(entity), 0);
                     return path != null && path.canReach();
                 })
                 .orElse(false);

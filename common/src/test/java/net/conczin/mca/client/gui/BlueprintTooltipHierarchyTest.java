@@ -3,12 +3,7 @@ package net.conczin.mca.client.gui;
 import com.google.gson.JsonObject;
 import net.conczin.mca.resources.BuildingTypes;
 import net.conczin.mca.resources.data.BuildingType;
-import net.conczin.mca.server.world.data.Building;
-import net.conczin.mca.server.world.data.TestFloorFootprint;
-import net.conczin.mca.server.world.data.RoomTypeResolver;
-import net.conczin.mca.server.world.data.Structure;
-import net.conczin.mca.server.world.data.StructureFloor;
-import net.conczin.mca.server.world.data.Village;
+import net.conczin.mca.server.world.data.*;
 import net.minecraft.SharedConstants;
 import net.minecraft.core.BlockPos;
 import net.minecraft.locale.Language;
@@ -28,9 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class BlueprintTooltipHierarchyTest {
     private Map<String, BuildingType> previousBuildingTypes;

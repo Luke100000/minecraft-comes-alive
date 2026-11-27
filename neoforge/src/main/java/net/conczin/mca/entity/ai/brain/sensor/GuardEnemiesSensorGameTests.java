@@ -4,8 +4,12 @@ import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
+import net.conczin.mca.entity.ai.SchedulesMCA;
 import net.conczin.mca.registry.ProfessionsMCA;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.core.GlobalPos;
+import net.minecraft.gametest.framework.AfterBatch;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.entity.Entity;
@@ -13,10 +17,17 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.ai.village.poi.PoiTypes;
+import net.minecraft.world.entity.schedule.Activity;
 import net.minecraft.world.entity.monster.Zombie;
+import net.minecraft.world.entity.animal.Cow;
+import net.minecraft.world.entity.npc.VillagerProfession;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.BedBlock;
+import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.GameTestHolder;
@@ -32,8 +43,194 @@ import java.util.Optional;
 @PrefixGameTestTemplate(false)
 public final class GuardEnemiesSensorGameTests {
     private static final List<Entity> TEST_ENTITIES = new ArrayList<>();
+    private static final List<ChunkPos> BEDTIME_FORCED_CHUNKS = new ArrayList<>();
+    private static Long originalBedtimeDayTime;
 
     private GuardEnemiesSensorGameTests() {
+    }
+
+    @GameTest(batch = "mca_guard_bedtime_far_enemy", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 240)
+    public static void distantEnemyDoesNotKeepGuardAwakeAtBedtime(GameTestHelper helper) {
+        cleanupTestEntities();
+        var level = helper.getLevel();
+        originalBedtimeDayTime = level.getDayTime();
+        level.setDayTime(14990);
+
+        BlockPos guardPos = helper.absolutePos(new BlockPos(3, 2, 3));
+        BlockPos enemyPos = guardPos.east(24);
+        prepareClearLane(helper, guardPos, enemyPos);
+        // The air template has no floor alongside the sightline. Provide a
+        // solid approach to HOME so falling into the void is not a false failure.
+        for (BlockPos floor : BlockPos.betweenClosed(guardPos.offset(-4, -1, -5),
+                guardPos.offset(9, -1, 5))) {
+            level.setBlock(floor, Blocks.STONE.defaultBlockState(), 3);
+            level.setBlock(floor.above(), Blocks.AIR.defaultBlockState(), 3);
+            level.setBlock(floor.above(2), Blocks.AIR.defaultBlockState(), 3);
+        }
+        // Test bedtime selection, not long-distance pathfinding: HOME is beside the guard.
+        BlockPos foot = guardPos.north();
+        BlockPos head = foot.east();
+        level.setBlock(foot.below(), Blocks.STONE.defaultBlockState(), 3);
+        level.setBlock(head.below(), Blocks.STONE.defaultBlockState(), 3);
+        var bed = Blocks.WHITE_BED.defaultBlockState()
+                .setValue(BedBlock.FACING, Direction.EAST)
+                .setValue(BedBlock.PART, BedPart.FOOT);
+        level.setBlock(foot, bed, 3);
+        level.setBlock(head, bed.setValue(BedBlock.PART, BedPart.HEAD), 3);
+
+        // The one-block air template only forces its own chunk. Actor offsets
+        // can cross that boundary; getChunk alone does not enable entity ticks.
+        for (BlockPos actorPos : List.of(guardPos, enemyPos, foot, head)) {
+            ChunkPos chunk = new ChunkPos(actorPos);
+            if (!level.getForcedChunks().contains(chunk.toLong())) {
+                BEDTIME_FORCED_CHUNKS.add(chunk);
+                level.setChunkForced(chunk.x, chunk.z, true);
+            }
+            level.getChunk(actorPos);
+        }
+        VillagerEntityMCA guard = VillagerFactory.newVillager(level)
+                .withAge(0)
+                .withProfession(ProfessionsMCA.GUARD)
+                .withPosition(Vec3.atBottomCenterOf(guardPos))
+                .withName("Guard Bedtime Combat Probe")
+                .spawn(MobSpawnType.STRUCTURE);
+        TEST_ENTITIES.add(guard);
+        helper.assertTrue(level.getEntity(guard.getId()) == guard,
+                "bedtime guard fixture was not added to the world");
+        guard.refreshBrain(level);
+        guard.getBrain().setSchedule(SchedulesMCA.GUARD);
+        guard.getBrain().updateActivityFromSchedule(level.getDayTime(), level.getGameTime());
+        helper.assertTrue(level.getPoiManager().take(poi -> poi.is(PoiTypes.HOME),
+                        (poi, pos) -> pos.equals(head), head, 1).isPresent(),
+                "fixture failed to reserve a real HOME bed");
+        guard.getBrain().setMemory(MemoryModuleType.HOME, GlobalPos.of(level.dimension(), head));
+
+        Zombie target = EntityType.ZOMBIE.create(level);
+        if (target == null) {
+            throw new IllegalStateException("failed to create distant enemy");
+        }
+        target.absMoveTo(enemyPos.getX() + 0.5D, enemyPos.getY(), enemyPos.getZ() + 0.5D);
+        target.setNoAi(true);
+        target.setTarget(guard);
+        level.addFreshEntity(target);
+        TEST_ENTITIES.add(target);
+        new GuardEnemiesSensor().doTick(level, guard);
+        helper.assertTrue(guard.getBrain().getMemory(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY)
+                        .orElse(null) == target,
+                "fixture guard failed to detect the 24-block enemy while on duty");
+        // A distant monster detected by the guard sensor is not, by itself,
+        // an ongoing fight. Do not seed ATTACK_TARGET: combat already underway
+        // is covered by the separate REST target-continuity regression.
+        guard.getBrain().eraseMemory(MemoryModuleType.ATTACK_TARGET);
+        level.setDayTime(15010);
+        // The fixture jumps the time-of-day forward by 20 ticks without
+        // advancing game time. Vanilla throttles schedule updates by 20 game
+        // ticks; simulate that elapsed interval for this controlled handoff.
+        guard.getBrain().updateActivityFromSchedule(level.getDayTime(), level.getGameTime() + 21L);
+        helper.assertTrue(guard.getBrain().isActive(Activity.REST),
+                "guard did not enter its scheduled REST activity with no attack target");
+        long started = level.getGameTime();
+        helper.onEachTick(() -> {
+            if (guard.isSleeping()) {
+                helper.assertTrue(guard.getBrain().isActive(Activity.REST),
+                        "guard fell asleep outside its REST activity");
+                helper.assertTrue(guard.getSleepingPos().filter(head::equals).isPresent(),
+                        "guard slept in a different bed");
+                helper.assertTrue(guard.getBrain().getMemory(MemoryModuleType.ATTACK_TARGET).isEmpty(),
+                        "guard kept the distant enemy while sleeping");
+                helper.succeed();
+            } else if (level.getGameTime() - started >= 180) {
+                helper.assertTrue(guard.tickCount > 0,
+                        "bedtime guard never ticked after being spawned into the world");
+                helper.fail("guard stayed awake at bedtime with a 24-block enemy: activity="
+                        + guard.getBrain().getActiveNonCoreActivity() + ", attackTarget="
+                        + guard.getBrain().getMemory(MemoryModuleType.ATTACK_TARGET)
+                        + ", daytime=" + level.getDayTime()
+                        + ", scheduled=" + guard.getBrain().getSchedule()
+                                .getActivityAt((int) (level.getDayTime() % 24000L))
+                        + ", enemyDistance=" + guard.distanceTo(target)
+                        + ", bedState=" + level.getBlockState(head)
+                        + ", entityTicks=" + guard.tickCount
+                        + ", home=" + guard.getBrain().getMemory(MemoryModuleType.HOME)
+                        + ", walk=" + guard.getBrain().getMemory(MemoryModuleType.WALK_TARGET)
+                        + ", path=" + guard.getNavigation().getPath()
+                        + ", pos=" + guard.position());
+            }
+        });
+    }
+
+    @GameTest(batch = "mca_guard_bedtime_near_enemy", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void nearbyEnemyStillKeepsGuardDefendingAtBedtime(GameTestHelper helper) {
+        cleanupTestEntities();
+        var level = helper.getLevel();
+        originalBedtimeDayTime = level.getDayTime();
+        level.setDayTime(15010);
+
+        BlockPos guardPos = helper.absolutePos(new BlockPos(3, 2, 3));
+        BlockPos enemyPos = guardPos.east(6);
+        prepareClearLane(helper, guardPos, enemyPos);
+        BlockPos foot = guardPos.north();
+        BlockPos head = foot.east();
+        level.setBlock(foot.below(), Blocks.STONE.defaultBlockState(), 3);
+        level.setBlock(head.below(), Blocks.STONE.defaultBlockState(), 3);
+        var bed = Blocks.WHITE_BED.defaultBlockState()
+                .setValue(BedBlock.FACING, Direction.EAST)
+                .setValue(BedBlock.PART, BedPart.FOOT);
+        level.setBlock(foot, bed, 3);
+        level.setBlock(head, bed.setValue(BedBlock.PART, BedPart.HEAD), 3);
+
+        VillagerEntityMCA guard = VillagerFactory.newVillager(level)
+                .withAge(0)
+                .withProfession(ProfessionsMCA.GUARD)
+                .withPosition(Vec3.atBottomCenterOf(guardPos))
+                .withName("Guard Nearby Bedtime Defense Probe")
+                .spawn(MobSpawnType.STRUCTURE);
+        TEST_ENTITIES.add(guard);
+        guard.refreshBrain(level);
+        guard.getBrain().setSchedule(SchedulesMCA.GUARD);
+        helper.assertTrue(level.getPoiManager().take(poi -> poi.is(PoiTypes.HOME),
+                        (poi, pos) -> pos.equals(head), head, 1).isPresent(),
+                "fixture failed to reserve a real HOME bed");
+        guard.getBrain().setMemory(MemoryModuleType.HOME, GlobalPos.of(level.dimension(), head));
+
+        Zombie target = EntityType.ZOMBIE.create(level);
+        if (target == null) {
+            throw new IllegalStateException("failed to create nearby enemy");
+        }
+        target.absMoveTo(enemyPos.getX() + 0.5D, enemyPos.getY(), enemyPos.getZ() + 0.5D);
+        target.setNoAi(true);
+        level.addFreshEntity(target);
+        TEST_ENTITIES.add(target);
+        guard.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, target);
+        guard.getBrain().setActiveActivityIfPossible(Activity.IDLE);
+        guard.getBrain().updateActivityFromSchedule(level.getDayTime(), level.getGameTime());
+
+        helper.runAfterDelay(10, () -> {
+            helper.assertTrue(target.isAlive() && guard.getBrain().getMemory(MemoryModuleType.ATTACK_TARGET)
+                            .orElse(null) == target,
+                    "a nearby hostile stopped being a valid attack target during REST");
+            helper.assertTrue(!guard.isSleeping(),
+                    "guard slept instead of defending against the nearby hostile");
+            helper.succeed();
+        });
+    }
+
+    @AfterBatch(batch = "mca_guard_bedtime_far_enemy")
+    public static void restoreBedtimeGameTest(net.minecraft.server.level.ServerLevel level) {
+        cleanupTestEntities();
+        BEDTIME_FORCED_CHUNKS.forEach(chunk -> level.setChunkForced(chunk.x, chunk.z, false));
+        BEDTIME_FORCED_CHUNKS.clear();
+        if (originalBedtimeDayTime != null) {
+            level.setDayTime(originalBedtimeDayTime);
+            originalBedtimeDayTime = null;
+        }
+    }
+
+    @AfterBatch(batch = "mca_guard_bedtime_near_enemy")
+    public static void restoreNearbyBedtimeGameTest(net.minecraft.server.level.ServerLevel level) {
+        restoreBedtimeGameTest(level);
     }
 
     @GameTest(batch = "mca_guard_scan_bounds", templateNamespace = "minecraft",
@@ -49,21 +246,21 @@ public final class GuardEnemiesSensorGameTests {
                 .spawn(MobSpawnType.STRUCTURE);
         Player followedPlayer = helper.makeMockPlayer(GameType.SURVIVAL);
         Method getBounds = GuardEnemiesSensor.class.getDeclaredMethod(
-                "getGuardScanBounds", VillagerEntityMCA.class, Optional.class);
+                "getGuardScanBounds", AABB.class, Optional.class);
         getBounds.setAccessible(true);
         try {
-            AABB guardOnly = guard.getBoundingBox().inflate(48.0D);
+            AABB guardOnly = guard.getBoundingBox().inflate(32.0D);
 
             followedPlayer.absMoveTo(guard.getX() + 24.0D, guard.getY(), guard.getZ());
             AABB nearbyFollowBounds = (AABB) getBounds.invoke(new GuardEnemiesSensor(),
-                    guard, Optional.of(followedPlayer));
+                    guardOnly, Optional.of(followedPlayer.getBoundingBox().inflate(32.0D)));
             helper.assertTrue(nearbyFollowBounds.equals(
-                            guardOnly.minmax(followedPlayer.getBoundingBox().inflate(48.0D))),
-                    "nearby followed players should retain both 48-block defense areas");
+                            guardOnly.minmax(followedPlayer.getBoundingBox().inflate(32.0D))),
+                    "nearby followed players should retain both 32-block defense areas");
 
             followedPlayer.absMoveTo(guard.getX() + 320.0D, guard.getY(), guard.getZ());
             AABB distantFollowBounds = (AABB) getBounds.invoke(new GuardEnemiesSensor(),
-                    guard, Optional.of(followedPlayer));
+                    guardOnly, Optional.of(followedPlayer.getBoundingBox().inflate(32.0D)));
             helper.assertTrue(distantFollowBounds.equals(guardOnly),
                     "a distant followed player must not expand the guard scan across unloaded space; bounds="
                             + distantFollowBounds);
@@ -105,13 +302,13 @@ public final class GuardEnemiesSensorGameTests {
             helper.getLevel().addFreshEntity(enemy);
             guard.getBrain().setMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING, followedPlayer);
 
-            helper.assertTrue(guard.distanceToSqr(enemy) > 48.0D * 48.0D,
-                    "fixture enemy must be outside guard's own 48-block scan");
-            helper.assertTrue(followedPlayer.distanceToSqr(enemy) < 48.0D * 48.0D,
+            helper.assertTrue(guard.distanceToSqr(enemy) > 32.0D * 32.0D,
+                    "fixture enemy must be outside guard's own 32-block scan");
+            helper.assertTrue(followedPlayer.distanceToSqr(enemy) < 32.0D * 32.0D,
                     "fixture enemy must be in followed player's defense range");
             helper.assertTrue(helper.getLevel().getEntitiesOfClass(
                             LivingEntity.class,
-                            followedPlayer.getBoundingBox().inflate(48.0D),
+                            followedPlayer.getBoundingBox().inflate(32.0D),
                             candidate -> candidate == enemy).contains(enemy),
                     "fixture enemy must be queryable in the test's loaded area");
             helper.assertTrue(guard.getSensing().hasLineOfSight(enemy),
@@ -132,7 +329,39 @@ public final class GuardEnemiesSensorGameTests {
         }
     }
 
-    @GameTest(batch = "mca_guard_enemy_range", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
+    @GameTest(batch = "mca_guard_enemy_range", templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 80)
+    public static void guardSearchStopsAtThirtyTwoBlocks(GameTestHelper helper) {
+        cleanupTestEntities();
+        try {
+            BlockPos guardPos = helper.absolutePos(new BlockPos(3, 2, 3));
+            prepareClearLane(helper, guardPos, guardPos.east(34));
+            VillagerEntityMCA guard = VillagerFactory.newVillager(helper.getLevel())
+                    .withAge(0).withProfession(ProfessionsMCA.GUARD)
+                    .withPosition(Vec3.atBottomCenterOf(guardPos)).spawn(MobSpawnType.STRUCTURE);
+            guard.setNoAi(true);
+            guard.refreshBrain(helper.getLevel());
+            TEST_ENTITIES.add(guard);
+            Zombie enemy = EntityType.ZOMBIE.create(helper.getLevel());
+            if (enemy == null) throw new IllegalStateException("No zombie for guard range regression");
+            enemy.setNoAi(true);
+            enemy.absMoveTo(guard.getX() + 32, guard.getY(), guard.getZ());
+            helper.getLevel().addFreshEntity(enemy);
+            TEST_ENTITIES.add(enemy);
+            GuardEnemiesSensor sensor = new GuardEnemiesSensor();
+            sensor.doTick(helper.getLevel(), guard);
+            helper.assertTrue(guard.getBrain().isMemoryValue(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY, enemy),
+                    "melee guard failed to acquire a visible enemy at the 32-block boundary");
+            enemy.absMoveTo(guard.getX() + 33, guard.getY(), guard.getZ());
+            sensor.doTick(helper.getLevel(), guard);
+            helper.assertTrue(guard.getBrain().getMemory(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY).isEmpty(),
+                    "melee guard acquired a new enemy beyond the 32-block boundary");
+            helper.succeed();
+        } finally {
+            cleanupTestEntities();
+        }
+    }
+
+    @GameTest(batch = "mca_guard_enemy_range", templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 80)
     public static void guardDetectsVisibleEnemyBeyondVanillaSixteenBlockScan(GameTestHelper helper) {
         cleanupTestEntities();
         try {
@@ -177,7 +406,7 @@ public final class GuardEnemiesSensorGameTests {
                     .orElse(List.of());
             boolean targetInScan = helper.getLevel().getEntitiesOfClass(
                     LivingEntity.class,
-                    guard.getBoundingBox().inflate(48.0D),
+                    guard.getBoundingBox().inflate(32.0D),
                     candidate -> candidate == target
             ).contains(target);
             boolean lineOfSight = guard.getSensing().hasLineOfSight(target);
@@ -254,6 +483,158 @@ public final class GuardEnemiesSensorGameTests {
             Config.SERVER.guardsTargetEntities.set(previousTargets);
             Config.SERVER.guardsTargetMonsters.set(previousTargetMonsters);
             cleanupTestEntities();
+        }
+    }
+
+    @GameTest(batch = "mca_noncombat_nearby_memory", templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 80)
+    public static void nonCombatVillagerNearbyMemoryRemainsBoundedAndSorted(GameTestHelper helper) {
+        var level = helper.getLevel();
+        BlockPos origin = helper.absolutePos(new BlockPos(40, 2, 40));
+        prepareClearLane(helper, origin, origin.east(24));
+        List<Entity> actors = new ArrayList<>();
+        try {
+            VillagerEntityMCA villager = VillagerFactory.newVillager(level).withAge(0)
+                    .withProfession(VillagerProfession.NONE).withPosition(Vec3.atBottomCenterOf(origin))
+                    .spawn(MobSpawnType.STRUCTURE);
+            actors.add(villager);
+            villager.setNoAi(true);
+            villager.refreshBrain(level);
+
+            Cow farther = EntityType.COW.create(level);
+            Cow closer = EntityType.COW.create(level);
+            Zombie outside = EntityType.ZOMBIE.create(level);
+            if (farther == null || closer == null || outside == null) {
+                throw new IllegalStateException("could not create noncombat scan fixture");
+            }
+            actors.add(farther);
+            actors.add(closer);
+            actors.add(outside);
+            farther.setNoAi(true);
+            closer.setNoAi(true);
+            outside.setNoAi(true);
+            farther.moveTo(villager.getX() + 8, villager.getY(), villager.getZ());
+            closer.moveTo(villager.getX() + 4, villager.getY(), villager.getZ());
+            outside.moveTo(villager.getX() + 24, villager.getY(), villager.getZ());
+            helper.assertTrue(level.addFreshEntity(farther) && level.addFreshEntity(closer)
+                            && level.addFreshEntity(outside),
+                    "noncombat scan fixture actors must be admitted");
+            helper.assertTrue(!villager.isGuard()
+                            && villager.getBrain().getMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING).isEmpty()
+                            && villager.getBrain().getMemory(MemoryModuleType.ATTACK_TARGET).isEmpty(),
+                    "fixture must use the ordinary noncombat sensor branch");
+            helper.assertTrue(farther.isAlive() && closer.isAlive() && outside.isAlive()
+                            && villager.distanceToSqr(closer) == 16.0
+                            && villager.distanceToSqr(farther) == 64.0
+                            && villager.distanceToSqr(outside) == 576.0
+                            && villager.hasLineOfSight(closer) && villager.hasLineOfSight(farther),
+                    "fixture must contain two visible nearby actors and an outside hostile");
+            villager.getBrain().setMemory(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY, outside);
+
+            new GuardEnemiesSensor().doTick(level, villager);
+            var nearby = villager.getBrain().getMemory(MemoryModuleType.NEAREST_LIVING_ENTITIES).orElseThrow();
+            var visible = villager.getBrain().getMemory(MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES).orElseThrow();
+            helper.assertTrue(nearby.stream().filter(actor -> actor == closer).count() == 1
+                            && nearby.stream().filter(actor -> actor == farther).count() == 1
+                            && nearby.indexOf(closer) < nearby.indexOf(farther),
+                    "ordinary nearby memory lost, duplicated, or misordered the two cows");
+            helper.assertTrue(visible.contains(closer) && visible.contains(farther),
+                    "ordinary visible memory lost an eligible nearby cow");
+            helper.assertTrue(!nearby.contains(outside) && !nearby.contains(villager)
+                            && !visible.contains(outside) && !visible.contains(villager),
+                    "ordinary 16-block sensor included the outside hostile or self");
+            helper.assertTrue(villager.getBrain().getMemory(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY).isEmpty(),
+                    "ordinary noncombat scan retained or acquired a guard enemy");
+            helper.succeed();
+        } finally {
+            actors.forEach(Entity::discard);
+        }
+    }
+
+    @GameTest(batch = "mca_guard_merged_followed_scan", templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 80)
+    public static void mergedFollowedPlayerScanPreservesNearbyActorsAndDefense(GameTestHelper helper) {
+        assertFollowedPlayerScan(helper, false);
+    }
+
+    @GameTest(batch = "mca_guard_overlap_followed_scan", templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 80)
+    public static void overlappingFollowedPlayerScanDoesNotDuplicateNearbyActors(GameTestHelper helper) {
+        assertFollowedPlayerScan(helper, true);
+    }
+
+    private static void assertFollowedPlayerScan(GameTestHelper helper, boolean split) {
+        var level = helper.getLevel();
+        BlockPos origin = helper.absolutePos(new BlockPos(40, 2, 40));
+        List<Entity> actors = new ArrayList<>();
+        try {
+            VillagerEntityMCA guard = VillagerFactory.newVillager(level).withAge(0)
+                    .withProfession(ProfessionsMCA.GUARD).withPosition(Vec3.atBottomCenterOf(origin))
+                    .spawn(MobSpawnType.STRUCTURE);
+            actors.add(guard);
+            guard.setNoAi(true);
+            guard.refreshBrain(level);
+
+            Player followedPlayer = helper.makeMockPlayer(GameType.SURVIVAL);
+            actors.add(followedPlayer);
+            followedPlayer.absMoveTo(guard.getX() + (split ? 30 : 24), guard.getY(),
+                    guard.getZ() + (split ? 30 : 0));
+            Cow cow = EntityType.COW.create(level);
+            Zombie enemy = EntityType.ZOMBIE.create(level);
+            if (cow == null || enemy == null) {
+                throw new IllegalStateException("could not create followed-player scan fixture");
+            }
+            actors.add(cow);
+            actors.add(enemy);
+            cow.setNoAi(true);
+            enemy.setNoAi(true);
+            cow.absMoveTo(guard.getX() + 8, guard.getY(), guard.getZ() + 8);
+            enemy.absMoveTo(guard.getX() + (split ? 36 : 40), guard.getY(),
+                    guard.getZ() + (split ? 30 : 0));
+            level.getChunk(cow.blockPosition());
+            level.getChunk(enemy.blockPosition());
+            helper.assertTrue(level.addFreshEntity(cow) && level.addFreshEntity(enemy),
+                    "followed-player scan fixture actors must be admitted");
+            enemy.setTarget(followedPlayer);
+            guard.getBrain().setMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING, followedPlayer);
+
+            AABB guardBounds = guard.getBoundingBox().inflate(32.0D);
+            AABB playerBounds = followedPlayer.getBoundingBox().inflate(32.0D);
+            AABB combined = guardBounds.minmax(playerBounds);
+            double combinedVolume = combined.getXsize() * combined.getYsize() * combined.getZsize();
+            double guardVolume = guardBounds.getXsize() * guardBounds.getYsize() * guardBounds.getZsize();
+            helper.assertTrue((combinedVolume > 2 * guardVolume) == split
+                            && guardBounds.intersects(cow.getBoundingBox())
+                            && playerBounds.intersects(cow.getBoundingBox())
+                            && guard.getBoundingBox().inflate(16.0D).intersects(cow.getBoundingBox()),
+                    "fixture must exercise its intended merge/split geometry and overlapping nearby cow");
+            helper.assertTrue(!guardBounds.intersects(enemy.getBoundingBox())
+                            && playerBounds.intersects(enemy.getBoundingBox())
+                            && followedPlayer.distanceToSqr(enemy) < 1024.0D
+                            && enemy.isAlive() && guard.isGuard()
+                            && followedPlayer.isAlive() && followedPlayer.level() == level
+                            && guard.hasLineOfSight(cow) && guard.hasLineOfSight(enemy),
+                    "fixture must contain a visible enemy outside guard range and inside player defense range");
+            helper.assertTrue(level.getEntitiesOfClass(LivingEntity.class, playerBounds,
+                            candidate -> candidate == enemy).contains(enemy)
+                            && guard.getBrain().getMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING)
+                            .orElse(null) == followedPlayer && enemy.getTarget() == followedPlayer,
+                    "fixture must expose the enemy to the player query and preserve the follow and attack targets");
+
+            new GuardEnemiesSensor().doTick(level, guard);
+            var nearby = guard.getBrain().getMemory(MemoryModuleType.NEAREST_LIVING_ENTITIES).orElseThrow();
+            var visible = guard.getBrain().getMemory(MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES).orElseThrow();
+            helper.assertTrue(nearby.stream().filter(actor -> actor == cow).count() == 1
+                            && visible.contains(cow),
+                    "followed-player query lost or duplicated the overlapping nearby cow");
+            helper.assertTrue(!nearby.contains(enemy) && !visible.contains(enemy),
+                    "followed-player query leaked a distant enemy into vanilla nearby memories");
+            helper.assertTrue(guard.getBrain().getMemory(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY)
+                            .orElse(null) == enemy,
+                    "guard did not acquire the enemy attacking its followed player");
+            helper.succeed();
+        } finally {
+            actors.forEach(Entity::discard);
         }
     }
 

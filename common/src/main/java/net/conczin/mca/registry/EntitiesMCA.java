@@ -1,11 +1,7 @@
 package net.conczin.mca.registry;
 
 import net.conczin.mca.MCA;
-import net.conczin.mca.entity.CribEntity;
-import net.conczin.mca.entity.GrimReaperEntity;
-import net.conczin.mca.entity.MCAFishingBobberEntity;
-import net.conczin.mca.entity.VillagerEntityMCA;
-import net.conczin.mca.entity.ZombieVillagerEntityMCA;
+import net.conczin.mca.entity.*;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;

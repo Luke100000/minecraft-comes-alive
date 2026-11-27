@@ -2,6 +2,7 @@ package net.conczin.mca.mixin.client;
 
 import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import net.conczin.mca.MCA;
+import net.conczin.mca.MCAClient;
 import net.conczin.mca.entity.CommonSpeechManager;
 import net.conczin.mca.entity.ai.DialogueType;
 import net.conczin.mca.util.localization.PooledTranslationStorage;
@@ -46,7 +47,12 @@ abstract class MixinClientLanguage extends Language {
 
     @Inject(method = "getOrDefault", at = @At("HEAD"), cancellable = true)
     private void mca$injectGetOrDefault(String key, String fallback, CallbackInfoReturnable<String> info) {
-        String modifiedKey = DialogueType.applyFallback(key);
+        if (key == null) {
+            info.setReturnValue(fallback != null ? fallback : "");
+            return;
+        }
+
+        String modifiedKey = DialogueType.applyFallback(key, MCAClient::useExpandedPersonalityTranslations);
 
         Tuple<String, String> unpooled = mca$getPool().get(modifiedKey);
         if (unpooled != null) {

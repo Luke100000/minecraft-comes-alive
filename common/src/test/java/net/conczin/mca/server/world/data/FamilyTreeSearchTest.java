@@ -8,13 +8,25 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static net.conczin.mca.FamilyTreeTestSupport.uuid;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class FamilyTreeSearchTest {
     @BeforeAll
     static void bootstrapMinecraft() {
         FamilyTreeTestSupport.bootstrapMinecraft();
+    }
+
+    @Test
+    void exactNameSearchRemainsCaseInsensitiveAndExcludesPartialMatches() {
+        FamilyTree tree = new FamilyTree(null);
+        tree.getOrCreate(uuid(31), "ALICE", Gender.FEMALE);
+        tree.getOrCreate(uuid(32), "alice", Gender.FEMALE);
+        tree.getOrCreate(uuid(33), "Malice", Gender.MALE);
+
+        assertEquals(
+                java.util.Set.of(uuid(31), uuid(32)),
+                tree.getAllWithName("aLiCe").map(FamilyTreeNode::id).collect(java.util.stream.Collectors.toSet())
+        );
     }
 
     @Test
@@ -45,5 +57,22 @@ class FamilyTreeSearchTest {
         assertEquals("Bálex", results.get(2).getName());
         assertTrue(tree.getAllWithNameContaining("   ", 16).isEmpty());
         assertTrue(tree.getAllWithNameContaining("alex", 0).isEmpty());
+    }
+
+    @Test
+    void normalizedSearchNameIsCachedAndInvalidatedOnSetName() {
+        FamilyTree tree = new FamilyTree(null);
+        FamilyTreeNode node = tree.getOrCreate(uuid(41), "Émilie", Gender.FEMALE);
+
+        String cached = node.normalizedSearchName();
+        assertEquals("emilie", cached);
+        assertSame(cached, node.normalizedSearchName(), "Normalized search name must be cached lazily");
+        assertEquals(List.of(node), tree.getAllWithNameContaining("emilie", 16));
+
+        node.setName("Zoë");
+
+        assertEquals("zoe", node.normalizedSearchName(), "Renaming a node must invalidate cached normalized name");
+        assertTrue(tree.getAllWithNameContaining("emilie", 16).isEmpty());
+        assertEquals(List.of(node), tree.getAllWithNameContaining("zoe", 16));
     }
 }

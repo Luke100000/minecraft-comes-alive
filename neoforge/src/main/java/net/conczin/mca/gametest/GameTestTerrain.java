@@ -5,6 +5,7 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -14,14 +15,33 @@ public final class GameTestTerrain {
     private GameTestTerrain() {
     }
 
+    /** Wait for queued roof lighting before checking the behavior under test. */
+    public static void whenSkyLightBlocked(GameTestHelper helper, BlockPos position,
+                                           int remainingTicks, Runnable continuation) {
+        if (!helper.getLevel().canSeeSky(position)) {
+            continuation.run();
+            return;
+        }
+        helper.assertTrue(remainingTicks > 0,
+                "GameTest fixture lighting never settled beneath its roof at " + position
+                        + "; skyLight=" + helper.getLevel().getBrightness(
+                                net.minecraft.world.level.LightLayer.SKY, position));
+        helper.runAfterDelay(1, () -> whenSkyLightBlocked(helper, position, remainingTicks - 1, continuation));
+    }
+
     public static void prepareFlatArea(GameTestHelper helper, BlockPos center, int radius) {
         prepareFlatArea(helper, center, radius, 2);
     }
 
     public static void prepareFlatArea(GameTestHelper helper, BlockPos center, int radius, int clearanceHeight) {
+        prepareFlatArea(helper, center, radius, clearanceHeight, null);
+    }
+
+    public static void prepareFlatArea(GameTestHelper helper, BlockPos center, int radius, int clearanceHeight,
+                                       @Nullable List<ChunkPos> ownedChunks) {
         ChunkPos minChunk = new ChunkPos(center.offset(-radius, 0, -radius));
         ChunkPos maxChunk = new ChunkPos(center.offset(radius, 0, radius));
-        ensureEntityTickingChunks(helper, minChunk, maxChunk);
+        ensureEntityTickingChunks(helper, minChunk, maxChunk, ownedChunks);
 
         for (int x = -radius; x <= radius; x++) {
             for (int z = -radius; z <= radius; z++) {
@@ -39,7 +59,7 @@ public final class GameTestTerrain {
         int maxX = Math.max(start.getX(), target.getX()) + 1;
         ChunkPos minChunk = new ChunkPos(new BlockPos(minX, start.getY(), start.getZ() - 1));
         ChunkPos maxChunk = new ChunkPos(new BlockPos(maxX, start.getY(), start.getZ() + 1));
-        ensureEntityTickingChunks(helper, minChunk, maxChunk);
+        ensureEntityTickingChunks(helper, minChunk, maxChunk, null);
 
         for (int x = minX; x <= maxX; x++) {
             for (int z = start.getZ() - 1; z <= start.getZ() + 1; z++) {
@@ -51,14 +71,17 @@ public final class GameTestTerrain {
         }
     }
 
-    private static void ensureEntityTickingChunks(GameTestHelper helper, ChunkPos minChunk, ChunkPos maxChunk) {
+    public static void ensureEntityTickingChunks(GameTestHelper helper, ChunkPos minChunk, ChunkPos maxChunk,
+                                                 @Nullable List<ChunkPos> ownedChunks) {
         ServerLevel level = helper.getLevel();
         List<ChunkPos> chunks = new ArrayList<>();
         for (int chunkX = minChunk.x; chunkX <= maxChunk.x; chunkX++) {
             for (int chunkZ = minChunk.z; chunkZ <= maxChunk.z; chunkZ++) {
                 ChunkPos chunk = new ChunkPos(chunkX, chunkZ);
                 chunks.add(chunk);
-                level.setChunkForced(chunkX, chunkZ, true);
+                if (level.setChunkForced(chunkX, chunkZ, true) && ownedChunks != null) {
+                    ownedChunks.add(chunk);
+                }
             }
         }
 

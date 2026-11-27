@@ -1,12 +1,7 @@
 package net.conczin.mca.client.gui;
 
 import net.conczin.mca.resources.data.BuildingType;
-import net.conczin.mca.server.world.data.Building;
-import net.conczin.mca.server.world.data.FloorConnector;
-import net.conczin.mca.server.world.data.RoomTypeResolver;
-import net.conczin.mca.server.world.data.Structure;
-import net.conczin.mca.server.world.data.StructureFloor;
-import net.conczin.mca.server.world.data.Village;
+import net.conczin.mca.server.world.data.*;
 import net.minecraft.core.BlockPos;
 
 import java.util.*;

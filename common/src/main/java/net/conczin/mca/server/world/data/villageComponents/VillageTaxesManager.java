@@ -123,10 +123,10 @@ public class VillageTaxesManager {
 
     public void deliverTaxes(ServerLevel world) {
         if (village.hasStoredResource() && WorldUtils.isChunkLoaded(world, village.getCenter())) {
-            village.getBuildingsOfType("storage").forEach(building -> building.getBlocks().values().stream()
+            village.getBuildingsOfType("storage").forEach(building -> village.getEffectiveBlocks(building).values().stream()
                     .flatMap(Collection::stream)
                     .forEach(p -> {
-                        if (village.hasStoredResource()) {
+                        if (village.hasStoredResource() && WorldUtils.isChunkLoaded(world, p)) {
                             tryToPutIntoInventory(world, p);
                         }
                     }));

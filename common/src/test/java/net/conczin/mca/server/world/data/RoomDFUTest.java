@@ -8,6 +8,7 @@ import net.minecraft.SharedConstants;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.world.level.block.Blocks;
@@ -19,11 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class RoomDFUTest {
     @BeforeAll
@@ -34,11 +31,12 @@ class RoomDFUTest {
 
     @BeforeEach
     void installBuildingTypes() {
-        BuildingTypes types = new BuildingTypes();
+        BuildingTypes types = BuildingTypes.getInstance();
         JsonObject houseJson = new JsonObject();
         JsonObject graveyardJson = new JsonObject();
         graveyardJson.addProperty("grouped", true);
         types.setBuildingTypes(Map.of(
+                "building", new BuildingType("building", new JsonObject()),
                 "house", new BuildingType("house", houseJson),
                 "graveyard", new BuildingType("graveyard", graveyardJson)));
     }
@@ -60,11 +58,35 @@ class RoomDFUTest {
     }
 
     @Test
+    void originMigrationQuarantinesBuildingWithNoFloorArea() {
+        CompoundTag invalid = originBuilding(8, "house");
+        invalid.putInt("pos0X", invalid.getInt("pos1X") + 1);
+        CompoundTag village = new CompoundTag();
+        village.put("buildings", list(originBuilding(7, "house"), invalid));
+
+        RoomDFU.Result migrated = RoomDFU.load(village);
+
+        assertEquals(Set.of(7), migrated.buildings().keySet());
+        assertTrue(migrated.quarantinedData(), "Discarding the invalid building must protect the source save");
+    }
+
+    @Test
+    void originMigrationRejectsDuplicateBuildingIdsInsteadOfReplacingSavedData() {
+        CompoundTag village = new CompoundTag();
+        village.put("buildings", list(originBuilding(7, "house"), originBuilding(7, "building")));
+
+        assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(village));
+    }
+
+    @Test
     void originBoundingBoxMigrationUsesRectangularApproximationUntilRescan() {
         CompoundTag village = new CompoundTag();
         village.put("buildings", list(originBuilding(7, "house")));
 
-        Building room = RoomDFU.load(village).buildings().get(7);
+        RoomDFU.Result migrated = RoomDFU.load(village);
+        Building room = migrated.buildings().get(7);
+        CompoundTag saved = migrated.structures().get(7).save();
+        assertTrue(new Structure(saved).hasOriginGeometryApproximation());
 
         assertEquals(Set.of(
                 new BlockPos(0, 64, 0), new BlockPos(0, 64, 1),
@@ -76,23 +98,6 @@ class RoomDFUTest {
                 new BlockPos(3, 64, 0), new BlockPos(3, 64, 1),
                 new BlockPos(3, 64, 2), new BlockPos(3, 64, 3)),
                 room.getFloorCells());
-    }
-
-    @Test
-    void originApproximationMarkerPersistsOnlyForOriginMigratedStructures() {
-        CompoundTag origin = new CompoundTag();
-        origin.put("buildings", list(originBuilding(7, "house")));
-        Structure migratedOrigin = RoomDFU.load(origin).structures().get(7);
-
-        CompoundTag savedOrigin = migratedOrigin.save();
-        assertTrue(savedOrigin.getBoolean("originGeometryApproximate"));
-        assertTrue(new Structure(savedOrigin).save().getBoolean("originGeometryApproximate"));
-
-        Structure migratedFloorClean = RoomDFU.load(upstreamFloorCleanSquashVillage(true))
-                .structures().get(20);
-        Structure canonical = RoomDFU.load(canonicalVillage().save()).structures().get(20);
-        assertFalse(migratedFloorClean.save().contains("originGeometryApproximate"));
-        assertFalse(canonical.save().contains("originGeometryApproximate"));
     }
 
     @Test
@@ -128,57 +133,23 @@ class RoomDFUTest {
     }
 
     @Test
-    void upstreamFloorCleanSquashInheritanceBecomesLogicalAndRoomState() {
-        CompoundTag village = upstreamFloorCleanSquashVillage(false);
-
-        RoomDFU.Result migrated = RoomDFU.load(village);
-
-        LogicalBuilding logical = migrated.logicalBuildings().get(20);
-        assertEquals(10, logical.mainRoomId());
-        assertFalse(logical.inheritanceEnabled());
-        assertTrue(migrated.buildings().get(11).contributesToMain());
-        assertFalse(migrated.buildings().get(12).contributesToMain());
-    }
-
-    @Test
-    void upstreamFloorCleanSquashGroundFloorIsDerivedFromMigratedMainRoom() {
-        RoomDFU.Result migrated = RoomDFU.load(upstreamFloorCleanSquashVillage(true));
-
-        LogicalBuilding logical = migrated.logicalBuildings().get(20);
-        assertEquals(10, logical.mainRoomId());
-        assertEquals(20, migrated.buildings().get(logical.mainRoomId()).getStructureId());
-        assertEquals(0, migrated.buildings().get(logical.mainRoomId()).getFloorId());
-    }
-
-    @Test
-    void upstreamFloorCleanSquashMigratesProjectedRegionsToExactFlatCells() {
-        RoomDFU.Result migrated = RoomDFU.load(upstreamFloorCleanSquashVillage(true));
-        StructureFloor floor = migrated.structures().get(20).getFloor(0).orElseThrow();
-        Set<BlockPos> expected = Set.of(new BlockPos(0, 64, 0), new BlockPos(1, 64, 0));
-
-        assertEquals(expected, floor.geometry().cells().stream()
-                .map(FloorGeometry.Cell::feet)
-                .collect(java.util.stream.Collectors.toSet()));
-        assertEquals(expected, migrated.buildings().get(10).getFloorCells());
-    }
-
-    @Test
     void normalizedSavesDoNotEmitLegacyAutomaticOrRoomInheritanceFields() {
-        RoomDFU.Result migrated = RoomDFU.load(upstreamFloorCleanSquashVillage(true));
+        Village village = canonicalVillage();
+        CompoundTag saved = village.save();
 
-        CompoundTag roomTag = migrated.buildings().get(11).save();
-        CompoundTag structureTag = migrated.structures().get(20).save();
-        CompoundTag logicalTag = migrated.logicalBuildings().get(20).save();
-        CompoundTag floorTag = structureTag.getList("floors", net.minecraft.nbt.Tag.TAG_COMPOUND)
-                .getCompound(0);
+        CompoundTag roomTag = saved.getList("buildings", Tag.TAG_COMPOUND).getCompound(0);
+        CompoundTag structureTag = saved.getList("structures", Tag.TAG_COMPOUND).getCompound(0);
+        CompoundTag logicalTag = saved.getList("logicalBuildings", Tag.TAG_COMPOUND).getCompound(0);
+        CompoundTag floorTag = structureTag.getList("floors", Tag.TAG_COMPOUND).getCompound(0);
         assertTrue(roomTag.contains("contributesToMain"));
         assertFalse(roomTag.contains("inheritanceEnabled"));
         assertFalse(roomTag.contains("size"));
         assertFalse(structureTag.contains("mainRoomId"));
         assertFalse(structureTag.contains("mainRoomAutomatic"));
         assertFalse(structureTag.contains("surfaceReferenceY"));
-        assertTrue(floorTag.contains("floorNumber", net.minecraft.nbt.Tag.TAG_INT));
-        assertTrue(floorTag.contains("anchorY", net.minecraft.nbt.Tag.TAG_INT));
+        assertFalse(structureTag.contains("originGeometryApproximate"));
+        assertTrue(floorTag.contains("floorNumber", Tag.TAG_INT));
+        assertTrue(floorTag.contains("anchorY", Tag.TAG_INT));
         assertTrue(logicalTag.contains("mainRoomId"));
         assertTrue(logicalTag.contains("inheritanceEnabled"));
         assertFalse(logicalTag.contains("groundStructureId"));
@@ -218,15 +189,16 @@ class RoomDFUTest {
     }
 
     @Test
-    void canonicalVillageSaveUsesCurrentVersionWithoutSurfaceHeight() {
+    void canonicalVillageSaveUsesPackedArraysWithoutSurfaceHeight() {
         Village village = canonicalVillage();
         CompoundTag saved = village.save();
 
         assertEquals(Village.BUILDING_DATA_VERSION, saved.getInt("buildingDataVersion"));
-        CompoundTag cell = firstCanonicalFloorCell(saved);
-        assertTrue(cell.contains("pos"));
-        assertTrue(cell.contains("ceilingY", net.minecraft.nbt.Tag.TAG_INT));
-        assertFalse(cell.contains("surfaceY"));
+        CompoundTag floorTag = firstCanonicalFloorTag(saved);
+        assertTrue(floorTag.contains("cellPositions", Tag.TAG_LONG_ARRAY));
+        assertTrue(floorTag.contains("ceilingYs", Tag.TAG_INT_ARRAY));
+        assertFalse(floorTag.contains("cells"));
+        assertFalse(floorTag.contains("surfaceY"));
     }
 
     @Test
@@ -243,18 +215,18 @@ class RoomDFUTest {
     }
 
     @Test
-    void unsupportedCanonicalVersionIsRejectedInsteadOfMigrated() {
+    void unsupportedCanonicalVersionIsRejectedWithUnsupportedVersionException() {
         Village village = new Village(1, null);
         CompoundTag unsupported = village.save();
         unsupported.putInt("buildingDataVersion", Village.BUILDING_DATA_VERSION + 1);
 
-        assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(unsupported));
+        assertThrows(RoomDFU.UnsupportedVersionException.class, () -> RoomDFU.load(unsupported));
     }
 
     @Test
     void canonicalStructureMissingBuildingIdIsRejectedAtDfuBoundary() {
         CompoundTag malformed = canonicalVillage().save();
-        malformed.getList("structures", net.minecraft.nbt.Tag.TAG_COMPOUND)
+        malformed.getList("structures", Tag.TAG_COMPOUND)
                 .getCompound(0).remove("buildingId");
 
         assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
@@ -263,7 +235,7 @@ class RoomDFUTest {
     @Test
     void canonicalRoomMissingIdIsRejectedAtDfuBoundary() {
         CompoundTag malformed = canonicalVillage().save();
-        malformed.getList("buildings", net.minecraft.nbt.Tag.TAG_COMPOUND)
+        malformed.getList("buildings", Tag.TAG_COMPOUND)
                 .getCompound(0).remove("id");
 
         assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
@@ -277,7 +249,7 @@ class RoomDFUTest {
         external.setType("graveyard");
         village.registerExternalBuilding(external);
         CompoundTag malformed = village.save();
-        malformed.getList("externalBuildings", net.minecraft.nbt.Tag.TAG_COMPOUND)
+        malformed.getList("externalBuildings", Tag.TAG_COMPOUND)
                 .getCompound(0).remove("id");
 
         assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
@@ -286,7 +258,7 @@ class RoomDFUTest {
     @Test
     void canonicalStructureMissingIdIsRejectedAtDfuBoundary() {
         CompoundTag malformed = canonicalVillage().save();
-        malformed.getList("structures", net.minecraft.nbt.Tag.TAG_COMPOUND)
+        malformed.getList("structures", Tag.TAG_COMPOUND)
                 .getCompound(0).remove("id");
 
         assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
@@ -295,8 +267,8 @@ class RoomDFUTest {
     @Test
     void canonicalStructureFloorMissingIdIsRejectedAtDfuBoundary() {
         CompoundTag malformed = canonicalVillage().save();
-        malformed.getList("structures", net.minecraft.nbt.Tag.TAG_COMPOUND)
-                .getCompound(0).getList("floors", net.minecraft.nbt.Tag.TAG_COMPOUND)
+        malformed.getList("structures", Tag.TAG_COMPOUND)
+                .getCompound(0).getList("floors", Tag.TAG_COMPOUND)
                 .getCompound(0).remove("id");
 
         assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
@@ -305,7 +277,7 @@ class RoomDFUTest {
     @Test
     void canonicalStructureWithNoFloorsIsRejectedAtDfuBoundary() {
         CompoundTag malformed = canonicalVillage().save();
-        malformed.getList("structures", net.minecraft.nbt.Tag.TAG_COMPOUND)
+        malformed.getList("structures", Tag.TAG_COMPOUND)
                 .getCompound(0).put("floors", new ListTag());
 
         assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
@@ -314,7 +286,7 @@ class RoomDFUTest {
     @Test
     void canonicalLogicalBuildingMissingIdIsRejectedAtDfuBoundary() {
         CompoundTag malformed = canonicalVillage().save();
-        malformed.getList("logicalBuildings", net.minecraft.nbt.Tag.TAG_COMPOUND)
+        malformed.getList("logicalBuildings", Tag.TAG_COMPOUND)
                 .getCompound(0).remove("id");
 
         assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
@@ -323,42 +295,41 @@ class RoomDFUTest {
     @Test
     void canonicalStructureAllowsMissingNextFloorId() {
         CompoundTag compatible = canonicalVillage().save();
-        compatible.getList("structures", net.minecraft.nbt.Tag.TAG_COMPOUND)
+        compatible.getList("structures", Tag.TAG_COMPOUND)
                 .getCompound(0).remove("nextFloorId");
 
         assertDoesNotThrow(() -> RoomDFU.load(compatible));
     }
 
     @Test
-    void originGeometryRefreshBackoffIsBounded() {
-        assertEquals(40L, VillageManager.originGeometryRefreshDelay(1));
-        assertEquals(80L, VillageManager.originGeometryRefreshDelay(2));
-        assertEquals(VillageManager.ORIGIN_GEOMETRY_REFRESH_MAX_DELAY,
-                VillageManager.originGeometryRefreshDelay(30));
-    }
+    void canonicalRoomWithMissingOrEmptyCellsIsQuarantinedWithoutWipingHealthyRooms() {
+        Village village = canonicalVillage();
+        Structure otherStructure = new Structure(21, new BlockPos(10, 64, 0), List.of(
+                TestStructureFloors.create(0, 64, 68, 0, TestFloorFootprint.fromFootprint(
+                        64, List.of(new BlockPos(10, 64, 0), new BlockPos(11, 64, 0))))));
+        Building healthyRoom = new Building(new BlockPos(10, 64, 0));
+        healthyRoom.setId(11);
+        healthyRoom.setStructureId(21);
+        healthyRoom.setFloorId(0);
+        healthyRoom.setType("house");
+        healthyRoom.setGeometry(new BlockPos(10, 64, 0), new BlockPos(11, 67, 0),
+                Set.of(new BlockPos(10, 64, 0), new BlockPos(11, 64, 0)));
+        village.registerStructure(otherStructure, healthyRoom);
 
-    @Test
-    void canonicalRoomMissingFloorCellsIsRejectedAtDfuBoundary() {
-        CompoundTag malformed = canonicalVillage().save();
-        malformed.getList("buildings", net.minecraft.nbt.Tag.TAG_COMPOUND)
-                .getCompound(0).remove("floorCells");
+        CompoundTag partial = village.save();
+        CompoundTag corruptRoom = partial.getList("buildings", Tag.TAG_COMPOUND).getCompound(0);
+        corruptRoom.remove("floorCellPositions");
+        corruptRoom.remove("floorCells");
 
-        assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
-    }
-
-    @Test
-    void canonicalRoomWithEmptyFloorCellsIsRejectedAtDfuBoundary() {
-        CompoundTag malformed = canonicalVillage().save();
-        malformed.getList("buildings", net.minecraft.nbt.Tag.TAG_COMPOUND)
-                .getCompound(0).put("floorCells", new ListTag());
-
-        assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
+        RoomDFU.Result loaded = RoomDFU.load(partial);
+        assertFalse(loaded.buildings().containsKey(10));
+        assertTrue(loaded.buildings().containsKey(11));
     }
 
     @Test
     void duplicateCanonicalRoomIdsAreRejectedBeforeMapInsertion() {
         CompoundTag malformed = canonicalVillage().save();
-        duplicateFirst(malformed.getList("buildings", net.minecraft.nbt.Tag.TAG_COMPOUND));
+        duplicateFirst(malformed.getList("buildings", Tag.TAG_COMPOUND));
 
         assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
     }
@@ -366,7 +337,7 @@ class RoomDFUTest {
     @Test
     void canonicalVillageLoadRejectsOverlappingRoomOwnership() {
         CompoundTag malformed = canonicalVillage().save();
-        ListTag rooms = malformed.getList("buildings", net.minecraft.nbt.Tag.TAG_COMPOUND);
+        ListTag rooms = malformed.getList("buildings", Tag.TAG_COMPOUND);
         CompoundTag overlapping = rooms.getCompound(0).copy();
         overlapping.putInt("id", 11);
         rooms.add(overlapping);
@@ -382,7 +353,7 @@ class RoomDFUTest {
         external.setType("graveyard");
         village.registerExternalBuilding(external);
         CompoundTag malformed = village.save();
-        duplicateFirst(malformed.getList("externalBuildings", net.minecraft.nbt.Tag.TAG_COMPOUND));
+        duplicateFirst(malformed.getList("externalBuildings", Tag.TAG_COMPOUND));
 
         assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
     }
@@ -390,7 +361,7 @@ class RoomDFUTest {
     @Test
     void duplicateCanonicalStructureIdsAreRejectedBeforeMapInsertion() {
         CompoundTag malformed = canonicalVillage().save();
-        duplicateFirst(malformed.getList("structures", net.minecraft.nbt.Tag.TAG_COMPOUND));
+        duplicateFirst(malformed.getList("structures", Tag.TAG_COMPOUND));
 
         assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
     }
@@ -398,8 +369,8 @@ class RoomDFUTest {
     @Test
     void duplicateCanonicalFloorIdsAreRejectedBeforeNestedMapInsertion() {
         CompoundTag malformed = canonicalVillage().save();
-        ListTag floors = malformed.getList("structures", net.minecraft.nbt.Tag.TAG_COMPOUND)
-                .getCompound(0).getList("floors", net.minecraft.nbt.Tag.TAG_COMPOUND);
+        ListTag floors = malformed.getList("structures", Tag.TAG_COMPOUND)
+                .getCompound(0).getList("floors", Tag.TAG_COMPOUND);
         duplicateFirst(floors);
 
         assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
@@ -408,7 +379,7 @@ class RoomDFUTest {
     @Test
     void duplicateCanonicalLogicalBuildingIdsAreRejectedBeforeMapInsertion() {
         CompoundTag malformed = canonicalVillage().save();
-        duplicateFirst(malformed.getList("logicalBuildings", net.minecraft.nbt.Tag.TAG_COMPOUND));
+        duplicateFirst(malformed.getList("logicalBuildings", Tag.TAG_COMPOUND));
 
         assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
     }
@@ -416,7 +387,7 @@ class RoomDFUTest {
     @Test
     void canonicalFloorCellMissingCeilingYIsRejectedAtDfuBoundary() {
         CompoundTag malformed = canonicalVillage().save();
-        firstCanonicalFloorCell(malformed).remove("ceilingY");
+        firstCanonicalFloorTag(malformed).remove("ceilingYs");
 
         assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
     }
@@ -424,7 +395,7 @@ class RoomDFUTest {
     @Test
     void canonicalFloorCellRejectsCeilingAtOrBelowFeet() {
         CompoundTag malformed = canonicalVillage().save();
-        firstCanonicalFloorCell(malformed).putInt("ceilingY", 64);
+        firstCanonicalFloorTag(malformed).putIntArray("ceilingYs", new int[]{64, 68});
 
         assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
     }
@@ -432,34 +403,123 @@ class RoomDFUTest {
     @Test
     void canonicalLogicalBuildingMissingInheritanceIsRejectedAtDfuBoundary() {
         CompoundTag malformed = canonicalVillage().save();
-        malformed.getList("logicalBuildings", net.minecraft.nbt.Tag.TAG_COMPOUND)
+        malformed.getList("logicalBuildings", Tag.TAG_COMPOUND)
                 .getCompound(0).remove("inheritanceEnabled");
 
         assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
     }
 
-    private static CompoundTag upstreamFloorCleanSquashVillage(boolean mainInheritanceEnabled) {
+    @Test
+    void inconsistentSavedStoreyLabelsConsolidateIntoPrimaryStructureWithoutNewRepair() {
+        Village village = canonicalVillage();
+        int[] heights = {72, 76, 78, 78};
+        int[] numbers = {1, 2, 3, 2};
+        for (int index = 0; index < heights.length; index++) {
+            int id = 21 + index;
+            BlockPos position = new BlockPos(10 + index * 3, heights[index], 0);
+            StructureFloor floor = new StructureFloor(0, numbers[index], new FloorGeometry(
+                    List.of(new FloorGeometry.Cell(position, heights[index] + 4)), Map.of()));
+            Structure structure = new Structure(id, position, List.of(floor));
+            structure.setLogicalBuildingId(20);
+            Building room = new Building(position);
+            room.setId(11 + index);
+            room.setStructureId(id);
+            room.setFloorId(0);
+            room.setType("house");
+            room.setGeometry(position, position.above(3), List.of(position));
+            village.registerStructure(structure, room);
+        }
+        Village reloaded = new Village(village.save(), null);
+        assertEquals(Set.of(20), reloaded.getStructures().keySet());
+        Structure consolidated = reloaded.getStructure(20).orElseThrow();
+        for (int index = 0; index < heights.length; index++) {
+            Building room = reloaded.getBuilding(11 + index).orElseThrow();
+            assertEquals(20, room.getStructureId());
+            assertEquals(numbers[index], consolidated.getFloor(room.getFloorId()).orElseThrow().floorNumber());
+        }
+    }
+
+    @Test
+    void releasedFloorInheritanceBecomesLogicalAndRoomState() {
+        CompoundTag village = releasedFloorVillage(false);
+
+        RoomDFU.Result migrated = RoomDFU.load(village);
+
+        LogicalBuilding logical = migrated.logicalBuildings().get(20);
+        assertEquals(10, logical.mainRoomId());
+        assertFalse(logical.inheritanceEnabled());
+        assertTrue(migrated.buildings().get(11).contributesToMain());
+        assertFalse(migrated.buildings().get(12).contributesToMain());
+    }
+
+    @Test
+    void releasedFloorMigrationQuarantinesStructureWithoutFloors() {
+        CompoundTag village = releasedFloorVillage(true);
+        CompoundTag invalid = releasedFloorStructure(21);
+        invalid.put("floors", new ListTag());
+        village.getList("structures", Tag.TAG_COMPOUND).add(invalid);
+
+        RoomDFU.Result migrated = RoomDFU.load(village);
+
+        assertEquals(Set.of(20), migrated.structures().keySet());
+        assertTrue(migrated.quarantinedData(), "Discarding the invalid structure must protect the source save");
+    }
+
+    @Test
+    void releasedFloorMigrationRejectsDuplicateStructureIdsInsteadOfReplacingSavedData() {
+        CompoundTag village = releasedFloorVillage(true);
+        CompoundTag duplicate = releasedFloorStructure(20);
+        duplicate.putInt("mainRoomId", 11);
+        village.getList("structures", Tag.TAG_COMPOUND).add(duplicate);
+
+        assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(village));
+    }
+
+    @Test
+    void releasedFloorGroundFloorIsDerivedFromMigratedMainRoom() {
+        RoomDFU.Result migrated = RoomDFU.load(releasedFloorVillage(true));
+
+        LogicalBuilding logical = migrated.logicalBuildings().get(20);
+        assertEquals(10, logical.mainRoomId());
+        assertEquals(20, migrated.buildings().get(logical.mainRoomId()).getStructureId());
+        assertEquals(0, migrated.buildings().get(logical.mainRoomId()).getFloorId());
+    }
+
+    @Test
+    void releasedFloorMigratesProjectedRegionsToExactFlatCells() {
+        RoomDFU.Result migrated = RoomDFU.load(releasedFloorVillage(true));
+        StructureFloor floor = migrated.structures().get(20).getFloor(0).orElseThrow();
+        Set<BlockPos> expected = Set.of(new BlockPos(0, 64, 0), new BlockPos(1, 64, 0));
+
+        assertEquals(expected, floor.geometry().cells().stream()
+                .map(FloorGeometry.Cell::feet)
+                .collect(java.util.stream.Collectors.toSet()));
+        assertEquals(expected, migrated.buildings().get(10).getFloorCells());
+    }
+
+    private static CompoundTag releasedFloorVillage(boolean mainInheritanceEnabled) {
         CompoundTag village = new CompoundTag();
-        CompoundTag main = upstreamFloorCleanSquashRoom(10, mainInheritanceEnabled);
-        CompoundTag inherited = upstreamFloorCleanSquashRoom(11, true);
-        CompoundTag independent = upstreamFloorCleanSquashRoom(12, false);
+        CompoundTag main = releasedFloorRoom(10, mainInheritanceEnabled);
+        CompoundTag inherited = releasedFloorRoom(11, true);
+        CompoundTag independent = releasedFloorRoom(12, false);
         village.put("buildings", list(main, inherited, independent));
         village.put("externalBuildings", new ListTag());
-        village.put("structures", list(upstreamFloorCleanSquashStructure(20)));
+        village.put("structures", list(releasedFloorStructure(20)));
         return village;
     }
 
-    private static CompoundTag upstreamFloorCleanSquashRoom(int id, boolean inheritanceEnabled) {
+    private static CompoundTag releasedFloorRoom(int id, boolean inheritanceEnabled) {
         CompoundTag room = originBuilding(id, "house");
         room.putInt("structureId", 20);
-        room.putInt("floorId", 0);
+        room.putInt("floorId", id == 10 ? 0 : 1);
         room.putBoolean("inheritanceEnabled", inheritanceEnabled);
-        room.put("floorRegions", list(legacyRegion(64, Set.of(
-                new BlockPos(0, 64, 0), new BlockPos(1, 64, 0)))));
+        Set<BlockPos> cells = id == 10 ? Set.of(new BlockPos(0, 64, 0), new BlockPos(1, 64, 0))
+                : Set.of(new BlockPos(id - 11, 68, 0));
+        room.put("floorRegions", list(legacyRegion(id == 10 ? 64 : 68, cells)));
         return room;
     }
 
-    private static CompoundTag upstreamFloorCleanSquashStructure(int id) {
+    private static CompoundTag releasedFloorStructure(int id) {
         CompoundTag structure = new CompoundTag();
         structure.putInt("id", id);
         structure.putInt("buildingId", id);
@@ -487,36 +547,41 @@ class RoomDFUTest {
         return tag;
     }
 
+    private static CompoundTag legacyRegion(int anchorY, Set<BlockPos> cells) {
+        CompoundTag tag = new CompoundTag();
+        tag.putInt("anchorY", anchorY);
+        tag.putInt("area", cells.size());
+        ListTag components = new ListTag();
+        if (!cells.isEmpty()) {
+            List<BlockPos> ordered = cells.stream()
+                    .sorted(java.util.Comparator.comparingInt((BlockPos pos) -> pos.getZ())
+                            .thenComparingInt(pos -> pos.getX()))
+                    .toList();
+            CompoundTag componentTag = new CompoundTag();
+            componentTag.putInt("minX", ordered.stream().mapToInt(BlockPos::getX).min().orElseThrow());
+            componentTag.putInt("minZ", ordered.stream().mapToInt(BlockPos::getZ).min().orElseThrow());
+            componentTag.putInt("maxX", ordered.stream().mapToInt(BlockPos::getX).max().orElseThrow());
+            componentTag.putInt("maxZ", ordered.stream().mapToInt(BlockPos::getZ).max().orElseThrow());
+            componentTag.putInt("area", ordered.size());
+            ListTag spans = new ListTag();
+            for (BlockPos cell : ordered) {
+                CompoundTag spanTag = new CompoundTag();
+                spanTag.putInt("z", cell.getZ());
+                spanTag.putInt("minX", cell.getX());
+                spanTag.putInt("maxX", cell.getX());
+                spans.add(spanTag);
+            }
+            componentTag.put("spans", spans);
+            components.add(componentTag);
+        }
+        tag.put("components", components);
+        return tag;
+    }
+
     private static StructureFloor floor(int id, int anchorY, int ceilingY, int number) {
         TestFloorFootprint region = TestFloorFootprint.fromFootprint(
                 anchorY, List.of(new BlockPos(0, anchorY, 0), new BlockPos(1, anchorY, 0)));
         return TestStructureFloors.create(id, anchorY, ceilingY, number, region);
-    }
-
-    @Test
-    void inconsistentSavedStoreyLabelsRoundTripWithoutNewRepair() {
-        Village village = canonicalVillage();
-        int[] heights = {72, 76, 78, 78};
-        int[] numbers = {1, 2, 3, 2};
-        for (int index = 0; index < heights.length; index++) {
-            int id = 21 + index;
-            BlockPos position = new BlockPos(10 + index * 3, heights[index], 0);
-            StructureFloor floor = new StructureFloor(0, numbers[index], new FloorGeometry(
-                    List.of(new FloorGeometry.Cell(position, heights[index] + 4)), java.util.Map.of()));
-            Structure structure = new Structure(id, position, List.of(floor));
-            structure.setLogicalBuildingId(20);
-            Building room = new Building(position);
-            room.setId(11 + index);
-            room.setStructureId(id);
-            room.setFloorId(0);
-            room.setGeometry(position, position.above(3), List.of(position));
-            village.registerStructure(structure, room);
-        }
-        Village reloaded = new Village(village.save(), null);
-        for (int index = 0; index < heights.length; index++) {
-            assertEquals(numbers[index], reloaded.getStructure(21 + index).orElseThrow()
-                    .getFloor(0).orElseThrow().floorNumber());
-        }
     }
 
     private static Village canonicalVillage() {
@@ -527,6 +592,7 @@ class RoomDFUTest {
         room.setId(10);
         room.setStructureId(20);
         room.setFloorId(0);
+        room.setType("house");
         room.setGeometry(new BlockPos(0, 64, 0), new BlockPos(1, 67, 0),
                 Set.of(new BlockPos(0, 64, 0), new BlockPos(1, 64, 0)));
         village.registerStructure(structure, room);
@@ -562,43 +628,10 @@ class RoomDFUTest {
         list.add(list.getCompound(0).copy());
     }
 
-    private static CompoundTag firstCanonicalFloorCell(CompoundTag village) {
-        return village.getList("structures", net.minecraft.nbt.Tag.TAG_COMPOUND)
+    private static CompoundTag firstCanonicalFloorTag(CompoundTag village) {
+        return village.getList("structures", Tag.TAG_COMPOUND)
                 .getCompound(0)
-                .getList("floors", net.minecraft.nbt.Tag.TAG_COMPOUND)
-                .getCompound(0)
-                .getList("cells", net.minecraft.nbt.Tag.TAG_COMPOUND)
+                .getList("floors", Tag.TAG_COMPOUND)
                 .getCompound(0);
-    }
-
-    private static CompoundTag legacyRegion(int anchorY, Set<BlockPos> cells) {
-        CompoundTag tag = new CompoundTag();
-        tag.putInt("anchorY", anchorY);
-        tag.putInt("area", cells.size());
-        ListTag components = new ListTag();
-        if (!cells.isEmpty()) {
-            List<BlockPos> ordered = cells.stream()
-                    .sorted(java.util.Comparator.comparingInt((BlockPos pos) -> pos.getZ())
-                            .thenComparingInt(pos -> pos.getX()))
-                    .toList();
-            CompoundTag componentTag = new CompoundTag();
-            componentTag.putInt("minX", ordered.stream().mapToInt(BlockPos::getX).min().orElseThrow());
-            componentTag.putInt("minZ", ordered.stream().mapToInt(BlockPos::getZ).min().orElseThrow());
-            componentTag.putInt("maxX", ordered.stream().mapToInt(BlockPos::getX).max().orElseThrow());
-            componentTag.putInt("maxZ", ordered.stream().mapToInt(BlockPos::getZ).max().orElseThrow());
-            componentTag.putInt("area", ordered.size());
-            ListTag spans = new ListTag();
-            for (BlockPos cell : ordered) {
-                CompoundTag spanTag = new CompoundTag();
-                spanTag.putInt("z", cell.getZ());
-                spanTag.putInt("minX", cell.getX());
-                spanTag.putInt("maxX", cell.getX());
-                spans.add(spanTag);
-            }
-            componentTag.put("spans", spans);
-            components.add(componentTag);
-        }
-        tag.put("components", components);
-        return tag;
     }
 }
