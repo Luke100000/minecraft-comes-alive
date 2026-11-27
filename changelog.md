@@ -24,9 +24,9 @@
 ## Villagers and movement
 
 * Improved villager pathfinding and recovery around stairs, ladders, doors, gates, partial blocks, and obstacles.
-* Villagers can use fence gates and support for Dramatic Doors. `villagersInteractWithFenceGates` and `villagersInteractWithAnyDoor` control door and gate interactions.
+* Villagers can use fence gates and interact with Dramatic Doors. `villagersInteractWithFenceGates` and `villagersInteractWithAnyDoor` control door and gate interactions.
 * Improved home, bed, workplace, and resident assignment, including support for more modded beds. **Set Home** now checks that the villager can reach the bed.
-* Temporary inn guests free their beds when their stay ends. Datapacks can customize the inn's wandering-trader visitor pool with the `mca:spawn_at_inn` entity type tag.
+* Temporary inn guests free their beds when their stay ends. Datapacks can customize the inn's visitor pool with the `mca:spawn_at_inn` entity type tag. Wandering traders are the default.
 * Added `villagersChangeProfession` to control profession changes when assigning workplaces.
 * Homeless villagers find and share nearby shelter more naturally at night.
 * Reworked mourning so smaller groups visit graves without interrupting important activities. Added `enableMourning` to control it.
@@ -53,7 +53,7 @@
 * Fixed the family whistle listing divorced ex-partners through shared children.
 * Destiny can discover vanilla and modded villages across dimensions. New settings control discovery and allowed destinations. Character creation can finish without teleporting when no destination is available.
 * Destiny no longer repeatedly reopens its screen over other mods' menus when joining a world.
-* Destiny and villager structure lookups no longer block normal server work.
+* Structure searches for Destiny and villager rumours run asynchronously.
 
 ## Skin Library
 
