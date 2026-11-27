@@ -26,6 +26,7 @@ import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.syncher.EntityDataAccessor;
+import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.FastColor;
@@ -397,6 +398,13 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         return data.isParam(AGE_STATE, accessor)
                 || Genetics.affectsDimensions(data, accessor)
                 || Traits.affectsDimensions(data, accessor);
+    }
+
+    default boolean affectsDimensions(SynchedEntityData.DataValue<?> value) {
+        CDataManager<?> data = getTypeDataManager();
+        return data.isParam(AGE_STATE, value)
+                || Genetics.affectsDimensions(data, value)
+                || Traits.affectsDimensions(data, value);
     }
 
     default void updateAttributes() {

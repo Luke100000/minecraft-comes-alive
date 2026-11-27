@@ -1664,9 +1664,20 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     @Override
     public void onSyncedDataUpdated(List<SynchedEntityData.DataValue<?>> values) {
         super.onSyncedDataUpdated(values);
-        // Age is synchronized before growth; refresh from the completed snapshot.
-        if (values.stream().anyMatch(value -> getTypeDataManager().isParam(AGE_STATE, value))) {
-            refreshDimensions();
+        // Age and scale inputs are synchronized before GROWTH_AMOUNT; refresh from the completed snapshot.
+        boolean hasDimensionInput = false;
+        boolean hasGrowthAmount = false;
+        CDataManager<?> data = getTypeDataManager();
+        for (SynchedEntityData.DataValue<?> value : values) {
+            if (!hasDimensionInput && affectsDimensions(value)) {
+                hasDimensionInput = true;
+            } else if (!hasGrowthAmount && data.isParam(GROWTH_AMOUNT, value)) {
+                hasGrowthAmount = true;
+            }
+            if (hasDimensionInput && hasGrowthAmount) {
+                refreshDimensions();
+                return;
+            }
         }
     }
 
