@@ -1502,6 +1502,14 @@ public final class ShelterDistributionGameTests {
     @GameTest(batch = BATCH, templateNamespace = "minecraft", template = "bastion/blocks/air")
     public static void guestCountsInCurrentHouseAndActiveArrival(GameTestHelper helper) {
         BlockPos center = arena(helper, 94);
+        // The fixture extends beyond the tiny GameTest template. Forced chunks
+        // can be block-loaded while their villagers are still hidden from the
+        // live entity index, skewing house occupancy between adjacent chunks.
+        GameTestTerrain.ensureEntityTickingChunks(helper,
+                ChunkPos.containing(center.west().north()),
+                ChunkPos.containing(center.east(39).south(9)), null);
+        helper.assertTrue(helper.getLevel().isPositionEntityTicking(center.east(34).south(3)),
+                "overflow villager spawn chunk must be entity ticking before spawning");
         BlockPos current = furnishedHouse(helper.getLevel(), center, 8);
         BlockPos destination = furnishedHouse(helper.getLevel(), center.east(16), 8);
         BlockPos overflow = furnishedHouse(helper.getLevel(), center.east(32), 23);

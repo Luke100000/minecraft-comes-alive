@@ -475,6 +475,7 @@ public final class HomelessShelterGameTests {
     @GameTest(batch = "mca_occupied_shelter_floor", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
     public static void homelessRestChoosesIndoorFloorInsteadOfOccupiedBed(GameTestHelper helper) {
         BlockPos floor = helper.absolutePos(new BlockPos(2, 1, 2));
+        previousDayTime = helper.getLevel().getOverworldClockTime();
         setDayTime(helper.getLevel(), 13000L);
         for (BlockPos pos : BlockPos.betweenClosed(floor, floor.offset(6, 0, 6))) {
             helper.getLevel().setBlock(pos.below(), Blocks.STONE.defaultBlockState(), 3);
@@ -571,10 +572,10 @@ public final class HomelessShelterGameTests {
         helper.getLevel().setBlock(origin.south().below(), Blocks.STONE.defaultBlockState(), 3);
         VillagerEntityMCA villager = spawn(helper, origin);
         STROLL_VILLAGERS.add(villager);
-        helper.runAfterDelay(10, () -> {
+        helper.runAfterDelay(10, () -> whenSkyLightBlocked(helper, villager.blockPosition(), 50, () -> {
             verifyStandingDestinations(helper, villager);
             helper.succeed();
-        });
+        }));
     }
 
     @GameTest(batch = "mca_indoor_stroll_movement", templateNamespace = "minecraft",
