@@ -16,6 +16,7 @@ import net.conczin.mca.network.s2c.ChatAIContextResponse;
 import net.conczin.mca.network.s2c.OpenGuiRequest;
 import net.conczin.mca.server.ServerInteractionManager;
 import net.conczin.mca.server.world.data.PlayerSaveData;
+import net.conczin.mca.server.world.data.ChatAIResourceData;
 import net.conczin.mca.server.world.data.Village;
 import net.conczin.mca.server.world.data.VillageManager;
 import net.minecraft.ChatFormatting;
@@ -55,17 +56,18 @@ public class Command {
                                 .requires(ChatAIContext::canEdit)
                                 .executes(Command::openChatAIContext))
                         .then(Commands.literal("disable")
-                                .requires(Command::hasChatAIAdminPermission)
+                                .requires(source -> MCA.platformHelper.allowsConfigCommands() && hasChatAIAdminPermission(source))
                                 .executes(Command::disableChatAI))
                         .then(Commands.literal("default")
-                                .requires(Command::hasChatAIAdminPermission)
-                                .executes(c -> Command.enableChatAI(c, "default", (new Config()).villagerChatAIEndpoint, "")))
+                                .requires(source -> MCA.platformHelper.allowsConfigCommands() && hasChatAIAdminPermission(source))
+                                .executes(c -> Command.enableChatAI(c, "default", Config.COMMON.villagerChatAIEndpoint.getDefault(), "")))
                         .then(Commands.literal("player2")
-                                .requires(Command::hasChatAIAdminPermission)
+                                .requires(source -> MCA.platformHelper.allowsConfigCommands() && hasChatAIAdminPermission(source))
                                 .executes(Command::setupPlayer2))
                         .then(register("inworldAI")
                                 .requires(Command::hasChatAIAdminPermission)
                                 .then(register("keys")
+                                        .requires(source -> MCA.platformHelper.allowsConfigCommands())
                                         .then(Commands.argument("api_key", StringArgumentType.string())
                                                 .executes(c -> Command.inworldAIKey(c.getArgument("api_key", String.class)))))
                                 .then(register("addCharacter")
@@ -77,14 +79,14 @@ public class Command {
                                 )
                         )
                         .then(Commands.argument("model", StringArgumentType.string())
-                                .requires(Command::hasChatAIAdminPermission)
-                                .executes(c -> Command.enableChatAI(c, c.getArgument("model", String.class), (new Config()).villagerChatAIEndpoint, ""))
+                                .requires(source -> MCA.platformHelper.allowsConfigCommands() && hasChatAIAdminPermission(source))
+                                .executes(c -> Command.enableChatAI(c, c.getArgument("model", String.class), Config.COMMON.villagerChatAIEndpoint.getDefault(), ""))
                                 .then(Commands.argument("endpoint", StringArgumentType.string())
                                         .executes(c -> Command.enableChatAI(c, c.getArgument("model", String.class), c.getArgument("endpoint", String.class), ""))
                                         .then(Commands.argument("token", StringArgumentType.string())
                                                 .executes(c -> Command.enableChatAI(c, c.getArgument("model", String.class), c.getArgument("endpoint", String.class), c.getArgument("token", String.class)))))))
                 .then(register("tts")
-                        .requires(p -> p.getServer().isSingleplayer())
+                        .requires(p -> MCA.platformHelper.allowsConfigCommands() && p.getServer().isSingleplayer())
                         .then(Commands.literal("default").executes(ctx -> ttsEnable(ctx, "default")))
                         .then(Commands.literal("elevenlabs").executes(ctx -> ttsEnable(ctx, "elevenlabs")))
                         .then(Commands.literal("realtime").executes(ctx -> ttsEnable(ctx, "realtime")))
@@ -117,22 +119,29 @@ public class Command {
                 village.map(Village::getId).orElse(-1),
                 village.map(Village::getName).orElse(""),
                 village.map(Village::getChatAIPrompt).orElse(""),
-                Config.getInstance().villagerChatAISystemPrompt
+                Config.COMMON.villagerChatAISystemPrompt.get()
         ), player);
         return 1;
     }
 
     private static int chatAIHelp(CommandContext<CommandSourceStack> ctx) {
+        if (!MCA.platformHelper.allowsConfigCommands()) {
+            sendMessage(ctx, Component.literal("Edit MCA TOML configuration files and restart to apply changes.").withStyle(ChatFormatting.YELLOW));
+            return 0;
+        }
         if (!hasChatAIAdminPermission(ctx.getSource())) {
             sendMessage(ctx, Component.translatable("command.no_permission").withStyle(ChatFormatting.RED));
             return 0;
         }
-        return enableChatAI(ctx, (new Config()).villagerChatAIModel, (new Config()).villagerChatAIEndpoint, (new Config()).villagerChatAIToken);
+        return enableChatAI(ctx,
+                Config.SERVER.villagerChatAIModel.getDefault(),
+                Config.COMMON.villagerChatAIEndpoint.getDefault(),
+                Config.COMMON.villagerChatAIToken.getDefault());
     }
 
     private static int inworldAIKey(String apiKey) {
-        Config.getInstance().inworldAIToken = apiKey;
-        Config.getInstance().save();
+        Config.COMMON.inworldAIToken.set(apiKey);
+        Config.saveCommon();
         return 0;
     }
 
@@ -140,19 +149,19 @@ public class Command {
         ServerPlayer player = ctx.getSource().getPlayer();
         Optional<VillagerEntityMCA> optionalVillager = ChatAI.findVillagerInArea(player, name);
         optionalVillager.ifPresent(v -> {
-            Config.getInstance().inworldAIResourceNames.put(v.getUUID(), endpoint);
+            ChatAIResourceData.get(player.serverLevel()).putResourceName(v.getUUID(), endpoint);
             ChatAI.clearStrategy(v.getUUID());
-            Config.getInstance().save();
         });
         return 0;
     }
 
     private static int enableChatAI(CommandContext<CommandSourceStack> ctx, String model, String endpoint, String token) {
-        Config.getInstance().enableVillagerChatAI = true;
-        Config.getInstance().villagerChatAIModel = model;
-        Config.getInstance().villagerChatAIEndpoint = endpoint;
-        Config.getInstance().villagerChatAIToken = token;
-        Config.getInstance().save();
+        Config.SERVER.enableVillagerChatAI.set(true);
+        Config.SERVER.villagerChatAIModel.set(model);
+        Config.COMMON.villagerChatAIEndpoint.set(endpoint);
+        Config.COMMON.villagerChatAIToken.set(token);
+        Config.saveServer();
+        Config.saveCommon();
 
         if (model.equals("default")) {
             sendMessage(ctx, Component.translatable("mca.ai_help").withStyle(s -> s
@@ -165,25 +174,28 @@ public class Command {
     }
 
     private static int disableChatAI(CommandContext<CommandSourceStack> c) {
-        Config.getInstance().enableVillagerChatAI = false;
-        Config.getInstance().save();
+        Config.SERVER.enableVillagerChatAI.set(false);
+        Config.saveServer();
         sendMessage(c, "command.chat_ai.disabled");
         return 0;
     }
 
     private static int setupPlayer2(CommandContext<CommandSourceStack> ctx) {
         // Use player2s endpoint
-        Config.getInstance().enableVillagerChatAI = true;
-        Config.getInstance().villagerChatAIModel = "player2";
-        Config.getInstance().villagerChatAIEndpoint = "http://127.0.0.1:4315/v1/chat/completions";
-        Config.getInstance().villagerChatAIToken = "";
-        Config.getInstance().villagerChatAIUseTools = true;
+        Config.SERVER.enableVillagerChatAI.set(true);
+        Config.SERVER.villagerChatAIModel.set("player2");
+        Config.COMMON.villagerChatAIEndpoint.set("http://127.0.0.1:4315/v1/chat/completions");
+        Config.COMMON.villagerChatAIToken.set("");
+        Config.SERVER.villagerChatAIUseTools.set(true);
 
-        // And turn on TTS
-        Config.getInstance().enableOnlineTTS = true;
-        Config.getInstance().onlineTTSModel = "player2";
+        Config.saveServer();
+        Config.saveCommon();
 
-        Config.getInstance().save();
+        if (ctx.getSource().getServer().isSingleplayer()) {
+            Config.CLIENT.enableOnlineTTS.set(true);
+            Config.CLIENT.onlineTTSModel.set("player2");
+            Config.saveClient();
+        }
 
         sendMessage(ctx, Component.translatable("command.chat_ai.player2").withStyle(s -> s
                 .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, "https://player2.game/"))));
@@ -191,16 +203,16 @@ public class Command {
     }
 
     private static int ttsEnable(CommandContext<CommandSourceStack> ctx, String model) {
-        Config.getInstance().enableOnlineTTS = true;
-        Config.getInstance().onlineTTSModel = model;
-        Config.getInstance().save();
+        Config.CLIENT.enableOnlineTTS.set(true);
+        Config.CLIENT.onlineTTSModel.set(model);
+        Config.saveClient();
         sendMessage(ctx, Component.translatable("command.tts.enabled." + model));
         return 0;
     }
 
     private static int ttsDisable(CommandContext<CommandSourceStack> ctx) {
-        Config.getInstance().enableOnlineTTS = false;
-        Config.getInstance().save();
+        Config.CLIENT.enableOnlineTTS.set(false);
+        Config.saveClient();
 
         return 0;
     }
@@ -210,10 +222,10 @@ public class Command {
         if (player == null) {
             return 1;
         }
-        if (ctx.getSource().hasPermission(2) || Config.getInstance().allowFullPlayerEditor) {
+        if (ctx.getSource().hasPermission(2) || Config.SERVER.allowFullPlayerEditor.get()) {
             Network.sendToPlayer(new OpenGuiRequest(OpenGuiRequest.Type.VILLAGER_EDITOR, player), player);
             return 0;
-        } else if (Config.getInstance().allowLimitedPlayerEditor) {
+        } else if (Config.SERVER.allowLimitedPlayerEditor.get()) {
             Network.sendToPlayer(new OpenGuiRequest(OpenGuiRequest.Type.LIMITED_VILLAGER_EDITOR, player), player);
             return 0;
         } else {
@@ -223,9 +235,9 @@ public class Command {
     }
 
     private static int destiny(CommandContext<CommandSourceStack> ctx) {
-        if (ctx.getSource().hasPermission(2) || Config.getInstance().allowDestinyCommandOnce) {
+        if (ctx.getSource().hasPermission(2) || Config.SERVER.allowDestinyCommandOnce.get()) {
             ServerPlayer player = ctx.getSource().getPlayer();
-            if (player != null && !PlayerSaveData.get(player).isEntityDataSet() || Config.getInstance().allowDestinyCommandMoreThanOnce) {
+            if (player != null && !PlayerSaveData.get(player).isEntityDataSet() || Config.SERVER.allowDestinyCommandMoreThanOnce.get()) {
                 ServerInteractionManager.launchDestiny(player);
                 return 0;
             } else {
@@ -272,7 +284,7 @@ public class Command {
         params.put("player", player.getName().getString());
         String encodedURL = params.keySet().stream()
                 .map(key -> key + "=" + URLEncoder.encode(params.get(key), StandardCharsets.UTF_8))
-                .collect(Collectors.joining("&", Config.getInstance().villagerChatAIEndpoint.replace("v1/mca/chat", "v1/mca/verify") + "?", ""));
+                .collect(Collectors.joining("&", Config.COMMON.villagerChatAIEndpoint.get().replace("v1/mca/chat", "v1/mca/verify") + "?", ""));
 
         CompletableFuture
                 .supplyAsync(() -> OpenAIChatAI.verify(encodedURL), Util.ioPool())

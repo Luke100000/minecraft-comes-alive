@@ -42,13 +42,13 @@ public final class DoorInteractionGameTests {
         BlockPos doorPos = helper.absolutePos(new BlockPos(5, 2, 4));
         helper.getLevel().setBlock(doorPos, Blocks.IRON_DOOR.defaultBlockState(), 3);
 
-        boolean oldAnyDoorConfig = Config.getInstance().villagersInteractWithAnyDoor;
+        boolean oldAnyDoorConfig = Config.SERVER.villagersInteractWithAnyDoor.get();
         try {
-            Config.getInstance().villagersInteractWithAnyDoor = false;
+            Config.SERVER.villagersInteractWithAnyDoor.set(false);
             helper.assertTrue(!PathingBlockInteraction.isOpenable(helper.getLevel().getBlockState(doorPos)),
                     "iron door should not be MCA-operable under the vanilla tag policy");
 
-            Config.getInstance().villagersInteractWithAnyDoor = true;
+            Config.SERVER.villagersInteractWithAnyDoor.set(true);
             BlockState closed = helper.getLevel().getBlockState(doorPos);
             helper.assertTrue(PathingBlockInteraction.isOpenable(closed),
                     "any-door config should allow an arbitrary DoorBlock");
@@ -58,7 +58,7 @@ public final class DoorInteractionGameTests {
                     "iron door stayed closed after MCA opened it");
             helper.succeed();
         } finally {
-            Config.getInstance().villagersInteractWithAnyDoor = oldAnyDoorConfig;
+            Config.SERVER.villagersInteractWithAnyDoor.set(oldAnyDoorConfig);
         }
     }
 
@@ -307,14 +307,14 @@ public final class DoorInteractionGameTests {
         }
         level.setBlock(gate, Blocks.OAK_FENCE_GATE.defaultBlockState(), 3);
 
-        boolean originalGateConfig = Config.getInstance().villagersInteractWithFenceGates;
+        boolean originalGateConfig = Config.SERVER.villagersInteractWithFenceGates.get();
         VillagerEntityMCA villager = VillagerFactory.newVillager(level)
                 .withAge(0).withPosition(Vec3.atBottomCenterOf(beforeGate))
                 .withName("Replanned Head Gate Probe").spawn(MobSpawnType.STRUCTURE);
         villager.setNoAi(true);
         villager.refreshBrain(level);
         try {
-            Config.getInstance().villagersInteractWithFenceGates = true;
+            Config.SERVER.villagersInteractWithFenceGates.set(true);
             Path initial = new Path(List.of(
                     node(beforeGate), node(beneathGate), node(afterGate), node(destination)), destination, true);
             initial.setNextNodeIndex(1);
@@ -352,7 +352,7 @@ public final class DoorInteractionGameTests {
                     "head-height gate remained open after the villager cleared its passage");
             helper.succeed();
         } finally {
-            Config.getInstance().villagersInteractWithFenceGates = originalGateConfig;
+            Config.SERVER.villagersInteractWithFenceGates.set(originalGateConfig);
             villager.discard();
         }
     }
@@ -370,14 +370,14 @@ public final class DoorInteractionGameTests {
         }
         level.setBlock(gate, Blocks.OAK_FENCE_GATE.defaultBlockState(), 3);
 
-        boolean originalGateConfig = Config.getInstance().villagersInteractWithFenceGates;
+        boolean originalGateConfig = Config.SERVER.villagersInteractWithFenceGates.get();
         VillagerEntityMCA villager = VillagerFactory.newVillager(level)
                 .withAge(0).withPosition(Vec3.atBottomCenterOf(beforeGate))
                 .withName("Lost Path Head Gate Probe").spawn(MobSpawnType.STRUCTURE);
         villager.setNoAi(true);
         villager.refreshBrain(level);
         try {
-            Config.getInstance().villagersInteractWithFenceGates = true;
+            Config.SERVER.villagersInteractWithFenceGates.set(true);
             Path initial = new Path(List.of(node(beforeGate), node(beneathGate), node(destination)), destination, true);
             initial.setNextNodeIndex(1);
             villager.getBrain().setMemory(MemoryModuleType.PATH, initial);
@@ -404,7 +404,7 @@ public final class DoorInteractionGameTests {
                     "head-height gate stayed open indefinitely because an unreachable destination remained");
             helper.succeed();
         } finally {
-            Config.getInstance().villagersInteractWithFenceGates = originalGateConfig;
+            Config.SERVER.villagersInteractWithFenceGates.set(originalGateConfig);
             villager.discard();
         }
     }

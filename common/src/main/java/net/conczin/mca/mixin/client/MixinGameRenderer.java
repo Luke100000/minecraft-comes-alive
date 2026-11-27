@@ -44,14 +44,15 @@ public abstract class MixinGameRenderer {
                     if (mca$currentShader != null) {
                         loadEffect(mca$currentShader.getB());
                     } else {
-                        Config.getInstance().shaderLocationsMap.entrySet().stream()
-                                .filter(entry -> villagerLike.getTraits().hasTrait(entry.getKey()))
-                                .filter(entry -> MCAClient.areShadersAllowed(entry.getKey() + "_shader"))
-                                .findFirst().ifPresent(entry -> {
-                                    ResourceLocation shaderId = ResourceLocation.parse(entry.getValue());
-                                    mca$currentShader = new Tuple<>(entry.getKey(), shaderId);
-                                    loadEffect(shaderId);
-                                });
+                        for (var entry : Config.CLIENT.shaderLocationsMap().entrySet()) {
+                            if (villagerLike.getTraits().hasTrait(entry.getKey())
+                                    && MCAClient.areShadersAllowed(entry.getKey() + "_shader")) {
+                                ResourceLocation shaderId = ResourceLocation.parse(entry.getValue());
+                                mca$currentShader = new Tuple<>(entry.getKey(), shaderId);
+                                loadEffect(shaderId);
+                                break;
+                            }
+                        }
                     }
                 } else if (mca$currentShader != null && !villagerLike.getTraits().hasTrait(mca$currentShader.getA())) {
                     shutdownEffect();

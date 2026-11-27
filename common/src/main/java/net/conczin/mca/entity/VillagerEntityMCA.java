@@ -110,7 +110,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     private static final OneShot<PathfinderMob> CREEPER_ESCAPE = SetWalkTargetAwayFrom.entity(
             MemoryModuleTypeMCA.NEAREST_IGNITED_CREEPER, 0.75F, 16, true);
     private static final CDataParameter<Float> INFECTION_PROGRESS = CParameter.create("InfectionProgress", 0.0f);
-    private static final CDataParameter<Integer> GROWTH_AMOUNT = CParameter.create("GrowthAmount", -AgeState.getMaxAge());
+    private static final CDataParameter<Integer> GROWTH_AMOUNT = CParameter.create("GrowthAmount", 0);
     private static final float VEHICLE_ATTACHMENT_Y = 0.6F;
     public static final int MAX_NICKNAME_LENGTH = 32;
     static final String CHAT_AI_PROMPT_KEY = "ChatAIPrompt";
@@ -141,6 +141,8 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     private long lastHit = 0;
     private int prevGrowthAmount;
     private boolean interactedWith;
+    private double lastAppliedConfiguredMaxHealth = Double.NaN;
+    private double lastAppliedConfiguredFollowRange = Double.NaN;
     private boolean wasPanicking;
     private double lastAppliedHealthBonus = Double.NaN;
     private boolean recoveryFoodUseActive;
@@ -220,8 +222,8 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
                 .add(Attributes.WATER_MOVEMENT_EFFICIENCY, 1.0D)
                 .add(Attributes.ATTACK_DAMAGE, 3.0f)
                 .add(Attributes.ATTACK_KNOCKBACK, 1.0f)
-                .add(Attributes.MAX_HEALTH, Config.getInstance().villagerMaxHealth)
-                .add(Attributes.FOLLOW_RANGE, Config.getInstance().getVillagerFollowRange());
+                .add(Attributes.MAX_HEALTH, Config.SERVER.villagerMaxHealth.getDefault())
+                .add(Attributes.FOLLOW_RANGE, Config.SERVER.villagerFollowRange.getDefault());
     }
 
     @Override
@@ -254,7 +256,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
         if (!level().isClientSide) {
             Optional<Village> village = residency.getHomeVillage();
-            if (village.isPresent() && Config.getInstance().villagerRestockNotification) {
+            if (village.isPresent() && Config.SERVER.villagerRestockNotification.get()) {
                 village.get().broadCastMessage((ServerLevel) level(), "events.restock", getName().getString());
             }
         }
@@ -534,7 +536,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         if (getVehicle() != null && getVehicle().equals(player)) return InteractionResult.PASS;
 
         ItemStack stack = player.getItemInHand(hand);
-        boolean isOnBlacklist = Config.getInstance().villagerInteractionItemBlacklist.contains(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());
+        boolean isOnBlacklist = Config.SERVER.villagerInteractionItemBlacklist.get().contains(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());
         if (hand.equals(InteractionHand.MAIN_HAND) && !isOnBlacklist && !stack.is(TagsMCA.Items.VILLAGER_EGGS) && canInteractWithItemStackInHand(stack) && !getVillagerBrain().isPanicking()) {
             //make sure dialogueType is synced in case the client needs it
             getDialogueType(player);
@@ -562,7 +564,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         if (getVehicle() != null && getVehicle().equals(player)) return InteractionResult.PASS;
 
         ItemStack stack = player.getItemInHand(hand);
-        boolean isOnBlacklist = Config.getInstance().villagerInteractionItemBlacklist.contains(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());
+        boolean isOnBlacklist = Config.SERVER.villagerInteractionItemBlacklist.get().contains(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());
         if (!isOnBlacklist && !stack.is(TagsMCA.Items.VILLAGER_EGGS) && isAlive() && !isTrading() && !isSleeping() && canInteractWithItemStackInHand(stack) && !getVillagerBrain().isPanicking()) {
             if (isBaby()) {
                 setUnhappy();
@@ -651,7 +653,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
         // you can't hit babies!
         // TODO: Verify the `isUnblockable` replacement for 1.19.4, ensure same behavior
-        if (!Config.getInstance().canHurtBabies && !source.is(DamageTypeTags.BYPASSES_SHIELD) && getAgeState() == AgeState.BABY) {
+        if (!Config.SERVER.canHurtBabies.get() && !source.is(DamageTypeTags.BYPASSES_SHIELD) && getAgeState() == AgeState.BABY) {
             if (source.getEntity() instanceof Player && requestCooldown()) {
                 sendEventMessage(Component.translatable("villager.baby_hit"));
             }
@@ -689,9 +691,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             //infect the villager
             if (source.getDirectEntity() instanceof Zombie
                 && getProfession() != ProfessionsMCA.GUARD
-                && Config.getInstance().enableInfection
-                && random.nextFloat() < Config.getInstance().zombieBiteInfectionChance
-                && random.nextFloat() > (getVillagerData().getLevel() - 1) * Config.getInstance().infectionChanceDecreasePerLevel
+                && Config.SERVER.enableInfection.get()
+                && random.nextFloat() < Config.SERVER.zombieBiteInfectionChance.get().floatValue()
+                && random.nextFloat() > (getVillagerData().getLevel() - 1) * Config.SERVER.infectionChanceDecreasePerLevel.get().floatValue()
                 && (getResidency().getHomeVillage().filter(v -> v.hasBuilding("infirmary")).isEmpty() || random.nextBoolean())) {
                 setInfected(true);
                 sendChatToAllAround("villager.bitten");
@@ -775,7 +777,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     private int getMaxWarnings(Player attacker) {
-        return getVillagerBrain().getMemoriesForPlayer(attacker).getHearts() / Math.max(1, Config.getInstance().heartsForPardonHit);
+        return getVillagerBrain().getMemoriesForPlayer(attacker).getHearts() / Math.max(1, Config.SERVER.heartsForPardonHit.get());
     }
 
     @Override
@@ -791,7 +793,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
         burned--;
         if (isOnFire()) {
-            burned = Config.getInstance().burnedClothingTickLength;
+            burned = Config.SERVER.burnedClothingTickLength.get();
         }
         if (burned > 0) {
             spawnBurntParticles();
@@ -823,7 +825,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
             inventory.update(this);
 
-            if (tickCount % Config.getInstance().pardonPlayerTicks == 0) {
+            if (tickCount % Config.SERVER.pardonPlayerTicks.get() == 0) {
                 pardonPlayers();
             }
 
@@ -832,12 +834,12 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             mcaBrain.think();
 
             // pop a item from the desaturation queue
-            if (tickCount % Config.getInstance().giftDesaturationReset == 0) {
+            if (tickCount % Config.SERVER.giftDesaturationReset.get() == 0) {
                 getRelationships().getGiftSaturation().pop();
             }
 
             // track the position from time to time
-            if (interactedWith && tickCount % Config.getInstance().trackVillagerPositionEveryNTicks == 0) {
+            if (interactedWith && tickCount % Config.SERVER.trackVillagerPositionEveryNTicks.get() == 0) {
                 VillagerTrackerManager.update(this);
             }
         }
@@ -1034,7 +1036,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
                     sendChatToAllAround("villager.sickness");
                 }
 
-                infection += 1.0f / Config.getInstance().infectionTime;
+                infection += 1.0f / Config.SERVER.infectionTime.get();
                 setInfectionProgress(infection);
 
                 if (infection > 1.0f) {
@@ -1057,6 +1059,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
                 sendChatToAllAround("sirben");
             }
 
+            updateConfiguredAttributes();
             updateLevelHealthBonus();
 
             //twice a day, randomize the mood a bit
@@ -1070,7 +1073,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     private void updateLevelHealthBonus() {
         int level = this.getVillagerData().getLevel() - 1;
-        double bonus = Config.getInstance().villagerHealthBonusPerLevel * level;
+        double bonus = Config.SERVER.villagerHealthBonusPerLevel.get() * level;
 
         if (bonus == lastAppliedHealthBonus) {
             return;
@@ -1091,6 +1094,36 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
                     bonus,
                     AttributeModifier.Operation.ADD_VALUE
             ));
+        }
+    }
+
+    private void updateConfiguredAttributes() {
+        if (!Config.SERVER_SPEC.isLoaded()) {
+            return;
+        }
+
+        double configuredMaxHealth = Config.SERVER.villagerMaxHealth.get();
+        if (configuredMaxHealth != lastAppliedConfiguredMaxHealth) {
+            AttributeInstance maxHealth = this.getAttributes().getInstance(Attributes.MAX_HEALTH);
+            if (maxHealth != null) {
+                float previousMaximum = this.getMaxHealth();
+                boolean wasAtFullHealth = this.getHealth() >= previousMaximum;
+                maxHealth.setBaseValue(configuredMaxHealth);
+                lastAppliedConfiguredMaxHealth = configuredMaxHealth;
+
+                if (wasAtFullHealth || this.getHealth() > this.getMaxHealth()) {
+                    this.setHealth(this.getMaxHealth());
+                }
+            }
+        }
+
+        double configuredFollowRange = Config.SERVER.villagerFollowRange.get();
+        if (configuredFollowRange != lastAppliedConfiguredFollowRange) {
+            AttributeInstance followRange = this.getAttributes().getInstance(Attributes.FOLLOW_RANGE);
+            if (followRange != null) {
+                followRange.setBaseValue(configuredFollowRange);
+                lastAppliedConfiguredFollowRange = configuredFollowRange;
+            }
         }
     }
 
@@ -1330,7 +1363,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     protected void doPush(Entity entity) {
-        if (isSleeping() || (!Config.getServerConfig().enableVillagerCollisions && entity instanceof VillagerEntityMCA)) {
+        if (isSleeping() || (!Config.SERVER.enableVillagerCollisions.get() && entity instanceof VillagerEntityMCA)) {
             return;
         }
         super.doPush(entity);
@@ -1425,9 +1458,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public SoundEvent getDeathSound() {
-        if (Config.getInstance().useMCAVoices) {
+        if (Config.SERVER.useMCAVoices.get()) {
             return getGenetics().getGender() == Gender.MALE ? SoundsMCA.VILLAGER_MALE_SCREAM : SoundsMCA.VILLAGER_FEMALE_SCREAM;
-        } else if (Config.getInstance().useVanillaVoices) {
+        } else if (Config.SERVER.useVanillaVoices.get()) {
             return super.getDeathSound();
         } else {
             return SoundsMCA.SILENT;
@@ -1435,7 +1468,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     public SoundEvent getSurprisedSound() {
-        if (Config.getInstance().useMCAVoices) {
+        if (Config.SERVER.useMCAVoices.get()) {
             return getGenetics().getGender() == Gender.MALE ? SoundsMCA.VILLAGER_MALE_SURPRISE : SoundsMCA.VILLAGER_FEMALE_SURPRISE;
         } else {
             return SoundsMCA.SILENT;
@@ -1445,7 +1478,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     @Nullable
     @Override
     protected final SoundEvent getAmbientSound() {
-        if (Config.getInstance().useMCAVoices) {
+        if (Config.SERVER.useMCAVoices.get()) {
             //baby sounds
             if (getAgeState() == AgeState.BABY) {
                 return SoundsMCA.VILLAGER_BABY_LAUGH;
@@ -1478,7 +1511,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             }
 
             return SoundsMCA.SILENT;
-        } else if (Config.getInstance().useVanillaVoices) {
+        } else if (Config.SERVER.useVanillaVoices.get()) {
             return super.getAmbientSound();
         } else {
             return SoundsMCA.SILENT;
@@ -1487,9 +1520,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     protected final SoundEvent getHurtSound(DamageSource cause) {
-        if (Config.getInstance().useMCAVoices) {
+        if (Config.SERVER.useMCAVoices.get()) {
             return getGenetics().getGender() == Gender.MALE ? SoundsMCA.VILLAGER_MALE_HURT : SoundsMCA.VILLAGER_FEMALE_HURT;
-        } else if (Config.getInstance().useVanillaVoices) {
+        } else if (Config.SERVER.useVanillaVoices.get()) {
             return super.getHurtSound(cause);
         } else {
             return SoundsMCA.SILENT;
@@ -1497,22 +1530,22 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     public final void playWelcomeSound() {
-        if (Config.getInstance().useMCAVoices && !getVillagerBrain().isPanicking() && getAgeState() != AgeState.BABY) {
+        if (Config.SERVER.useMCAVoices.get() && !getVillagerBrain().isPanicking() && getAgeState() != AgeState.BABY) {
             playSound(getGenetics().getGender() == Gender.MALE ? SoundsMCA.VILLAGER_MALE_GREET : SoundsMCA.VILLAGER_FEMALE_GREET, getSoundVolume(), getVoicePitch());
         }
     }
 
     public final void playSurprisedSound() {
-        if (Config.getInstance().useMCAVoices) {
+        if (Config.SERVER.useMCAVoices.get()) {
             playSound(getSurprisedSound(), getSoundVolume(), getVoicePitch());
         }
     }
 
     @Override
     public SoundEvent getNotifyTradeSound() {
-        if (Config.getInstance().useMCAVoices) {
+        if (Config.SERVER.useMCAVoices.get()) {
             return getGenetics().getGender() == Gender.MALE ? SoundsMCA.VILLAGER_MALE_YES : SoundsMCA.VILLAGER_FEMALE_YES;
-        } else if (Config.getInstance().useVanillaVoices) {
+        } else if (Config.SERVER.useVanillaVoices.get()) {
             return super.getNotifyTradeSound();
         } else {
             return SoundsMCA.SILENT;
@@ -1520,9 +1553,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     public SoundEvent getNoSound() {
-        if (Config.getInstance().useMCAVoices) {
+        if (Config.SERVER.useMCAVoices.get()) {
             return getGenetics().getGender() == Gender.MALE ? SoundsMCA.VILLAGER_MALE_NO : SoundsMCA.VILLAGER_FEMALE_NO;
-        } else if (Config.getInstance().useVanillaVoices) {
+        } else if (Config.SERVER.useVanillaVoices.get()) {
             return SoundEvents.VILLAGER_NO;
         } else {
             return SoundsMCA.SILENT;
@@ -1531,9 +1564,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     protected SoundEvent getTradeUpdatedSound(boolean sold) {
-        if (Config.getInstance().useMCAVoices) {
+        if (Config.SERVER.useMCAVoices.get()) {
             return sold ? getNotifyTradeSound() : getNoSound();
-        } else if (Config.getInstance().useVanillaVoices) {
+        } else if (Config.SERVER.useVanillaVoices.get()) {
             return super.getTradeUpdatedSound(sold);
         } else {
             return SoundsMCA.SILENT;
@@ -1542,9 +1575,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public void playCelebrateSound() {
-        if (Config.getInstance().useMCAVoices) {
+        if (Config.SERVER.useMCAVoices.get()) {
             playSound(getGenetics().getGender() == Gender.MALE ? SoundsMCA.VILLAGER_MALE_CELEBRATE : SoundsMCA.VILLAGER_FEMALE_CELEBRATE, getSoundVolume(), getVoicePitch());
-        } else if (Config.getInstance().useVanillaVoices) {
+        } else if (Config.SERVER.useVanillaVoices.get()) {
             super.playCelebrateSound();
         } else {
             playSound(SoundsMCA.SILENT, getSoundVolume(), getVoicePitch());
@@ -2111,7 +2144,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     private void tickDespawnDelay() {
         if (this.despawnDelay > 0 && !this.isTrading() && --this.despawnDelay == 0) {
-            if (getRelationships().getPartner().isPresent() || getVillagerBrain().getMemories().values().stream().anyMatch(m -> random.nextInt(Config.getInstance().marriageHeartsRequirement) < m.getHearts())) {
+            if (getRelationships().getPartner().isPresent() || getVillagerBrain().getMemories().values().stream().anyMatch(m -> random.nextInt(Config.SERVER.marriageHeartsRequirement.get()) < m.getHearts())) {
                 setProfession(VillagerProfession.NONE);
                 setDespawnDelay(0);
             } else {

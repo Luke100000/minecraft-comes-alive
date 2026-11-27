@@ -30,7 +30,7 @@ public class VillageGuardsManager {
             case 1 -> EquipmentSet.GUARD_1;
             default -> getEquipmentFor(dominantHand, EquipmentSet.GUARD_0, EquipmentSet.GUARD_0_LEFT);
         };
-        return getConfiguredEquipment(Config.getInstance().guardEquipment, level, fallback);
+        return getConfiguredEquipment(Config.SERVER.guardEquipment(), level, fallback);
     }
 
     public static EquipmentSet getArcherEquipmentForLevel(int level, InteractionHand dominantHand) {
@@ -39,11 +39,11 @@ public class VillageGuardsManager {
             case 1 -> getEquipmentFor(dominantHand, EquipmentSet.ARCHER_1, EquipmentSet.ARCHER_1_LEFT);
             default -> getEquipmentFor(dominantHand, EquipmentSet.ARCHER_0, EquipmentSet.ARCHER_0_LEFT);
         };
-        return getConfiguredEquipment(Config.getInstance().archerEquipment, level, fallback);
+        return getConfiguredEquipment(Config.SERVER.archerEquipment(), level, fallback);
     }
 
     public void spawnGuards(ServerLevel world) {
-        int guardCapacity = (int) Math.ceil(village.getPopulation() * Config.getInstance().guardSpawnFraction);
+        int guardCapacity = (int) Math.ceil(village.getPopulation() * Config.SERVER.guardSpawnFraction.get().floatValue());
 
         // Count up the guards
         int guards = 0;
@@ -63,7 +63,7 @@ public class VillageGuardsManager {
 
         // Count all unloaded villagers against the guard limit
         // This is statistical and may not be accurate, but it's better than nothing
-        guards += (int) Math.ceil((village.getPopulation() - guards - citizen) * Config.getInstance().guardSpawnFraction);
+        guards += (int) Math.ceil((village.getPopulation() - guards - citizen) * Config.SERVER.guardSpawnFraction.get().floatValue());
 
         // Spawn a new guard if we don't have enough
         if (!nonGuards.isEmpty() && guards < guardCapacity) {

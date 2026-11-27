@@ -71,7 +71,7 @@ class SkinLibraryAsyncGuardTest {
     void prepare() throws Exception {
         SharedConstants.tryDetectVersion();
         Bootstrap.bootStrap();
-        formerUrl = Config.getInstance().immersiveLibraryUrl;
+        formerUrl = Config.CLIENT.immersiveLibraryUrl.get();
         formerToken = (String) field(Auth.class, "currentToken").get(null);
         formerMinecraft = (Minecraft) field(Minecraft.class, "instance").get(null);
         field(Auth.class, "currentToken").set(null, "skin-async-test-token");
@@ -104,7 +104,7 @@ class SkinLibraryAsyncGuardTest {
             }
         });
         server.start();
-        Config.getInstance().immersiveLibraryUrl = "http://127.0.0.1:" + server.getAddress().getPort();
+        Config.CLIENT.immersiveLibraryUrl.set("http://127.0.0.1:" + server.getAddress().getPort());
     }
 
     @AfterEach
@@ -121,7 +121,7 @@ class SkinLibraryAsyncGuardTest {
         }
         server.stop(0);
         serverExecutor.shutdownNow();
-        Config.getInstance().immersiveLibraryUrl = formerUrl;
+        Config.CLIENT.immersiveLibraryUrl.set(formerUrl);
         field(Auth.class, "currentToken").set(null, formerToken);
         field(Minecraft.class, "instance").set(null, formerMinecraft);
         if (formerCatalogOutdated != null) {

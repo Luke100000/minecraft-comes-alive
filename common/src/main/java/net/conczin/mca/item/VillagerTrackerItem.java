@@ -44,7 +44,7 @@ public class VillagerTrackerItem extends Item {
     @Override
     public void inventoryTick(ItemStack stack, Level world, Entity entity, int slot, boolean selected) {
         if (world instanceof ServerLevel serverWorld) {
-            if (world.getGameTime() % Config.getInstance().trackVillagerPositionEveryNTicks == 0 && stack.has(DataComponentsMCA.TRACKER_UUID)) {
+            if (world.getGameTime() % Config.SERVER.trackVillagerPositionEveryNTicks.get() == 0 && stack.has(DataComponentsMCA.TRACKER_UUID)) {
                 UUID uuid = stack.get(DataComponentsMCA.TRACKER_UUID);
                 GlobalPos pos = VillagerTrackerManager.get(serverWorld).get(uuid);
                 if (pos != null) {

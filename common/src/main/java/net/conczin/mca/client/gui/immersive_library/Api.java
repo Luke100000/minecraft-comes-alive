@@ -40,7 +40,7 @@ public class Api {
                                             Map<String, String> queryParams, Map<String, ?> body, String token) {
         HttpURLConnection con = null;
         try {
-            String fullUrl = Config.getInstance().immersiveLibraryUrl + "/" + url;
+            String fullUrl = Config.CLIENT.immersiveLibraryUrl.get() + "/" + url;
 
             // Append query params
             if (queryParams != null) {

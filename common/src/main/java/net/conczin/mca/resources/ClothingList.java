@@ -54,11 +54,11 @@ public class ClothingList extends SimpleJsonResourceReloadListener {
     }
 
     private List<Clothing> getOptions(VillagerLike<?> villager, Collection<Clothing> available) {
-        return SkinSelection.clothingForVillager(available, villager, Config.getInstance().professionConversionsMap);
+        return SkinSelection.clothingForVillager(available, villager, Config.SERVER.professionConversionsMap());
     }
 
     private List<Clothing> getOptions(Gender gender, @Nullable VillagerProfession profession, Collection<Clothing> available) {
-        Map<String, String> map = Config.getInstance().professionConversionsMap;
+        Map<String, String> map = Config.SERVER.professionConversionsMap();
         String currentValue = profession == null ? "minecraft:none" : BuiltInRegistries.VILLAGER_PROFESSION.getKey(profession).toString();
         return getOptions(gender, SkinSelection.mapProfession(currentValue, map), available);
     }

@@ -12,7 +12,7 @@ import net.minecraft.world.entity.npc.VillagerProfession;
 
 public class LoseUnimportantJobTask {
     protected static boolean shouldRun(ServerLevel world, Villager entity) {
-        return Config.getServerConfig().villagersChangeProfession && !((VillagerEntityMCA) entity).isProfessionImportant();
+        return Config.SERVER.villagersChangeProfession.get() && !((VillagerEntityMCA) entity).isProfessionImportant();
     }
 
     public static BehaviorControl<Villager> create() {

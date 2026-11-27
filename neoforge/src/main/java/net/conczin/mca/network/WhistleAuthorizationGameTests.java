@@ -110,20 +110,20 @@ public final class WhistleAuthorizationGameTests {
         VillagerEntityMCA relative = villager(helper);
         makeChildOf(relative, sender);
         sender.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(ItemsMCA.WHISTLE));
-        boolean original = Config.getServerConfig().whistleCallMakesVillagersFollow;
+        boolean original = Config.SERVER.whistleCallMakesVillagersFollow.get();
         try {
             relative.getVillagerBrain().setMoveState(MoveState.STAY, sender);
-            Config.getServerConfig().whistleCallMakesVillagersFollow = false;
+            Config.SERVER.whistleCallMakesVillagersFollow.set(false);
             new CallToPlayerMessage(relative.getUUID()).handleServer(sender);
             helper.assertTrue(relative.getVillagerBrain().getMoveState() == MoveState.STAY,
                     "whistle call ignored disabled follow setting");
 
-            Config.getServerConfig().whistleCallMakesVillagersFollow = true;
+            Config.SERVER.whistleCallMakesVillagersFollow.set(true);
             new CallToPlayerMessage(relative.getUUID()).handleServer(sender);
             helper.assertTrue(relative.getVillagerBrain().getMoveState() == MoveState.FOLLOW,
                     "whistle call did not follow when enabled");
         } finally {
-            Config.getServerConfig().whistleCallMakesVillagersFollow = original;
+            Config.SERVER.whistleCallMakesVillagersFollow.set(original);
         }
         helper.succeed();
     }

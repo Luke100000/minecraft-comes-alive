@@ -56,10 +56,10 @@ public final class NavigationOutcomeGameTests {
 
     @BeforeBatch(batch = BATCH)
     public static void prepareBatch(ServerLevel level) {
-        previousTeleporting = Config.getInstance().allowVillagerTeleporting;
-        previousMourning = Config.getInstance().enableMourning;
-        Config.getInstance().allowVillagerTeleporting = false;
-        Config.getInstance().enableMourning = true;
+        previousTeleporting = Config.SERVER.allowVillagerTeleporting.get();
+        previousMourning = Config.SERVER.enableMourning.get();
+        Config.SERVER.allowVillagerTeleporting.set(false);
+        Config.SERVER.enableMourning.set(true);
     }
 
     @AfterBatch(batch = BATCH)
@@ -68,8 +68,8 @@ public final class NavigationOutcomeGameTests {
         ACTORS.clear();
         FORCED_CHUNKS.forEach(chunk -> level.setChunkForced(chunk.x, chunk.z, false));
         FORCED_CHUNKS.clear();
-        Config.getInstance().allowVillagerTeleporting = previousTeleporting;
-        Config.getInstance().enableMourning = previousMourning;
+        Config.SERVER.allowVillagerTeleporting.set(previousTeleporting);
+        Config.SERVER.enableMourning.set(previousMourning);
     }
 
     @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 900)

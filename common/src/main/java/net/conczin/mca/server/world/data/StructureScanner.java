@@ -1,6 +1,7 @@
 package net.conczin.mca.server.world.data;
 
 import net.conczin.mca.Config;
+import net.conczin.mca.ServerConfig;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.BlockGetter;
@@ -19,9 +20,9 @@ final class StructureScanner {
     }
 
     static SelectedFloorScanner.Observation newObservation(BlockGetter world) {
-        Config config = Config.getInstance();
+        ServerConfig config = Config.SERVER;
         return new SelectedFloorScanner.Observation(
-                world, config.maxBuildingSize, config.maxBuildingRadius);
+                world, config.maxBuildingSize.get(), config.maxBuildingRadius.get());
     }
 
     /** World-aware Room partition entry point so door ownership stays consistent across callers. */

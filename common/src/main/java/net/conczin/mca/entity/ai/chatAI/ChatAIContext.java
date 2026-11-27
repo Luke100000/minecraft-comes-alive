@@ -124,7 +124,7 @@ public final class ChatAIContext {
     };
 
     public static boolean canEdit(ServerPlayer player) {
-        return player.hasPermissions(Config.getInstance().villagerChatAIContextPermissionLevel)
+        return player.hasPermissions(Config.SERVER.villagerChatAIContextPermissionLevel.get())
                || player.serverLevel().getServer().isSingleplayerOwner(player.getGameProfile());
     }
 

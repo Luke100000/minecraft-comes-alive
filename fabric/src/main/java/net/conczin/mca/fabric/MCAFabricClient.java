@@ -9,6 +9,8 @@ import net.conczin.mca.client.particle.InteractionParticle;
 import net.conczin.mca.client.render.*;
 import net.conczin.mca.client.resources.GeneratedEyeTextureReloadListener;
 import net.conczin.mca.fabric.client.gui.FabricMCAScreens;
+import net.conczin.mca.fabric.config.FabricConfigBootstrap;
+import net.conczin.mca.fabric.config.FabricConfigSync;
 import net.conczin.mca.fabric.resources.ApiIdentifiableReloadListener;
 import net.conczin.mca.fabric.resources.FabricColorPaletteLoader;
 import net.conczin.mca.fabric.resources.FabricReloadListener;
@@ -42,9 +44,12 @@ import net.minecraft.world.entity.player.Player;
 public final class MCAFabricClient extends ClientProxyAbstractImpl implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
+        FabricConfigBootstrap.initializeClient();
+        FabricConfigSync.initializeClient();
+
         Network.registerClientSender(ClientPlayNetworking::send);
 
-        if (Config.getInstance().useSquidwardModels) {
+        if (Config.COMMON.useSquidwardModels.get()) {
             EntityRendererRegistry.register(EntitiesMCA.MALE_VILLAGER, VillagerRenderer::new);
             EntityRendererRegistry.register(EntitiesMCA.FEMALE_VILLAGER, VillagerRenderer::new);
 
@@ -79,7 +84,7 @@ public final class MCAFabricClient extends ClientProxyAbstractImpl implements Cl
         ModelPredicatesMCA.setup(ItemProperties::register);
 
         ClientPlayConnectionEvents.JOIN.register((handler, sender, server) ->
-                MCAClient.onLogin()
+                FabricConfigSync.onClientJoin(MCAClient::onLogin)
         );
 
         BlockRenderLayerMap.INSTANCE.putBlock(BlocksMCA.INFERNAL_FLAME, RenderType.cutout());

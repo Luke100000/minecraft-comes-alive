@@ -74,7 +74,7 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
         int lastProcreation = entity.getTrackedValue(LAST_PROCREATION);
         int elapsed = (int) time - lastProcreation;
         return pendingProcreation == null
-                && (lastProcreation == 0 || elapsed < 0 || elapsed > Config.getInstance().procreationCooldown);
+                && (lastProcreation == 0 || elapsed < 0 || elapsed > Config.SERVER.procreationCooldown.get());
     }
 
     public boolean startProcreating(Entity spouse, long time) {
@@ -195,7 +195,7 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
 
         // desaturation
         int occurrences = getGiftSaturation().get(stack);
-        int penalty = (int) (occurrences * Config.getInstance().giftDesaturationFactor * Math.pow(Math.max(satisfaction, 0.0), Config.getInstance().giftDesaturationExponent));
+        int penalty = (int) (occurrences * Config.SERVER.giftDesaturationFactor.get().floatValue() * Math.pow(Math.max(satisfaction, 0.0), Config.SERVER.giftDesaturationExponent.get()));
         if (penalty != 0) {
             analysis.add("desaturation", -penalty);
         }
@@ -203,7 +203,7 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
         Response desaturatedResponse = gift.getResponse(desaturatedSatisfaction);
 
         // adjust reward
-        desaturatedSatisfaction = (int) (desaturatedSatisfaction * Config.getInstance().giftSatisfactionFactor);
+        desaturatedSatisfaction = (int) (desaturatedSatisfaction * Config.SERVER.giftSatisfactionFactor.get());
 
         Network.sendToPlayer(new AnalysisResults(analysis), player);
 
@@ -224,7 +224,7 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
         }
 
         //modify mood and hearts
-        entity.getVillagerBrain().modifyMoodValue((int) (desaturatedSatisfaction * Config.getInstance().giftMoodEffect + Config.getInstance().baseGiftMoodEffect * Mth.sign(desaturatedSatisfaction)));
+        entity.getVillagerBrain().modifyMoodValue((int) (desaturatedSatisfaction * Config.SERVER.giftMoodEffect.get().floatValue() + Config.SERVER.baseGiftMoodEffect.get().floatValue() * Mth.sign(desaturatedSatisfaction)));
         CriterionMCA.HEARTS.trigger(player, memory.getHearts(), desaturatedSatisfaction, "gift");
         memory.modHearts(desaturatedSatisfaction);
     }

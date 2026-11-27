@@ -147,16 +147,15 @@ public final class NavigationRecoveryGameTests {
             }
         }
         VillagerEntityMCA villager = spawnStationary(helper, start);
-        Config config = Config.getInstance();
-        int previousDistance = config.villagerPathfindingDistance;
+        int previousDistance = Config.SERVER.villagerPathfindingDistance.get();
         try {
-            config.villagerPathfindingDistance = 160;
+            Config.SERVER.villagerPathfindingDistance.set(160);
             Path route = ((MCAGroundPathNavigation) villager.getNavigation())
                     .createPathForPersistentIntent(Set.of(target), 0);
             helper.assertTrue(route != null && route.canReach() && route.getEndNode().asBlockPos().equals(target),
                     "A nearby walkable destination was denied its native detour search");
         } finally {
-            config.villagerPathfindingDistance = previousDistance;
+            Config.SERVER.villagerPathfindingDistance.set(previousDistance);
             villager.discard();
         }
         helper.succeed();
@@ -351,10 +350,9 @@ public final class NavigationRecoveryGameTests {
             }
         }
         VillagerEntityMCA villager = spawnStationary(helper, start);
-        Config config = Config.getInstance();
-        int previousDistance = config.villagerPathfindingDistance;
+        int previousDistance = Config.SERVER.villagerPathfindingDistance.get();
         try {
-            config.villagerPathfindingDistance = 160;
+            Config.SERVER.villagerPathfindingDistance.set(160);
             villager.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
             villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
                     new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
@@ -374,7 +372,7 @@ public final class NavigationRecoveryGameTests {
                             .getTarget().currentBlockPosition().equals(target),
                     "Recovery replaced the logical destination with its temporary flank waypoint");
         } finally {
-            config.villagerPathfindingDistance = previousDistance;
+            Config.SERVER.villagerPathfindingDistance.set(previousDistance);
             villager.discard();
         }
         helper.succeed();
@@ -401,12 +399,12 @@ public final class NavigationRecoveryGameTests {
         }
         helper.getLevel().setBlock(target.south(), Blocks.OAK_FENCE_GATE.defaultBlockState(), 3);
         VillagerEntityMCA villager = spawnStationary(helper, start);
-        Config config = Config.getInstance();
-        int previousDistance = config.villagerPathfindingDistance;
-        boolean previousGates = config.villagersInteractWithFenceGates;
+        var config = Config.SERVER;
+        int previousDistance = config.villagerPathfindingDistance.get();
+        boolean previousGates = config.villagersInteractWithFenceGates.get();
         try {
-            config.villagersInteractWithFenceGates = true;
-            config.villagerPathfindingDistance = 160;
+            config.villagersInteractWithFenceGates.set(true);
+            config.villagerPathfindingDistance.set(160);
             villager.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
             villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
                     new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
@@ -424,8 +422,8 @@ public final class NavigationRecoveryGameTests {
                             && ((MCAGroundPathNavigation) villager.getNavigation()).isTakingDetourTo(target),
                     "A target with an operable gate as its only approach was denied detour recovery");
         } finally {
-            config.villagerPathfindingDistance = previousDistance;
-            config.villagersInteractWithFenceGates = previousGates;
+            config.villagerPathfindingDistance.set(previousDistance);
+            config.villagersInteractWithFenceGates.set(previousGates);
             villager.discard();
         }
         helper.succeed();
@@ -442,10 +440,10 @@ public final class NavigationRecoveryGameTests {
             }
         }
         VillagerEntityMCA villager = spawnStationary(helper, start);
-        Config config = Config.getInstance();
-        int previousDistance = config.villagerPathfindingDistance;
+        var config = Config.SERVER;
+        int previousDistance = config.villagerPathfindingDistance.get();
         try {
-            config.villagerPathfindingDistance = 160;
+            config.villagerPathfindingDistance.set(160);
             villager.getBrain().setMemory(MemoryModuleType.HOME,
                     GlobalPos.of(helper.getLevel().dimension(), target));
             var producer = ExtendedWalkTowardsTask.createWithoutPoiRelease(
@@ -481,7 +479,7 @@ public final class NavigationRecoveryGameTests {
                             .getTarget().currentBlockPosition().equals(target),
                     "preserving failure evidence interrupted the logical journey");
         } finally {
-            config.villagerPathfindingDistance = previousDistance;
+            config.villagerPathfindingDistance.set(previousDistance);
             villager.discard();
         }
         helper.succeed();
@@ -499,10 +497,10 @@ public final class NavigationRecoveryGameTests {
             }
         }
         VillagerEntityMCA villager = spawnStationary(helper, start);
-        Config config = Config.getInstance();
-        int previousDistance = config.villagerPathfindingDistance;
+        var config = Config.SERVER;
+        int previousDistance = config.villagerPathfindingDistance.get();
         try {
-            config.villagerPathfindingDistance = 160;
+            config.villagerPathfindingDistance.set(160);
             villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
                     new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
             var navigation = villager.getNavigation();
@@ -534,7 +532,7 @@ public final class NavigationRecoveryGameTests {
                             && WalkTargetFailureMemory.hasFailureFor(villager, target),
                     "flank selection changed the logical destination or erased its failure");
         } finally {
-            config.villagerPathfindingDistance = previousDistance;
+            config.villagerPathfindingDistance.set(previousDistance);
             villager.discard();
         }
         helper.succeed();
@@ -552,10 +550,10 @@ public final class NavigationRecoveryGameTests {
             }
         }
         VillagerEntityMCA villager = spawnStationary(helper, start);
-        Config config = Config.getInstance();
-        int previousDistance = config.villagerPathfindingDistance;
+        var config = Config.SERVER;
+        int previousDistance = config.villagerPathfindingDistance.get();
         try {
-            config.villagerPathfindingDistance = 49;
+            config.villagerPathfindingDistance.set(49);
             villager.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
             villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
                     new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
@@ -566,7 +564,7 @@ public final class NavigationRecoveryGameTests {
                             && PathRequestDiagnostics.snapshot(villager).extendedSearches() == 1,
                     "fixture did not exhaust the smaller extended search: " + blocked);
             WalkTargetFailureMemory.record(villager, target, helper.getLevel().getGameTime());
-            config.villagerPathfindingDistance = 160;
+            config.villagerPathfindingDistance.set(160);
             navigation.moveTo(blocked, 0.5D);
             while (!blocked.isDone()) {
                 blocked.advance();
@@ -577,7 +575,7 @@ public final class NavigationRecoveryGameTests {
                             && recovered.getTarget().equals(target),
                     "larger search horizon retained stale backoff and started a sideways detour: " + recovered);
         } finally {
-            config.villagerPathfindingDistance = previousDistance;
+            config.villagerPathfindingDistance.set(previousDistance);
             villager.discard();
         }
         helper.succeed();
@@ -612,10 +610,10 @@ public final class NavigationRecoveryGameTests {
             }
         }
         VillagerEntityMCA villager = spawnStationary(helper, start);
-        Config config = Config.getInstance();
-        int previousDistance = config.villagerPathfindingDistance;
+        var config = Config.SERVER;
+        int previousDistance = config.villagerPathfindingDistance.get();
         try {
-            config.villagerPathfindingDistance = 160;
+            config.villagerPathfindingDistance.set(160);
             villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
                     new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
             MCAGroundPathNavigation navigation = (MCAGroundPathNavigation) villager.getNavigation();
@@ -650,7 +648,7 @@ public final class NavigationRecoveryGameTests {
                             && !WalkTargetFailureMemory.hasFailureFor(villager, target),
                     "opened route retained stale backoff or failed to clear destination failure: " + recovered);
         } finally {
-            config.villagerPathfindingDistance = previousDistance;
+            config.villagerPathfindingDistance.set(previousDistance);
             villager.discard();
         }
         helper.succeed();
@@ -668,10 +666,10 @@ public final class NavigationRecoveryGameTests {
             }
         }
         VillagerEntityMCA villager = spawnStationary(helper, start);
-        Config config = Config.getInstance();
-        int previousDistance = config.villagerPathfindingDistance;
+        var config = Config.SERVER;
+        int previousDistance = config.villagerPathfindingDistance.get();
         try {
-            config.villagerPathfindingDistance = 32;
+            config.villagerPathfindingDistance.set(32);
             villager.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
             villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
                     new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
@@ -694,7 +692,7 @@ public final class NavigationRecoveryGameTests {
                             .getTarget().currentBlockPosition().equals(target),
                     "navigation replaced the logical destination with a flank waypoint");
         } finally {
-            config.villagerPathfindingDistance = previousDistance;
+            config.villagerPathfindingDistance.set(previousDistance);
             villager.discard();
         }
         helper.succeed();
@@ -712,10 +710,10 @@ public final class NavigationRecoveryGameTests {
             }
         }
         VillagerEntityMCA villager = spawnStationary(helper, start);
-        Config config = Config.getInstance();
-        int previousDistance = config.villagerPathfindingDistance;
+        var config = Config.SERVER;
+        int previousDistance = config.villagerPathfindingDistance.get();
         try {
-            config.villagerPathfindingDistance = 32;
+            config.villagerPathfindingDistance.set(32);
             villager.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
             int flankDistance = (int) (MCAGroundPathNavigation.getOrdinaryPathLength(villager) * 0.5F);
             for (int side : new int[]{-1, 1}) {
@@ -748,7 +746,7 @@ public final class NavigationRecoveryGameTests {
             helper.assertTrue(selected.getTarget().equals(navigation.getTargetPos()),
                     "the opposite rejected probe replaced the accepted flank's replanning target");
         } finally {
-            config.villagerPathfindingDistance = previousDistance;
+            config.villagerPathfindingDistance.set(previousDistance);
             villager.discard();
         }
         helper.succeed();
@@ -766,10 +764,10 @@ public final class NavigationRecoveryGameTests {
             }
         }
         VillagerEntityMCA villager = spawnStationary(helper, start);
-        Config config = Config.getInstance();
-        int previousDistance = config.villagerPathfindingDistance;
+        var config = Config.SERVER;
+        int previousDistance = config.villagerPathfindingDistance.get();
         try {
-            config.villagerPathfindingDistance = 32;
+            config.villagerPathfindingDistance.set(32);
             villager.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
             villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
                     new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
@@ -779,7 +777,7 @@ public final class NavigationRecoveryGameTests {
                             && !MCAGroundPathNavigation.isUsefulPartialPath(blocked, target),
                     "fixture did not exhaust the ordinary search at the long wall: " + blocked);
             WalkTargetFailureMemory.record(villager, target, helper.getLevel().getGameTime());
-            config.villagerPathfindingDistance = 160;
+            config.villagerPathfindingDistance.set(160);
             navigation.moveTo(blocked, 0.5D);
             while (!blocked.isDone()) {
                 blocked.advance();
@@ -791,7 +789,7 @@ public final class NavigationRecoveryGameTests {
                     "navigation started a sideways detour even though its extended search could reach the destination: "
                             + recovered);
         } finally {
-            config.villagerPathfindingDistance = previousDistance;
+            config.villagerPathfindingDistance.set(previousDistance);
             villager.discard();
         }
         helper.succeed();
@@ -819,11 +817,11 @@ public final class NavigationRecoveryGameTests {
             }
         }
 
-        Config config = Config.getInstance();
-        int previousDistance = config.villagerPathfindingDistance;
+        var config = Config.SERVER;
+        int previousDistance = config.villagerPathfindingDistance.get();
         VillagerEntityMCA villager = spawnStationary(helper, start);
         try {
-            config.villagerPathfindingDistance = 32;
+            config.villagerPathfindingDistance.set(32);
             villager.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
             villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
                     new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
@@ -834,7 +832,7 @@ public final class NavigationRecoveryGameTests {
                     "fixture ordinary search unexpectedly made useful progress: " + blocked);
             WalkTargetFailureMemory.record(villager, target, helper.getLevel().getGameTime());
 
-            config.villagerPathfindingDistance = 160;
+            config.villagerPathfindingDistance.set(160);
             VillagerEntityMCA probe = spawnStationary(helper, start);
             try {
                 probe.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
@@ -859,7 +857,7 @@ public final class NavigationRecoveryGameTests {
             helper.assertTrue(WalkTargetFailureMemory.hasFailureFor(villager, target),
                     "useful partial route cleared destination failure before the villager made progress");
         } finally {
-            config.villagerPathfindingDistance = previousDistance;
+            config.villagerPathfindingDistance.set(previousDistance);
             villager.discard();
         }
         helper.succeed();
@@ -915,10 +913,10 @@ public final class NavigationRecoveryGameTests {
             }
         }
         VillagerEntityMCA villager = spawnStationary(helper, start);
-        Config config = Config.getInstance();
-        int previousDistance = config.villagerPathfindingDistance;
+        var config = Config.SERVER;
+        int previousDistance = config.villagerPathfindingDistance.get();
         try {
-            config.villagerPathfindingDistance = 160;
+            config.villagerPathfindingDistance.set(160);
             villager.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
             villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
                     new WalkTarget(new PersistentPathTarget(destination), 0.5F, 0));
@@ -942,7 +940,7 @@ public final class NavigationRecoveryGameTests {
             helper.assertTrue(replacement != null && replacement.getTarget().equals(destination),
                     "detour recomputation kept its obsolete flank target: " + replacement);
         } finally {
-            config.villagerPathfindingDistance = previousDistance;
+            config.villagerPathfindingDistance.set(previousDistance);
             villager.discard();
         }
         helper.succeed();
@@ -999,10 +997,10 @@ public final class NavigationRecoveryGameTests {
             helper.getLevel().setBlock(gate.above(y), Blocks.STONE.defaultBlockState(), 3);
         }
         VillagerEntityMCA villager = spawnStationary(helper, start);
-        Config config = Config.getInstance();
-        int previousDistance = config.villagerPathfindingDistance;
+        var config = Config.SERVER;
+        int previousDistance = config.villagerPathfindingDistance.get();
         try {
-            config.villagerPathfindingDistance = 256;
+            config.villagerPathfindingDistance.set(256);
             villager.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
             villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
                     new WalkTarget(new PersistentPathTarget(destination), 0.5F, 0));
@@ -1039,7 +1037,7 @@ public final class NavigationRecoveryGameTests {
             helper.assertTrue(repaired != null && repaired.canReach(),
                     "the repaired corridor still could not reach its destination: " + repaired);
         } finally {
-            config.villagerPathfindingDistance = previousDistance;
+            config.villagerPathfindingDistance.set(previousDistance);
             villager.discard();
         }
         helper.succeed();
@@ -1247,10 +1245,10 @@ public final class NavigationRecoveryGameTests {
             }
         }
         VillagerEntityMCA villager = spawnStationary(helper, start);
-        Config config = Config.getInstance();
-        int previousHorizon = config.villagerPathfindingDistance;
+        var config = Config.SERVER;
+        int previousHorizon = config.villagerPathfindingDistance.get();
         try {
-            config.villagerPathfindingDistance = 160;
+            config.villagerPathfindingDistance.set(160);
             villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
                     new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
             MCAGroundPathNavigation navigation = (MCAGroundPathNavigation) villager.getNavigation();
@@ -1269,7 +1267,7 @@ public final class NavigationRecoveryGameTests {
                             && reopened != null && reopened.canReach(),
                     "route opening retained the failed extended-search suppression");
         } finally {
-            config.villagerPathfindingDistance = previousHorizon;
+            config.villagerPathfindingDistance.set(previousHorizon);
             villager.discard();
         }
         helper.succeed();
@@ -1295,10 +1293,10 @@ public final class NavigationRecoveryGameTests {
             }
         }
         VillagerEntityMCA villager = spawnStationary(helper, start);
-        Config config = Config.getInstance();
-        int previousHorizon = config.villagerPathfindingDistance;
+        var config = Config.SERVER;
+        int previousHorizon = config.villagerPathfindingDistance.get();
         try {
-            config.villagerPathfindingDistance = 160;
+            config.villagerPathfindingDistance.set(160);
             villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
                     new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
             MCAGroundPathNavigation navigation = (MCAGroundPathNavigation) villager.getNavigation();
@@ -1327,7 +1325,7 @@ public final class NavigationRecoveryGameTests {
                             && reopened != null && reopened.canReach(),
                     "stopped navigator retained failed extended-search suppression after world block update");
         } finally {
-            config.villagerPathfindingDistance = previousHorizon;
+            config.villagerPathfindingDistance.set(previousHorizon);
             villager.discard();
         }
         helper.succeed();
@@ -1350,10 +1348,10 @@ public final class NavigationRecoveryGameTests {
                 helper.getLevel().setBlock(blocked.above(y), Blocks.STONE.defaultBlockState(), 3);
             }
         }
-        Config config = Config.getInstance();
-        int previousDistance = config.villagerPathfindingDistance;
+        var config = Config.SERVER;
+        int previousDistance = config.villagerPathfindingDistance.get();
         try {
-            config.villagerPathfindingDistance = 160;
+            config.villagerPathfindingDistance.set(160);
 
             // 1. Open wooden door at the sole cardinal approach (PathType.DOOR_OPEN)
             var openDoor = Blocks.OAK_DOOR.defaultBlockState()
@@ -1387,7 +1385,7 @@ public final class NavigationRecoveryGameTests {
             helper.assertTrue(startsDetourFromCompletedPartial(helper, start, endpoint, raisedTarget),
                     "raised target with a 1-block step-up approach was denied detour recovery");
         } finally {
-            config.villagerPathfindingDistance = previousDistance;
+            config.villagerPathfindingDistance.set(previousDistance);
         }
         helper.succeed();
     }
@@ -1430,10 +1428,10 @@ public final class NavigationRecoveryGameTests {
             }
         }
         VillagerEntityMCA villager = spawnStationary(helper, start);
-        Config config = Config.getInstance();
-        int previousDistance = config.villagerPathfindingDistance;
+        var config = Config.SERVER;
+        int previousDistance = config.villagerPathfindingDistance.get();
         try {
-            config.villagerPathfindingDistance = 160;
+            config.villagerPathfindingDistance.set(160);
             villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
                     new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
             NavigationProbe navigation = new NavigationProbe(villager);
@@ -1457,7 +1455,7 @@ public final class NavigationRecoveryGameTests {
             helper.assertTrue(!navigation.consumeRetryInvalidation(target),
                     "producer invalidation was delivered more than once");
         } finally {
-            config.villagerPathfindingDistance = previousDistance;
+            config.villagerPathfindingDistance.set(previousDistance);
             villager.discard();
         }
         helper.succeed();

@@ -98,14 +98,14 @@ class ApiResourceLifecycleTest {
 
     private static void withServer(Configure configure, CheckedRunnable assertions) throws Exception {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        String oldUrl = Config.getInstance().immersiveLibraryUrl;
+        String oldUrl = Config.CLIENT.immersiveLibraryUrl.get();
         try {
             configure.configure(server);
             server.start();
-            Config.getInstance().immersiveLibraryUrl = "http://127.0.0.1:" + server.getAddress().getPort();
+            Config.CLIENT.immersiveLibraryUrl.set("http://127.0.0.1:" + server.getAddress().getPort());
             assertions.run();
         } finally {
-            Config.getInstance().immersiveLibraryUrl = oldUrl;
+            Config.CLIENT.immersiveLibraryUrl.set(oldUrl);
             server.stop(0);
         }
     }

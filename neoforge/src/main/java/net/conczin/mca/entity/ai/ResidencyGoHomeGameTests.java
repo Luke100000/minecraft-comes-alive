@@ -57,10 +57,10 @@ public final class ResidencyGoHomeGameTests {
         helper.assertTrue(walkTarget.getCloseEnoughDist() == 1,
                 "Go Home changed its existing close-enough distance");
 
-        Config config = Config.getInstance();
-        int previousDistance = config.villagerPathfindingDistance;
+        var config = Config.SERVER;
+        int previousDistance = config.villagerPathfindingDistance.get();
         try {
-            config.villagerPathfindingDistance = 160;
+            config.villagerPathfindingDistance.set(160);
             helper.assertTrue(targetDistance > MCAGroundPathNavigation.getOrdinaryPathLength(villager),
                     "fixture did not exceed the ordinary MCA horizon");
             Path first = villager.getNavigation().createPath(home, 0);
@@ -76,7 +76,7 @@ public final class ResidencyGoHomeGameTests {
             helper.assertTrue(PathRequestDiagnostics.snapshot(villager).extendedSearches() == 1,
                     "recovery did not exercise an actual extended search");
         } finally {
-            config.villagerPathfindingDistance = previousDistance;
+            config.villagerPathfindingDistance.set(previousDistance);
             villager.discard();
         }
         helper.succeed();

@@ -45,7 +45,7 @@ public final class EnterBuildingGameTests {
         villager.setNoAi(true);
         villager.refreshBrain(helper.getLevel());
 
-        int pathfindingDistance = Config.getInstance().getVillagerPathfindingDistance();
+        int pathfindingDistance = Config.SERVER.villagerPathfindingDistance();
         double testFollowRange = Math.max(4.0D, pathfindingDistance / 4.0D);
         villager.getAttribute(Attributes.FOLLOW_RANGE).setBaseValue(testFollowRange);
         double followRange = villager.getAttributeValue(Attributes.FOLLOW_RANGE);
@@ -88,10 +88,10 @@ public final class EnterBuildingGameTests {
         villager.setNoAi(true);
         villager.setOnGround(true);
         villager.getAttribute(Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
-        Config config = Config.getInstance();
-        int previousDistance = config.villagerPathfindingDistance;
+        var config = Config.SERVER;
+        int previousDistance = config.villagerPathfindingDistance.get();
         try {
-            config.villagerPathfindingDistance = 160;
+            config.villagerPathfindingDistance.set(160);
             EnterBuildingTask task = new FixedTargetEnterBuildingTask(0.5F, target);
             helper.assertTrue(task.tryStart(helper.getLevel(), villager, helper.getLevel().getGameTime()),
                     "building visit did not publish its destination");
@@ -99,7 +99,7 @@ public final class EnterBuildingGameTests {
             helper.assertTrue(path != null && path.canReach() && path.getTarget().equals(target),
                     "building visit lost long-wall recovery: " + path);
         } finally {
-            config.villagerPathfindingDistance = previousDistance;
+            config.villagerPathfindingDistance.set(previousDistance);
             villager.discard();
         }
         helper.succeed();
@@ -109,7 +109,7 @@ public final class EnterBuildingGameTests {
             template = "bastion/blocks/air")
     public static void distantBuildingKeepsRealDestination(GameTestHelper helper) {
         BlockPos start = helper.absolutePos(new BlockPos(3, 1, 1));
-        int pathfindingDistance = Config.getInstance().getVillagerPathfindingDistance();
+        int pathfindingDistance = Config.SERVER.villagerPathfindingDistance();
         BlockPos buildingTarget = start.east(pathfindingDistance + 32);
         prepareFlatArea(helper, start, 16, 3);
 

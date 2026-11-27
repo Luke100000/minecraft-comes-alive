@@ -73,7 +73,7 @@ public final class PathingBlockInteraction {
     }
 
     public static boolean canInteractWithFenceGate(BlockState state) {
-        return Config.getServerConfig().villagersInteractWithFenceGates && isFenceGate(state);
+        return Config.SERVER.villagersInteractWithFenceGates.get() && isFenceGate(state);
     }
 
     /**
@@ -83,7 +83,7 @@ public final class PathingBlockInteraction {
      */
     public static boolean canInteractWithDoor(BlockState state) {
         return state.getBlock() instanceof DoorBlock
-                && (Config.getServerConfig().villagersInteractWithAnyDoor
+                && (Config.SERVER.villagersInteractWithAnyDoor.get()
                     || state.is(BlockTags.MOB_INTERACTABLE_DOORS));
     }
 

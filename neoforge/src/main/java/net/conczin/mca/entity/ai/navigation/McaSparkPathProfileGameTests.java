@@ -42,8 +42,8 @@ public final class McaSparkPathProfileGameTests {
             timeoutTicks = 650)
     public static void captureRepeatedBlockedMcaPathsWithSpark(GameTestHelper helper) {
         helper.assertTrue(PathRequestDiagnostics.enabled(), "MCA path diagnostics must be active");
-        previousPathDistance = Config.getInstance().villagerPathfindingDistance;
-        Config.getInstance().villagerPathfindingDistance = 160;
+        previousPathDistance = Config.SERVER.villagerPathfindingDistance.get();
+        Config.SERVER.villagerPathfindingDistance.set(160);
         BlockPos start = helper.absolutePos(new BlockPos(180, 1, 180));
         BlockPos destination = start.east(3);
         prepareFlatArea(helper, start, 30, 3);
@@ -129,6 +129,6 @@ public final class McaSparkPathProfileGameTests {
     public static void cleanup(net.minecraft.server.level.ServerLevel level) {
         VILLAGERS.forEach(VillagerEntityMCA::discard);
         VILLAGERS.clear();
-        Config.getInstance().villagerPathfindingDistance = previousPathDistance;
+        Config.SERVER.villagerPathfindingDistance.set(previousPathDistance);
     }
 }

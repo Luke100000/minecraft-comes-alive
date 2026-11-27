@@ -36,7 +36,7 @@ public record CallToPlayerMessage(UUID uuid) implements HandleablePayload {
             }
             v.stopRiding();
             v.setPos(player.getX(), player.getY(), player.getZ());
-            if (Config.getInstance().whistleCallMakesVillagersFollow) {
+            if (Config.SERVER.whistleCallMakesVillagersFollow.get()) {
                 v.getVillagerBrain().setMoveState(MoveState.FOLLOW, player);
             }
         }

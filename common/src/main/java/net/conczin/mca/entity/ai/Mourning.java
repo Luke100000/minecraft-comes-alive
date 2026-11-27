@@ -56,7 +56,7 @@ public final class Mourning {
     }
 
     public static void resume(VillagerEntityMCA villager) {
-        if (!Config.getInstance().enableMourning) {
+        if (!Config.SERVER.enableMourning.get()) {
             pause(villager);
             return;
         }
@@ -76,7 +76,7 @@ public final class Mourning {
     }
 
     public static boolean canResumeScheduled(VillagerEntityMCA villager) {
-        if (!Config.getInstance().enableMourning) {
+        if (!Config.SERVER.enableMourning.get()) {
             pause(villager);
             return false;
         }
@@ -274,7 +274,7 @@ public final class Mourning {
 
     private static void leaveGrievingActivity(VillagerEntityMCA villager) {
         // Disabling the feature cancels the assignment, including safety and movement retries.
-        if (!Config.getInstance().enableMourning) {
+        if (!Config.SERVER.enableMourning.get()) {
             clear(villager);
         }
 
@@ -292,7 +292,7 @@ public final class Mourning {
     }
 
     public static boolean isTemporarilyBlocked(VillagerEntityMCA villager) {
-        return !Config.getInstance().enableMourning
+        return !Config.SERVER.enableMourning.get()
                 || isInterrupted(villager)
                 || villager.isSleeping()
                 // GRIEVE has no schedule updater, so check the scheduled activity itself.

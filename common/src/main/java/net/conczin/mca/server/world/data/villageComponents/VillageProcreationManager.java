@@ -17,7 +17,7 @@ public class VillageProcreationManager {
 
     // if the population is low, find a couple and let them have a child
     public void procreate(ServerLevel world) {
-        if (world.random.nextFloat() >= Config.getInstance().villagerProcreationChancePerMinute) {
+        if (world.random.nextFloat() >= Config.SERVER.villagerProcreationChancePerMinute.get().floatValue()) {
             return;
         }
 
@@ -35,7 +35,7 @@ public class VillageProcreationManager {
                 .ifPresent(villager ->
                         villager.getRelationships().getPartner().ifPresent(spouse -> {
                                     // tell everyone about it
-                                    if (Config.getInstance().villagerBirthNotification && spouse instanceof VillagerEntityMCA spouseVillager) {
+                                    if (Config.SERVER.villagerBirthNotification.get() && spouse instanceof VillagerEntityMCA spouseVillager) {
                                         village.broadCastMessage(world, "events.baby", villager, spouseVillager);
                                     }
                                 }

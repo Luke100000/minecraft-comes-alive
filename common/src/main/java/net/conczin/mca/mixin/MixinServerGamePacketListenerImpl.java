@@ -24,7 +24,7 @@ public class MixinServerGamePacketListenerImpl {
 
     @ModifyReturnValue(method = "getSignedMessage", at = @At("RETURN"))
     private PlayerChatMessage mca$handleAcceptedChat(PlayerChatMessage message) {
-        if (!Config.getInstance().enableVillagerChatAI) {
+        if (!Config.SERVER.enableVillagerChatAI.get()) {
             return message;
         }
 

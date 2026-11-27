@@ -24,7 +24,7 @@ public class GiftSaturation {
         values.add(id);
 
         // clear old values if limit is reached
-        while (values.size() > Config.getInstance().giftDesaturationQueueLength) {
+        while (values.size() > Config.SERVER.giftDesaturationQueueLength.get()) {
             pop();
         }
     }

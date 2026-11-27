@@ -66,7 +66,7 @@ public class Pregnancy {
 
         setBabyAge(getBabyAge() + 60);
 
-        if (getBabyAge() < Config.getInstance().babyItemGrowUpTime) {
+        if (getBabyAge() < Config.SERVER.babyItemGrowUpTime.get()) {
             return;
         }
 
@@ -160,7 +160,7 @@ public class Pregnancy {
     public int rollBabyCount() {
         RandomSource random = mother.getRandom();
         int count = 1;
-        while (random.nextFloat() < Config.getInstance().twinBabyChance && count < 8) {
+        while (random.nextFloat() < Config.SERVER.twinBabyChance.get().floatValue() && count < 8) {
             count++;
         }
         return count;

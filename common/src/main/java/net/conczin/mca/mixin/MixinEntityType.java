@@ -15,7 +15,7 @@ public class MixinEntityType {
     @ModifyReturnValue(method = "is(Lnet/minecraft/tags/TagKey;)Z", at = @At("RETURN"))
     private boolean mca$includeMcaVillagersInVillagerTags(boolean original, TagKey<EntityType<?>> tag) {
         if (original
-                || !Config.getInstance().villagerTagsHacks
+                || !Config.SERVER.villagerTagsHacks.get()
                 || !BuiltInRegistries.ENTITY_TYPE.wrapAsHolder(EntityType.VILLAGER).is(tag)) {
             return original;
         }

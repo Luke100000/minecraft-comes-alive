@@ -486,7 +486,7 @@ public final class RoomWorkflow {
                                      Plan plan) {
         Building room = new Building(component.nearestCell(source));
         Building.validationResult result = room.applyRoomComponent(
-                world, source, Config.getInstance().maxBuildingSize, evidence, component);
+                world, source, Config.SERVER.maxBuildingSize.get(), evidence, component);
         if (result != Building.validationResult.SUCCESS) {
             return failedAddition(result, plan.interactionSource(), village);
         }

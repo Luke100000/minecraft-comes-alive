@@ -144,11 +144,11 @@ public final class EditorAuthorizationGameTests {
     public static void mixedLimitedPatchDoesNotPartiallyApply(GameTestHelper helper) {
         ServerPlayer sender = createPlayer(helper, "editor-limited", new BlockPos(2, 2, 2));
         helper.getLevel().addNewPlayer(sender);
-        boolean originalLimited = Config.getInstance().allowLimitedPlayerEditor;
-        boolean originalFull = Config.getInstance().allowFullPlayerEditor;
+        boolean originalLimited = Config.SERVER.allowLimitedPlayerEditor.get();
+        boolean originalFull = Config.SERVER.allowFullPlayerEditor.get();
         try {
-            Config.getInstance().allowLimitedPlayerEditor = true;
-            Config.getInstance().allowFullPlayerEditor = false;
+            Config.SERVER.allowLimitedPlayerEditor.set(true);
+            Config.SERVER.allowFullPlayerEditor.set(false);
             helper.assertTrue(!sender.createCommandSourceStack().hasPermission(2),
                     "limited-editor fixture must be a non-operator");
             CompoundTag original = PlayerSaveData.get(sender).getEntityData();
@@ -161,8 +161,8 @@ public final class EditorAuthorizationGameTests {
             helper.assertTrue(PlayerSaveData.get(sender).getEntityData().equals(original),
                     "limited editor partially accepted a mixed allowed/forbidden patch");
         } finally {
-            Config.getInstance().allowLimitedPlayerEditor = originalLimited;
-            Config.getInstance().allowFullPlayerEditor = originalFull;
+            Config.SERVER.allowLimitedPlayerEditor.set(originalLimited);
+            Config.SERVER.allowFullPlayerEditor.set(originalFull);
             helper.getLevel().removePlayerImmediately(sender, Entity.RemovalReason.DISCARDED);
         }
         helper.succeed();
@@ -214,11 +214,11 @@ public final class EditorAuthorizationGameTests {
     public static void limitedSelfEditorRetainsNameEdit(GameTestHelper helper) {
         ServerPlayer sender = createPlayer(helper, "editor-self", new BlockPos(2, 2, 2));
         helper.getLevel().addNewPlayer(sender);
-        boolean originalLimited = Config.getInstance().allowLimitedPlayerEditor;
-        boolean originalFull = Config.getInstance().allowFullPlayerEditor;
+        boolean originalLimited = Config.SERVER.allowLimitedPlayerEditor.get();
+        boolean originalFull = Config.SERVER.allowFullPlayerEditor.get();
         try {
-            Config.getInstance().allowLimitedPlayerEditor = true;
-            Config.getInstance().allowFullPlayerEditor = false;
+            Config.SERVER.allowLimitedPlayerEditor.set(true);
+            Config.SERVER.allowFullPlayerEditor.set(false);
             CompoundTag patch = new CompoundTag();
             patch.putString("CustomName", "\"Legal own name\"");
             new VillagerEditorSyncRequest("sync", sender.getUUID(), patch).handleServer(sender);
@@ -226,8 +226,8 @@ public final class EditorAuthorizationGameTests {
             helper.assertTrue("\"Legal own name\"".equals(PlayerSaveData.get(sender).getEntityData().getString("CustomName")),
                     "limited self editor was denied legal name field");
         } finally {
-            Config.getInstance().allowLimitedPlayerEditor = originalLimited;
-            Config.getInstance().allowFullPlayerEditor = originalFull;
+            Config.SERVER.allowLimitedPlayerEditor.set(originalLimited);
+            Config.SERVER.allowFullPlayerEditor.set(originalFull);
             helper.getLevel().removePlayerImmediately(sender, Entity.RemovalReason.DISCARDED);
         }
         helper.succeed();
@@ -242,15 +242,15 @@ public final class EditorAuthorizationGameTests {
         bystander.getRelationships().getFamilyEntry().setName(bystanderName);
         helper.getLevel().addNewPlayer(sender);
 
-        boolean originalFull = Config.getInstance().allowFullPlayerEditor;
-        boolean originalLimited = Config.getInstance().allowLimitedPlayerEditor;
-        boolean originalBody = Config.getInstance().allowBodyCustomizationInDestiny;
-        boolean originalTraits = Config.getInstance().allowTraitCustomizationInDestiny;
+        boolean originalFull = Config.SERVER.allowFullPlayerEditor.get();
+        boolean originalLimited = Config.SERVER.allowLimitedPlayerEditor.get();
+        boolean originalBody = Config.SERVER.allowBodyCustomizationInDestiny.get();
+        boolean originalTraits = Config.SERVER.allowTraitCustomizationInDestiny.get();
         try {
-            Config.getInstance().allowFullPlayerEditor = false;
-            Config.getInstance().allowLimitedPlayerEditor = true;
-            Config.getInstance().allowBodyCustomizationInDestiny = true;
-            Config.getInstance().allowTraitCustomizationInDestiny = true;
+            Config.SERVER.allowFullPlayerEditor.set(false);
+            Config.SERVER.allowLimitedPlayerEditor.set(true);
+            Config.SERVER.allowBodyCustomizationInDestiny.set(true);
+            Config.SERVER.allowTraitCustomizationInDestiny.set(true);
 
             PlayerSaveData saveData = PlayerSaveData.get(sender);
             CompoundTag seeded = saveData.getEntityData();
@@ -297,10 +297,10 @@ public final class EditorAuthorizationGameTests {
                     "Destiny session must not marry bystander villager");
         } finally {
             ServerInteractionManager.getInstance().clearDestinySession(sender.getUUID());
-            Config.getInstance().allowFullPlayerEditor = originalFull;
-            Config.getInstance().allowLimitedPlayerEditor = originalLimited;
-            Config.getInstance().allowBodyCustomizationInDestiny = originalBody;
-            Config.getInstance().allowTraitCustomizationInDestiny = originalTraits;
+            Config.SERVER.allowFullPlayerEditor.set(originalFull);
+            Config.SERVER.allowLimitedPlayerEditor.set(originalLimited);
+            Config.SERVER.allowBodyCustomizationInDestiny.set(originalBody);
+            Config.SERVER.allowTraitCustomizationInDestiny.set(originalTraits);
             bystander.discard();
             helper.getLevel().removePlayerImmediately(sender, Entity.RemovalReason.DISCARDED);
         }
@@ -318,11 +318,11 @@ public final class EditorAuthorizationGameTests {
         VillagerEntityMCA farVillager = spawnVillager(helper, new BlockPos(14, 2, 2));
         helper.getLevel().addNewPlayer(sender);
 
-        boolean originalFull = Config.getInstance().allowFullPlayerEditor;
-        boolean originalLimited = Config.getInstance().allowLimitedPlayerEditor;
+        boolean originalFull = Config.SERVER.allowFullPlayerEditor.get();
+        boolean originalLimited = Config.SERVER.allowLimitedPlayerEditor.get();
         try {
-            Config.getInstance().allowFullPlayerEditor = false;
-            Config.getInstance().allowLimitedPlayerEditor = true;
+            Config.SERVER.allowFullPlayerEditor.set(false);
+            Config.SERVER.allowLimitedPlayerEditor.set(true);
 
             PlayerSaveData selfSave = PlayerSaveData.get(sender);
             CompoundTag selfSeeded = selfSave.getEntityData();
@@ -400,8 +400,8 @@ public final class EditorAuthorizationGameTests {
             helper.assertTrue(selfSave.getEntityData().getInt("Gender") == originalGenderId,
                     "Needle and Thread must reject Gender changes");
         } finally {
-            Config.getInstance().allowFullPlayerEditor = originalFull;
-            Config.getInstance().allowLimitedPlayerEditor = originalLimited;
+            Config.SERVER.allowFullPlayerEditor.set(originalFull);
+            Config.SERVER.allowLimitedPlayerEditor.set(originalLimited);
             nearbyVillager.discard();
             farVillager.discard();
             helper.getLevel().removePlayerImmediately(sender, Entity.RemovalReason.DISCARDED);
@@ -420,8 +420,8 @@ public final class EditorAuthorizationGameTests {
         Vec3 villagerInitialPos = targetVillager.position();
         helper.getLevel().addNewPlayer(sender);
 
-        boolean originalLimited = Config.getInstance().allowLimitedPlayerEditor;
-        boolean originalFull = Config.getInstance().allowFullPlayerEditor;
+        boolean originalLimited = Config.SERVER.allowLimitedPlayerEditor.get();
+        boolean originalFull = Config.SERVER.allowFullPlayerEditor.get();
         try {
             PlayerSaveData saveData = PlayerSaveData.get(sender);
             CompoundTag seeded = saveData.getEntityData();
@@ -429,8 +429,8 @@ public final class EditorAuthorizationGameTests {
             saveData.setEntityData(seeded);
 
             // 1. Limited self-editor allows echoed VillagerDataFinalized: true with CustomName edit.
-            Config.getInstance().allowLimitedPlayerEditor = true;
-            Config.getInstance().allowFullPlayerEditor = false;
+            Config.SERVER.allowLimitedPlayerEditor.set(true);
+            Config.SERVER.allowFullPlayerEditor.set(false);
 
             CompoundTag limitedPatch = VillagerEditorSyncRequest.createEditorPatch(saveData.getEntityData().copy());
             limitedPatch.putBoolean("VillagerDataFinalized", true);
@@ -441,7 +441,7 @@ public final class EditorAuthorizationGameTests {
                     "limited self editor should accept echoed VillagerDataFinalized when CustomName changes");
 
             // 2. Full player self-editor cannot link spouse via FamilyTreeNewSpouseName or authorize CallToPlayerMessage.
-            Config.getInstance().allowFullPlayerEditor = true;
+            Config.SERVER.allowFullPlayerEditor.set(true);
             CompoundTag hijackPatch = VillagerEditorSyncRequest.createEditorPatch(saveData.getEntityData().copy());
             hijackPatch.putString("FamilyTreeNewSpouseName", villagerName);
             new VillagerEditorSyncRequest("sync", sender.getUUID(), hijackPatch).handleServer(sender);
@@ -456,8 +456,8 @@ public final class EditorAuthorizationGameTests {
             helper.assertTrue(targetVillager.position().equals(villagerInitialPos),
                     "unlinked villager must not be teleported by CallToPlayerMessage");
         } finally {
-            Config.getInstance().allowLimitedPlayerEditor = originalLimited;
-            Config.getInstance().allowFullPlayerEditor = originalFull;
+            Config.SERVER.allowLimitedPlayerEditor.set(originalLimited);
+            Config.SERVER.allowFullPlayerEditor.set(originalFull);
             targetVillager.discard();
             helper.getLevel().removePlayerImmediately(sender, Entity.RemovalReason.DISCARDED);
         }
@@ -470,9 +470,9 @@ public final class EditorAuthorizationGameTests {
         VillagerEntityMCA childVillager = spawnVillager(helper, new BlockPos(5, 2, 2));
         helper.getLevel().addNewPlayer(sender);
 
-        boolean originalFull = Config.getInstance().allowFullPlayerEditor;
+        boolean originalFull = Config.SERVER.allowFullPlayerEditor.get();
         try {
-            Config.getInstance().allowFullPlayerEditor = false;
+            Config.SERVER.allowFullPlayerEditor.set(false);
             sender.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(ItemsMCA.COMB));
 
             // Capture t=0 client snapshot while villager is a growing child.
@@ -523,7 +523,7 @@ public final class EditorAuthorizationGameTests {
             helper.assertTrue(childVillager.getTraits().hasTrait(Traits.RAINBOW) == hadRainbow,
                     "Comb packet tampering with Traits must be rejected");
         } finally {
-            Config.getInstance().allowFullPlayerEditor = originalFull;
+            Config.SERVER.allowFullPlayerEditor.set(originalFull);
             childVillager.discard();
             helper.getLevel().removePlayerImmediately(sender, Entity.RemovalReason.DISCARDED);
         }
@@ -535,13 +535,13 @@ public final class EditorAuthorizationGameTests {
         ServerPlayer sender = createPlayer(helper, "destiny-preset-self", new BlockPos(2, 2, 2));
         helper.getLevel().addNewPlayer(sender);
 
-        boolean originalFull = Config.getInstance().allowFullPlayerEditor;
-        boolean originalBody = Config.getInstance().allowBodyCustomizationInDestiny;
-        boolean originalTraits = Config.getInstance().allowTraitCustomizationInDestiny;
+        boolean originalFull = Config.SERVER.allowFullPlayerEditor.get();
+        boolean originalBody = Config.SERVER.allowBodyCustomizationInDestiny.get();
+        boolean originalTraits = Config.SERVER.allowTraitCustomizationInDestiny.get();
         try {
-            Config.getInstance().allowFullPlayerEditor = false;
-            Config.getInstance().allowBodyCustomizationInDestiny = true;
-            Config.getInstance().allowTraitCustomizationInDestiny = true;
+            Config.SERVER.allowFullPlayerEditor.set(false);
+            Config.SERVER.allowBodyCustomizationInDestiny.set(true);
+            Config.SERVER.allowTraitCustomizationInDestiny.set(true);
 
             PlayerSaveData saveData = PlayerSaveData.get(sender);
             saveData.setEntityDataSet(false);
@@ -585,9 +585,9 @@ public final class EditorAuthorizationGameTests {
                     "Destiny preset sync must ignore FamilyTreeNewSpouseName");
         } finally {
             ServerInteractionManager.getInstance().clearDestinySession(sender.getUUID());
-            Config.getInstance().allowFullPlayerEditor = originalFull;
-            Config.getInstance().allowBodyCustomizationInDestiny = originalBody;
-            Config.getInstance().allowTraitCustomizationInDestiny = originalTraits;
+            Config.SERVER.allowFullPlayerEditor.set(originalFull);
+            Config.SERVER.allowBodyCustomizationInDestiny.set(originalBody);
+            Config.SERVER.allowTraitCustomizationInDestiny.set(originalTraits);
             helper.getLevel().removePlayerImmediately(sender, Entity.RemovalReason.DISCARDED);
         }
         helper.succeed();

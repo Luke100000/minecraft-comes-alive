@@ -196,10 +196,10 @@ public final class PathSearchBudgetGameTests {
 
     private static void configure(GameTestHelper helper) {
         helper.assertTrue(HORIZON >= 48 && EXTENDED_NODE_CAP >= 0, "invalid search experiment settings");
-        previousHorizon = Config.getInstance().villagerPathfindingDistance;
-        previousTeleport = Config.getInstance().allowVillagerTeleporting;
-        Config.getInstance().villagerPathfindingDistance = HORIZON;
-        Config.getInstance().allowVillagerTeleporting = false;
+        previousHorizon = Config.SERVER.villagerPathfindingDistance.get();
+        previousTeleport = Config.SERVER.allowVillagerTeleporting.get();
+        Config.SERVER.villagerPathfindingDistance.set(HORIZON);
+        Config.SERVER.allowVillagerTeleporting.set(false);
     }
 
     private static VillagerEntityMCA spawn(GameTestHelper helper, BlockPos start, BlockPos target) {
@@ -391,11 +391,11 @@ public final class PathSearchBudgetGameTests {
         NEW_FORCED_CHUNKS.forEach(chunk -> level.setChunkForced(chunk.x, chunk.z, false));
         NEW_FORCED_CHUNKS.clear();
         if (previousHorizon != null) {
-            Config.getInstance().villagerPathfindingDistance = previousHorizon;
+            Config.SERVER.villagerPathfindingDistance.set(previousHorizon);
             previousHorizon = null;
         }
         if (previousTeleport != null) {
-            Config.getInstance().allowVillagerTeleporting = previousTeleport;
+            Config.SERVER.allowVillagerTeleporting.set(previousTeleport);
             previousTeleport = null;
         }
     }

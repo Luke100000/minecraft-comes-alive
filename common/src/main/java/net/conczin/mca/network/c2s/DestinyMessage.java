@@ -81,7 +81,7 @@ public record DestinyMessage(Optional<DestinyDestination> destination) implement
             return;
         }
 
-        if (!Config.getInstance().allowDestinyTeleportation) {
+        if (!Config.SERVER.allowDestinyTeleportation.get()) {
             interactionManager.clearDestinySession(playerId);
             finishDestinyOnboarding(serverPlayer);
             return;
@@ -121,7 +121,7 @@ public record DestinyMessage(Optional<DestinyDestination> destination) implement
 
             finishDestinyOnboarding(serverPlayer);
             if (error != null || result == null || result.isEmpty()
-                    || serverPlayer.serverLevel() != sourceLevel || !Config.getInstance().allowDestinyTeleportation
+                    || serverPlayer.serverLevel() != sourceLevel || !Config.SERVER.allowDestinyTeleportation.get()
                     || !DestinyLocationResolver.getCachedDestinations(serverPlayer.server).contains(selectedDestination)) {
                 notifyDestinationNotFound(serverPlayer);
                 return;

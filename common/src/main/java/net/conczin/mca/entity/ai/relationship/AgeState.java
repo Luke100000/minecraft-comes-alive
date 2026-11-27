@@ -34,7 +34,7 @@ public enum AgeState implements VillagerDimensions {
     }
 
     public static int getMaxAge() {
-        return Config.getServerConfig().villagerMaxAgeTime;
+        return Config.SERVER.villagerMaxAgeTime.get();
     }
 
     public static int getStageDuration() {

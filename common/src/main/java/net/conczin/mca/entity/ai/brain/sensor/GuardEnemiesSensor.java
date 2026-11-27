@@ -205,7 +205,7 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
             }
         }
 
-        if (Config.getInstance().guardsTargetMonsters && entity instanceof Enemy) {
+        if (Config.SERVER.guardsTargetMonsters.get() && entity instanceof Enemy) {
             return 3;
         }
         return -1;
@@ -286,12 +286,14 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
             Map<EntityType<?>, Integer> entityPriorities,
             List<ConfiguredTagPriority> tagPriorities
     ) {
+        private static volatile ConfiguredPriorityLookup cachedLookup;
+
         private static ConfiguredPriorityLookup get() {
-            Map<String, Integer> configuredPriorities = Config.getInstance().guardsTargetEntities;
-            ConfiguredPriorityLookup lookup = Holder.INSTANCE;
-            if (!lookup.matches(configuredPriorities)) {
+            Map<String, Integer> configuredPriorities = Config.SERVER.guardsTargetEntities();
+            ConfiguredPriorityLookup lookup = cachedLookup;
+            if (lookup == null || !lookup.matches(configuredPriorities)) {
                 lookup = compile(configuredPriorities);
-                Holder.INSTANCE = lookup;
+                cachedLookup = lookup;
             }
             return lookup;
         }
@@ -353,8 +355,5 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
             return Optional.empty();
         }
 
-        private static final class Holder {
-            private static ConfiguredPriorityLookup INSTANCE = compile(Config.getInstance().guardsTargetEntities);
-        }
     }
 }

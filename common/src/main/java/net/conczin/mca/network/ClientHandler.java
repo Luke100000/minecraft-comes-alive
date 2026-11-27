@@ -39,8 +39,6 @@ public interface ClientHandler {
 
     void handleDialogueQuestionResponse(InteractionDialogueQuestionResponse response);
 
-    void handleConfigResponse(ConfigResponse response);
-
     void handleVillagerMessage(VillagerMessage message);
 
     void handleCustomSkinsChangedMessage(CustomSkinsChangedMessage message);

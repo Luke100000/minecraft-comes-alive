@@ -1,6 +1,7 @@
 package net.conczin.mca.network.c2s;
 
 import net.conczin.mca.Config;
+import net.conczin.mca.ServerConfig;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerLike;
@@ -231,8 +232,8 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
         }
 
         boolean self = target == sender;
-        Config config = Config.getInstance();
-        if (self && config.allowFullPlayerEditor
+        ServerConfig config = Config.SERVER;
+        if (self && config.allowFullPlayerEditor.get()
                 && arePlayerTraitsValid(serverData, data) && isPersonalityValid(serverData, data)) {
             return new ApprovedEdit(selfEditPatch(), false);
         }
@@ -250,7 +251,7 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
                 && allChangedKeysIn(serverData, CLOTHING_KEYS)) {
             return new ApprovedEdit(retainOnlyKeys(data, CLOTHING_KEYS), false);
         }
-        if (self && config.allowLimitedPlayerEditor && command.equals("sync")
+        if (self && config.allowLimitedPlayerEditor.get() && command.equals("sync")
                 && allChangedKeysIn(serverData, LIMITED_PLAYER_KEYS)) {
             return new ApprovedEdit(retainOnlyKeys(data, LIMITED_PLAYER_KEYS), false);
         }
@@ -258,7 +259,7 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
     }
 
     private boolean isDestinyPatchPermitted(CompoundTag serverData) {
-        Config config = Config.getInstance();
+        ServerConfig config = Config.SERVER;
         for (String key : data.getAllKeys()) {
             if (isProtectedSelfEditKey(key) || Objects.equals(serverData.get(key), data.get(key))) {
                 continue;
@@ -273,13 +274,13 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
                 continue;
             }
             if (key.startsWith("Gene")) {
-                if (!config.allowBodyCustomizationInDestiny) {
+                if (!config.allowBodyCustomizationInDestiny.get()) {
                     return false;
                 }
                 continue;
             }
             if (key.equals("Traits")) {
-                if (!config.allowTraitCustomizationInDestiny || !arePlayerTraitsValid(serverData, data)) {
+                if (!config.allowTraitCustomizationInDestiny.get() || !arePlayerTraitsValid(serverData, data)) {
                     return false;
                 }
                 continue;
@@ -323,7 +324,7 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
                 ? serverData.getCompound("Traits")
                 : new CompoundTag();
         CompoundTag nextTraits = patch.getCompound("Traits");
-        Config config = Config.getInstance();
+        ServerConfig config = Config.SERVER;
         for (String traitId : nextTraits.getAllKeys()) {
             if (previousTraits.contains(traitId)) {
                 continue;
@@ -333,8 +334,8 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
                 return false;
             }
             Traits.Trait trait = resolved.get();
-            boolean enabled = config.enabledTraits.getOrDefault(trait.getId().toString(), true);
-            if (!enabled || (!config.bypassTraitRestrictions && !trait.isUsableOnPlayer())) {
+            boolean enabled = config.enabledTraits().getOrDefault(trait.getId().toString(), true);
+            if (!enabled || (!config.bypassTraitRestrictions.get() && !trait.isUsableOnPlayer())) {
                 return false;
             }
         }

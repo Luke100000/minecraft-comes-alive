@@ -45,7 +45,6 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.List;
 import java.util.ArrayList;
-import java.util.Map;
 
 @PrefixGameTestTemplate(false)
 public final class CreeperSafetyGameTests {
@@ -287,11 +286,11 @@ public final class CreeperSafetyGameTests {
     public static void guardRejectsPassiveCreeperDespiteConfig(GameTestHelper helper) {
         var villager = villager(helper);
         var creeper = helper.spawn(EntityType.CREEPER, new BlockPos(58, 2, 56));
-        var config = Config.getInstance();
-        var oldTargets = config.guardsTargetEntities;
+        var config = Config.SERVER;
+        var oldTargets = config.guardsTargetEntities.get();
         try {
             villager.setProfession(ProfessionsMCA.GUARD);
-            config.guardsTargetEntities = Map.of("minecraft:creeper", 100);
+            config.guardsTargetEntities.set(List.of("minecraft:creeper=100"));
             scanThreats(helper, villager);
             helper.assertTrue(!GuardEnemiesSensor.isGuardEnemy(creeper, villager),
                     "config must not make a passive creeper a guard enemy");
@@ -299,7 +298,7 @@ public final class CreeperSafetyGameTests {
                     "guard must not select creeper");
             helper.succeed();
         } finally { SensorTestFixtures.restore(helper);
-            config.guardsTargetEntities = oldTargets;
+            config.guardsTargetEntities.set(oldTargets);
             villager.discard(); creeper.discard();
         }
     }

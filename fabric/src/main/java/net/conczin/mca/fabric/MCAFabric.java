@@ -1,6 +1,8 @@
 package net.conczin.mca.fabric;
 
 import net.conczin.mca.Config;
+import net.conczin.mca.fabric.config.FabricConfigBootstrap;
+import net.conczin.mca.fabric.config.FabricConfigSync;
 import net.conczin.mca.MCA;
 import net.conczin.mca.block.BlockEntityTypesMCA;
 import net.conczin.mca.entity.ai.ActivitiesMCA;
@@ -87,6 +89,9 @@ public final class MCAFabric implements ModInitializer {
 
     @Override
     public void onInitialize() {
+        FabricConfigBootstrap.initialize();
+        FabricConfigSync.initializeCommon();
+
         ServerEntityEvents.ENTITY_LOAD.register((entity, level) -> {
             if (entity instanceof Villager villager) VillageManager.get(level).trackVillager(villager);
         });
@@ -145,26 +150,33 @@ public final class MCAFabric implements ModInitializer {
         });
 
         // Register events
-        ServerLifecycleEvents.SERVER_STARTING.register(MCA::startServer);
+        ServerLifecycleEvents.SERVER_STARTING.register(server -> {
+            FabricConfigBootstrap.startWorld(server);
+            MCA.startServer(server);
+        });
         ServerLifecycleEvents.SERVER_STARTED.register(server ->
-                DestinyLocationResolver.refreshCachedDestinations(server, Config.getInstance())
+                DestinyLocationResolver.refreshCachedDestinations(server, Config.SERVER)
         );
         ServerLifecycleEvents.END_DATA_PACK_RELOAD.register((server, resourceManager, success) -> {
             if (success) {
-                DestinyLocationResolver.refreshCachedDestinations(server, Config.getInstance());
+                DestinyLocationResolver.refreshCachedDestinations(server, Config.SERVER);
             }
         });
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
             DestinyLocationResolver.clearCachedDestinations(server);
             MCA.stopServer(server);
         });
-        ServerLifecycleEvents.SERVER_STOPPED.register(MCA::finishServerStop);
+        ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
+            MCA.finishServerStop(server);
+            FabricConfigBootstrap.stopWorld();
+        });
         ServerTickEvents.END_WORLD_TICK.register(w -> VillageManager.get(w).tick());
         ServerTickEvents.END_SERVER_TICK.register(s -> ServerInteractionManager.getInstance().tick());
 
-        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) ->
-                ServerInteractionManager.getInstance().onPlayerJoin(handler.player)
-        );
+        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
+            FabricConfigSync.send(handler.player);
+            ServerInteractionManager.getInstance().onPlayerJoin(handler.player);
+        });
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) ->
                 ServerInteractionManager.getInstance().clearDestinySession(handler.player.getUUID())
         );

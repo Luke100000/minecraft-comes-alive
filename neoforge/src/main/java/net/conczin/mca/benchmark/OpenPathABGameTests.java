@@ -45,10 +45,10 @@ public final class OpenPathABGameTests {
         if (!cpu.isThreadCpuTimeEnabled()) {
             cpu.setThreadCpuTimeEnabled(true);
         }
-        previousPathDistance = Config.getInstance().villagerPathfindingDistance;
+        previousPathDistance = Config.SERVER.villagerPathfindingDistance.get();
         MCA.LOGGER.info("[MCA AB OPEN] debugInstrumentationOptOut={}",
                 Boolean.getBoolean("mca.pathDebug.benchmarkWithoutDiagnostics"));
-        Config.getInstance().villagerPathfindingDistance = 160;
+        Config.SERVER.villagerPathfindingDistance.set(160);
         BlockPos center = helper.absolutePos(new BlockPos(60, 1, 60));
         prepareFlatArea(helper, center, 24);
         for (int i = 0; i < 6; i++) {
@@ -175,6 +175,6 @@ public final class OpenPathABGameTests {
         VILLAGERS.forEach(VillagerEntityMCA::discard);
         VILLAGERS.clear();
         TARGETS.clear();
-        Config.getInstance().villagerPathfindingDistance = previousPathDistance;
+        Config.SERVER.villagerPathfindingDistance.set(previousPathDistance);
     }
 }

@@ -36,7 +36,7 @@ public final class TeleportBlockBlacklist {
     }
 
     private static MatcherSnapshot refreshCacheIfNeeded() {
-        List<String> configured = Config.getInstance().unSafeBlocksToTeleportOn;
+        List<? extends String> configured = Config.SERVER.unSafeBlocksToTeleportOn.get();
         MatcherSnapshot current = snapshot;
         if (current != null && current.configured().equals(configured)) {
             return current;
@@ -53,7 +53,7 @@ public final class TeleportBlockBlacklist {
     private record MatcherSnapshot(List<String> configured, List<Predicate<BlockState>> matchers) {
     }
 
-    private static List<Predicate<BlockState>> buildMatchers(List<String> configured, String configName) {
+    private static List<Predicate<BlockState>> buildMatchers(List<? extends String> configured, String configName) {
         List<Predicate<BlockState>> matchers = new ArrayList<>();
 
         for (String entry : configured) {

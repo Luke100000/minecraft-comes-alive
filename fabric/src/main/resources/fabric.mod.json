@@ -36,6 +36,7 @@
     "java": ">=17"
   },
   "suggests": {
+    "forgeconfigapiport": ">=${forge_config_api_port_version}",
     "immersive_melodies": ">=${immersive_melodies_version}"
   },
   "breaks": {

@@ -54,7 +54,7 @@ public final class VillagerChildSuffocationGameTests {
         father.getRelationships().marry(mother);
         var pregnancy = mother.getRelationships().getPregnancy();
         pregnancy.setPregnant(true);
-        pregnancy.setBabyAge(Config.getInstance().babyItemGrowUpTime - 60);
+        pregnancy.setBabyAge(Config.SERVER.babyItemGrowUpTime.get() - 60);
         pregnancy.tick();
 
         List<VillagerEntityMCA> children = helper.getLevel().getEntitiesOfClass(
@@ -146,7 +146,7 @@ public final class VillagerChildSuffocationGameTests {
 
         ItemStack stack = ItemsMCA.BABY_BOY.getDefaultInstance();
         stack.set(DataComponents.CUSTOM_NAME, Component.literal("Placement Test"));
-        stack.set(DataComponentsMCA.BABY_AGE, Config.getServerConfig().babyItemGrowUpTime);
+        stack.set(DataComponentsMCA.BABY_AGE, Config.SERVER.babyItemGrowUpTime.get());
         player.setItemInHand(InteractionHand.MAIN_HAND, stack);
 
         int villagersBefore = helper.getLevel().getEntitiesOfClass(
@@ -176,7 +176,7 @@ public final class VillagerChildSuffocationGameTests {
 
         ItemStack stack = ItemsMCA.BABY_BOY.getDefaultInstance();
         stack.set(DataComponents.CUSTOM_NAME, Component.literal("Low Ceiling Placement Test"));
-        stack.set(DataComponentsMCA.BABY_AGE, Config.getServerConfig().babyItemGrowUpTime);
+        stack.set(DataComponentsMCA.BABY_AGE, Config.SERVER.babyItemGrowUpTime.get());
         player.setItemInHand(InteractionHand.MAIN_HAND, stack);
 
         stack.getItem().use(helper.getLevel(), player, InteractionHand.MAIN_HAND);
@@ -201,7 +201,7 @@ public final class VillagerChildSuffocationGameTests {
 
         ItemStack stack = ItemsMCA.BABY_BOY.getDefaultInstance();
         stack.set(DataComponents.CUSTOM_NAME, Component.literal("Placement Test"));
-        stack.set(DataComponentsMCA.BABY_AGE, Config.getServerConfig().babyItemGrowUpTime);
+        stack.set(DataComponentsMCA.BABY_AGE, Config.SERVER.babyItemGrowUpTime.get());
         player.setItemInHand(InteractionHand.MAIN_HAND, stack);
 
         stack.getItem().use(helper.getLevel(), player, InteractionHand.MAIN_HAND);
@@ -229,7 +229,7 @@ public final class VillagerChildSuffocationGameTests {
 
         ItemStack stack = ItemsMCA.BABY_BOY.getDefaultInstance();
         stack.set(DataComponents.CUSTOM_NAME, Component.literal("Cancelled Spawn Test"));
-        stack.set(DataComponentsMCA.BABY_AGE, Config.getServerConfig().babyItemGrowUpTime);
+        stack.set(DataComponentsMCA.BABY_AGE, Config.SERVER.babyItemGrowUpTime.get());
         player.setItemInHand(InteractionHand.MAIN_HAND, stack);
 
         int[] cancelled = {0};
@@ -278,7 +278,7 @@ public final class VillagerChildSuffocationGameTests {
 
         ItemStack stack = ItemsMCA.SIRBEN_BABY_BOY.getDefaultInstance();
         stack.set(DataComponents.CUSTOM_NAME, Component.literal("Sirben Placement Test"));
-        stack.set(DataComponentsMCA.BABY_AGE, Config.getServerConfig().babyItemGrowUpTime);
+        stack.set(DataComponentsMCA.BABY_AGE, Config.SERVER.babyItemGrowUpTime.get());
         player.setItemInHand(InteractionHand.MAIN_HAND, stack);
 
         stack.getItem().use(helper.getLevel(), player, InteractionHand.MAIN_HAND);

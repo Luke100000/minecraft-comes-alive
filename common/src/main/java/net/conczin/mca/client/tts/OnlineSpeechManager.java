@@ -127,7 +127,7 @@ public class OnlineSpeechManager {
         );
         String url = params.keySet().stream()
                 .map(key -> key + "=" + URLEncoder.encode(params.get(key), StandardCharsets.UTF_8))
-                .collect(Collectors.joining("&", Config.getInstance().onlineTTSServer + "v1/tts/xtts-v2?", ""));
+                .collect(Collectors.joining("&", Config.CLIENT.onlineTTSServer.get() + "v1/tts/xtts-v2?", ""));
         HttpURLConnection connection = null;
         try {
             connection = (HttpURLConnection) (URI.create(url)).toURL().openConnection();

@@ -69,8 +69,8 @@ public final class PathfindingABGameTests {
     @GameTest(batch = NORMAL_BATCH, templateNamespace = "mca_ab",
             template = "ab_air", timeoutTicks = 1200)
     public static void normalBrainAcrossTwoGates(GameTestHelper helper) {
-        previousPathDistance = Config.getInstance().villagerPathfindingDistance;
-        Config.getInstance().villagerPathfindingDistance = 160;
+        previousPathDistance = Config.SERVER.villagerPathfindingDistance.get();
+        Config.SERVER.villagerPathfindingDistance.set(160);
         BlockPos center = helper.absolutePos(new BlockPos(80, 1, 80));
         prepareFlatArea(helper, center, 40, 3);
 
@@ -192,8 +192,8 @@ public final class PathfindingABGameTests {
         if (!threadCpu.isThreadCpuTimeEnabled()) {
             threadCpu.setThreadCpuTimeEnabled(true);
         }
-        previousPathDistance = Config.getInstance().villagerPathfindingDistance;
-        Config.getInstance().villagerPathfindingDistance = 160;
+        previousPathDistance = Config.SERVER.villagerPathfindingDistance.get();
+        Config.SERVER.villagerPathfindingDistance.set(160);
         BlockPos center = helper.absolutePos(new BlockPos(80, 1, 80));
         prepareFlatArea(helper, center, 29, 3);
         // A separate, chunk-forced open corridor makes the fourth workload
@@ -523,6 +523,6 @@ public final class PathfindingABGameTests {
     private static void cleanup() {
         VILLAGERS.forEach(VillagerEntityMCA::discard);
         VILLAGERS.clear();
-        Config.getInstance().villagerPathfindingDistance = previousPathDistance;
+        Config.SERVER.villagerPathfindingDistance.set(previousPathDistance);
     }
 }

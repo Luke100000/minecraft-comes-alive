@@ -1,5 +1,6 @@
 package net.conczin.mca;
 
+import java.nio.file.Path;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -20,5 +21,14 @@ public class PlatformHelper {
 
     public String getModVersion() {
         return "unknown";
+    }
+
+    /** Config commands are native-NeoForge-only; Fabric editing uses the optional FCP GUI. */
+    public boolean allowsConfigCommands() {
+        return true;
+    }
+
+    public Path getConfigDirectory() {
+        return Path.of("config");
     }
 }

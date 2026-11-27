@@ -1349,13 +1349,13 @@ public final class MCAGroundPathNavigationGameTests {
         villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
                 new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
 
-        Config config = Config.getInstance();
-        int originalPathfindingDistance = config.villagerPathfindingDistance;
+        var pathfindingDistance = Config.SERVER.villagerPathfindingDistance;
+        int originalPathfindingDistance = pathfindingDistance.get();
         try {
-            config.villagerPathfindingDistance = 160;
+            pathfindingDistance.set(160);
             villager.getNavigation().createPath(target, 0);
         } finally {
-            config.villagerPathfindingDistance = originalPathfindingDistance;
+            pathfindingDistance.set(originalPathfindingDistance);
         }
 
         helper.assertTrue(!helper.getLevel().isLoaded(target),
@@ -1369,7 +1369,7 @@ public final class MCAGroundPathNavigationGameTests {
             template = "bastion/blocks/air", timeoutTicks = 1_200)
     public static void longDistanceTargetWalksAcrossMultiplePathSegments(GameTestHelper helper) {
         BlockPos start = helper.absolutePos(new BlockPos(4, 1, 4));
-        int pathHorizon = Math.max(Config.getInstance().getVillagerPathfindingDistance(), 48);
+        int pathHorizon = Math.max(Config.SERVER.villagerPathfindingDistance(), 48);
         BlockPos target = start.east(pathHorizon + 32);
         ChunkPos startChunk = new ChunkPos(start);
         ChunkPos targetChunk = new ChunkPos(target);
@@ -1446,14 +1446,14 @@ public final class MCAGroundPathNavigationGameTests {
 
         villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
                 new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
-        Config config = Config.getInstance();
-        int originalPathfindingDistance = config.villagerPathfindingDistance;
+        var pathfindingDistance = Config.SERVER.villagerPathfindingDistance;
+        int originalPathfindingDistance = pathfindingDistance.get();
         Path extended;
         try {
-            config.villagerPathfindingDistance = 160;
+            pathfindingDistance.set(160);
             extended = navigation.createPath(target, 0);
         } finally {
-            config.villagerPathfindingDistance = originalPathfindingDistance;
+            pathfindingDistance.set(originalPathfindingDistance);
         }
 
         helper.assertTrue(extended != null && extended.canReach(),
@@ -1503,10 +1503,10 @@ public final class MCAGroundPathNavigationGameTests {
         villager.setOnGround(true);
         villager.getAttribute(Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
 
-        Config config = Config.getInstance();
-        int originalPathfindingDistance = config.villagerPathfindingDistance;
+        var pathfindingDistance = Config.SERVER.villagerPathfindingDistance;
+        int originalPathfindingDistance = pathfindingDistance.get();
         try {
-            config.villagerPathfindingDistance = 160;
+            pathfindingDistance.set(160);
 
             villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
                     new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
@@ -1523,7 +1523,7 @@ public final class MCAGroundPathNavigationGameTests {
             helper.assertTrue(target.equals(escalated.getTarget()),
                     "canonical far-target retry changed the logical destination");
         } finally {
-            config.villagerPathfindingDistance = originalPathfindingDistance;
+            pathfindingDistance.set(originalPathfindingDistance);
         }
 
         villager.discard();
@@ -1557,10 +1557,10 @@ public final class MCAGroundPathNavigationGameTests {
         villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
                 new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
 
-        Config config = Config.getInstance();
-        int originalPathfindingDistance = config.villagerPathfindingDistance;
+        var pathfindingDistance = Config.SERVER.villagerPathfindingDistance;
+        int originalPathfindingDistance = pathfindingDistance.get();
         try {
-            config.villagerPathfindingDistance = 160;
+            pathfindingDistance.set(160);
             Path first = villager.getNavigation().createPath(target, 0);
             helper.assertTrue(first != null && !first.canReach(),
                     "useful ordinary partial was replaced by an immediate enlarged detour search");
@@ -1573,7 +1573,7 @@ public final class MCAGroundPathNavigationGameTests {
             helper.assertTrue(escalated != null && escalated.canReach(),
                     "detour escalation was not available after bounded progress became exhausted");
         } finally {
-            config.villagerPathfindingDistance = originalPathfindingDistance;
+            pathfindingDistance.set(originalPathfindingDistance);
         }
 
         villager.discard();
@@ -1618,10 +1618,10 @@ public final class MCAGroundPathNavigationGameTests {
         villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
                 new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
 
-        Config config = Config.getInstance();
-        int originalPathfindingDistance = config.villagerPathfindingDistance;
+        var config = Config.SERVER;
+        int originalPathfindingDistance = config.villagerPathfindingDistance.get();
         try {
-            config.villagerPathfindingDistance = 160;
+            config.villagerPathfindingDistance.set(160);
             Path blocked = villager.getNavigation().createPath(target, 0);
             helper.assertTrue(blocked != null && !blocked.canReach(),
                     "fixture found a route into the sealed target enclosure");
@@ -1669,7 +1669,7 @@ public final class MCAGroundPathNavigationGameTests {
             helper.assertTrue(afterReturning != null && afterReturning.canReach(),
                     "meaningful movement did not invalidate the old failed detour; path=" + summarizePath(afterReturning));
         } finally {
-            config.villagerPathfindingDistance = originalPathfindingDistance;
+            config.villagerPathfindingDistance.set(originalPathfindingDistance);
             villager.discard();
         }
         helper.succeed();
@@ -1705,10 +1705,10 @@ public final class MCAGroundPathNavigationGameTests {
         villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
                 new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
 
-        Config config = Config.getInstance();
-        int originalPathfindingDistance = config.villagerPathfindingDistance;
+        var config = Config.SERVER;
+        int originalPathfindingDistance = config.villagerPathfindingDistance.get();
         try {
-            config.villagerPathfindingDistance = 160;
+            config.villagerPathfindingDistance.set(160);
             WalkTargetFailureMemory.record(villager, target, helper.getLevel().getGameTime());
             Path blocked = villager.getNavigation().createPath(target, 0);
             helper.assertTrue(blocked == null || !blocked.canReach(),
@@ -1729,7 +1729,7 @@ public final class MCAGroundPathNavigationGameTests {
             helper.assertTrue(afterMoving != null && afterMoving.canReach(),
                     "meaningful movement did not unlock a full far-target search; path=" + summarizePath(afterMoving));
         } finally {
-            config.villagerPathfindingDistance = originalPathfindingDistance;
+            config.villagerPathfindingDistance.set(originalPathfindingDistance);
             villager.discard();
         }
         helper.succeed();
@@ -1941,10 +1941,10 @@ public final class MCAGroundPathNavigationGameTests {
         persistentVillager.setOnGround(true);
         persistentVillager.getAttribute(Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
 
-        Config config = Config.getInstance();
-        int originalPathfindingDistance = config.villagerPathfindingDistance;
+        var config = Config.SERVER;
+        int originalPathfindingDistance = config.villagerPathfindingDistance.get();
         try {
-            config.villagerPathfindingDistance = 160;
+            config.villagerPathfindingDistance.set(160);
             ordinaryVillager.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(target, 0.5F, 0));
             Path ordinaryProbe = ordinaryVillager.getNavigation().createPath(target, 0);
             helper.assertTrue(ordinaryProbe != null && !ordinaryProbe.canReach(),
@@ -1968,7 +1968,7 @@ public final class MCAGroundPathNavigationGameTests {
             helper.assertTrue(persistentAfter.extendedSearches() > persistentBefore.extendedSearches(),
                     "explicit persistent destination did not receive an extended path search");
         } finally {
-            config.villagerPathfindingDistance = originalPathfindingDistance;
+            config.villagerPathfindingDistance.set(originalPathfindingDistance);
         }
         ordinaryVillager.discard();
         persistentVillager.discard();
@@ -2051,10 +2051,9 @@ public final class MCAGroundPathNavigationGameTests {
                 .spawn(MobSpawnType.STRUCTURE);
         villager.setNoAi(true);
         villager.setOnGround(true);
-        Config config = Config.getInstance();
-        int originalPathfindingDistance = config.villagerPathfindingDistance;
+        int originalPathfindingDistance = Config.SERVER.villagerPathfindingDistance.get();
         try {
-            config.villagerPathfindingDistance = 160;
+            Config.SERVER.villagerPathfindingDistance.set(160);
             villager.getAttribute(Attributes.FOLLOW_RANGE).setBaseValue(96.0D);
             // Construct after updating the attribute: vanilla fixes its base node
             // budget when PathNavigation creates its PathFinder.
@@ -2074,7 +2073,7 @@ public final class MCAGroundPathNavigationGameTests {
             helper.assertTrue(extendedNodes >= ordinaryNodes,
                     "extended search expanded fewer nodes than ordinary: " + extendedNodes + " vs " + ordinaryNodes);
         } finally {
-            config.villagerPathfindingDistance = originalPathfindingDistance;
+            Config.SERVER.villagerPathfindingDistance.set(originalPathfindingDistance);
             villager.discard();
         }
         helper.succeed();

@@ -4,9 +4,12 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.sun.net.httpserver.HttpServer;
 import net.conczin.mca.Config;
+import net.conczin.mca.NativeConfigDefaultsExtension;
 import net.conczin.mca.client.tts.sound.PCMAudioStream;
+import net.conczin.mca.config.ConfigScope;
 import net.minecraft.SharedConstants;
 import net.minecraft.server.Bootstrap;
+import net.neoforged.neoforge.common.ModConfigSpec;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -195,17 +198,23 @@ class AudioCacheConcurrencyTest {
         HttpServer server = startAudioServer("/v1/tts/xtts-v2", audio);
         String identifier = "concurrency_test/" + UUID.randomUUID() + ".ogg";
         Path targetPath = Path.of("tts_cache").resolve(identifier);
-        Config config = Config.getInstance();
-        String previousUrl = config.onlineTTSServer;
+        var urlSetting = Config.CLIENT.onlineTTSServer;
+        String previousUrl = urlSetting.get();
+        ModConfigSpec.ConfigValue<?> nativeUrl = NativeConfigDefaultsExtension.spec(ConfigScope.CLIENT)
+                .getValues().get(urlSetting.getPath());
         try {
-            config.onlineTTSServer = "http://127.0.0.1:" + server.getAddress().getPort() + "/";
+            String localUrl = "http://127.0.0.1:" + server.getAddress().getPort() + "/";
+            urlSetting.set(localUrl);
+            nativeUrl.clearCache();
+            assertEquals(localUrl, urlSetting.get());
             OnlineSpeechManager manager = new OnlineSpeechManager();
             assertFalse(AudioCache.cachedRetrieve(identifier, out -> manager.downloadAudio(out, "en", "male_0", "Hello")));
             assertFalse(Files.exists(targetPath));
             assertTrue(AudioCache.cachedRetrieve(identifier, out -> manager.downloadAudio(out, "en", "male_0", "Hello")));
             assertArrayEquals(audio, Files.readAllBytes(targetPath));
         } finally {
-            config.onlineTTSServer = previousUrl;
+            urlSetting.set(previousUrl);
+            nativeUrl.clearCache();
             server.stop(0);
             Files.deleteIfExists(targetPath);
         }

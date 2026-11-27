@@ -121,13 +121,13 @@ public final class ProcreationInventoryGameTests {
         fillVillagerInventory(villager);
         villager.getInventory().setItem(0, ItemStack.EMPTY);
 
-        float previousChance = Config.getInstance().twinBabyChance;
+        double previousChance = Config.SERVER.twinBabyChance.get();
         boolean started;
         try {
-            Config.getInstance().twinBabyChance = 1.0f;
+            Config.SERVER.twinBabyChance.set(1.0);
             started = villager.getRelationships().startProcreating(player, helper.getLevel().getGameTime());
         } finally {
-            Config.getInstance().twinBabyChance = previousChance;
+            Config.SERVER.twinBabyChance.set(previousChance);
         }
 
         helper.assertTrue(!started, "Insufficient capacity for multiple babies must prevent the animation");

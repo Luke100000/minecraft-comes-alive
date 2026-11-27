@@ -33,7 +33,7 @@ public class VillagerTrackerManager extends SavedData {
     }
 
     public static void update(Entity entity) {
-        if (Config.getInstance().trackVillagerPosition && entity.level() instanceof ServerLevel serverWorld) {
+        if (Config.SERVER.trackVillagerPosition.get() && entity.level() instanceof ServerLevel serverWorld) {
             get(serverWorld).set(entity);
         }
     }

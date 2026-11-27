@@ -65,11 +65,11 @@ public final class MourningFailureGameTests {
     @BeforeBatch(batch = BATCH)
     public static void prepareMourningBatch(ServerLevel level) {
         previousDayTime = level.getDayTime();
-        previousMourning = Config.getInstance().enableMourning;
-        previousTeleporting = Config.getInstance().allowVillagerTeleporting;
+        previousMourning = Config.SERVER.enableMourning.get();
+        previousTeleporting = Config.SERVER.allowVillagerTeleporting.get();
         level.setDayTime(6_000L);
-        Config.getInstance().enableMourning = true;
-        Config.getInstance().allowVillagerTeleporting = false;
+        Config.SERVER.enableMourning.set(true);
+        Config.SERVER.allowVillagerTeleporting.set(false);
     }
 
     @AfterBatch(batch = BATCH)
@@ -79,8 +79,8 @@ public final class MourningFailureGameTests {
         VILLAGERS.forEach(VillagerEntityMCA::discard);
         VILLAGERS.clear();
         level.setDayTime(previousDayTime);
-        Config.getInstance().enableMourning = previousMourning;
-        Config.getInstance().allowVillagerTeleporting = previousTeleporting;
+        Config.SERVER.enableMourning.set(previousMourning);
+        Config.SERVER.allowVillagerTeleporting.set(previousTeleporting);
     }
 
     @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena",

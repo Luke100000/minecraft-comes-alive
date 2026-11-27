@@ -49,8 +49,8 @@ public final class MCAWalkNodeEvaluatorLookupGameTests {
                 .withAge(0).withPosition(Vec3.atBottomCenterOf(air.west(2)))
                 .spawn(MobSpawnType.STRUCTURE);
         villager.setNoAi(true);
-        boolean oldGateConfig = Config.getInstance().villagersInteractWithFenceGates;
-        Config.getInstance().villagersInteractWithFenceGates = true;
+        boolean oldGateConfig = Config.SERVER.villagersInteractWithFenceGates.get();
+        Config.SERVER.villagersInteractWithFenceGates.set(true);
         try {
             CountingContext context = new CountingContext(level, villager);
             MCAWalkNodeEvaluator evaluator = new MCAWalkNodeEvaluator();
@@ -72,7 +72,7 @@ public final class MCAWalkNodeEvaluatorLookupGameTests {
             helper.assertTrue(context.lookups == 1, "ladder should require one state read");
             helper.succeed();
         } finally {
-            Config.getInstance().villagersInteractWithFenceGates = oldGateConfig;
+            Config.SERVER.villagersInteractWithFenceGates.set(oldGateConfig);
             villager.discard();
         }
     }
@@ -89,12 +89,12 @@ public final class MCAWalkNodeEvaluatorLookupGameTests {
                 .withAge(0).withPosition(Vec3.atBottomCenterOf(woodenDoor.west(2)))
                 .spawn(MobSpawnType.STRUCTURE);
         villager.setNoAi(true);
-        boolean oldAnyDoorConfig = Config.getInstance().villagersInteractWithAnyDoor;
+        boolean oldAnyDoorConfig = Config.SERVER.villagersInteractWithAnyDoor.get();
         try {
             MCAWalkNodeEvaluator evaluator = new MCAWalkNodeEvaluator();
             PathfindingContext context = new PathfindingContext(level, villager);
 
-            Config.getInstance().villagersInteractWithAnyDoor = false;
+            Config.SERVER.villagersInteractWithAnyDoor.set(false);
             helper.assertTrue(PathingBlockInteraction.isOpenable(level.getBlockState(woodenDoor)),
                     "vanilla mob-interactable door should remain operable by default");
             helper.assertTrue(!PathingBlockInteraction.isOpenable(level.getBlockState(ironDoor)),
@@ -104,14 +104,14 @@ public final class MCAWalkNodeEvaluatorLookupGameTests {
             helper.assertTrue(evaluator.getPathType(context, ironDoor.getX(), ironDoor.getY(), ironDoor.getZ()) == PathType.DOOR_IRON_CLOSED,
                     "door the villager refuses to operate must not be pathable");
 
-            Config.getInstance().villagersInteractWithAnyDoor = true;
+            Config.SERVER.villagersInteractWithAnyDoor.set(true);
             helper.assertTrue(PathingBlockInteraction.isOpenable(level.getBlockState(ironDoor)),
                     "any-door config should make an iron DoorBlock operable");
             helper.assertTrue(evaluator.getPathType(context, ironDoor.getX(), ironDoor.getY(), ironDoor.getZ()) == PathType.WALKABLE_DOOR,
                     "any-door config should make the same iron DoorBlock pathable");
             helper.succeed();
         } finally {
-            Config.getInstance().villagersInteractWithAnyDoor = oldAnyDoorConfig;
+            Config.SERVER.villagersInteractWithAnyDoor.set(oldAnyDoorConfig);
             villager.discard();
         }
     }

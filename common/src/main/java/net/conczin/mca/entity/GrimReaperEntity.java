@@ -232,7 +232,7 @@ public class GrimReaperEntity extends PathfinderMob implements CTrackedEntity<Gr
         // Update boss info
         bossInfo.setProgress(this.getHealth() / this.getMaxHealth());
 
-        if (!Config.getInstance().allowGrimReaper) {
+        if (!Config.SERVER.allowGrimReaper.get()) {
             discard();
         }
 

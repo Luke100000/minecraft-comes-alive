@@ -54,7 +54,7 @@ public class VillagerEntityBaseModelMCA<T extends LivingEntity & VillagerLike<T>
 
     protected static CubeListBuilder newBreasts(CubeDeformation dilation, int oy) {
         CubeListBuilder builder = CubeListBuilder.create();
-        if (Config.getInstance().enableBoobs) {
+        if (Config.CLIENT.enableBoobs.get()) {
             builder.texOffs(18, 21 + oy).addBox(-3.25F, -1.25F, -1.5F, 6, 3, 3, dilation);
         }
         return builder;

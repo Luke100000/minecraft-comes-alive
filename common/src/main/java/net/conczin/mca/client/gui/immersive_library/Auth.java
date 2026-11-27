@@ -81,6 +81,6 @@ public class Auth {
 
     public static String authenticate(String username) {
         currentToken = newToken();
-        return Config.getInstance().immersiveLibraryUrl + "/v1/login?state=" + createDataState(username, currentToken);
+        return Config.CLIENT.immersiveLibraryUrl.get() + "/v1/login?state=" + createDataState(username, currentToken);
     }
 }

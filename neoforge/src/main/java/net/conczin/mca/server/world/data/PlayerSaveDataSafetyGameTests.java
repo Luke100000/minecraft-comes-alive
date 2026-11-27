@@ -114,11 +114,11 @@ public final class PlayerSaveDataSafetyGameTests {
             }
         };
 
-        boolean originalLaunchDestiny = Config.getInstance().launchIntoDestiny;
+        boolean originalLaunchDestiny = Config.SERVER.launchIntoDestiny.get();
         try {
             Files.createDirectories(dataDir);
             Files.write(saveFile, corruptBytes);
-            Config.getInstance().launchIntoDestiny = true;
+            Config.SERVER.launchIntoDestiny.set(true);
 
             PlayerSaveData data = PlayerSaveData.get(player);
             helper.assertTrue(data.hasUnreadableSavedData(),
@@ -148,7 +148,7 @@ public final class PlayerSaveDataSafetyGameTests {
         } catch (Exception e) {
             throw new RuntimeException(e);
         } finally {
-            Config.getInstance().launchIntoDestiny = originalLaunchDestiny;
+            Config.SERVER.launchIntoDestiny.set(originalLaunchDestiny);
             ServerInteractionManager.getInstance().clearDestinySession(playerUuid);
             try {
                 Files.deleteIfExists(saveFile);

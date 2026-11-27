@@ -22,6 +22,37 @@ repeat indefinitely!
 MCA Reborn is a rewrite of MCA for Minecraft 1.16.5 and upwards, featuring extended village management, villager
 genetics, and various enhancements.
 
+## Configuration (Minecraft 1.21.1)
+
+**Fabric:** Forge Config API Port (FCP) is **optional**. Without it, MCA runs with
+no in-game configuration editor: edit `config/mca-common.toml`,
+`config/mca-server.toml` (and `config/mca-client.toml` on clients) manually.
+Restart Minecraft or the dedicated server to apply file changes. An existing
+`<world>/serverconfig/mca-server.toml` overrides the global SERVER settings
+for that world. The client receives authoritative SERVER settings when joining
+a Fabric server; private COMMON and CLIENT settings stay local.
+
+When **FCP is installed on Fabric**, MCA registers its **existing searchable
+configuration screen** instead of supplying a different editor. Mod Menu can
+provide a convenient way to open a mod's configuration screen. FCP is not
+bundled or required by MCA. NeoForge uses its built-in native configuration
+system and existing searchable screen; it does not require FCP.
+
+**Without FCP**, manually edit TOML and restart; there is no configuration
+GUI or live file watcher. Malformed TOML is left untouched so it can be fixed,
+and individual invalid entries fall back to validated defaults. **With FCP**,
+FCP itself owns TOML loading/correction, saving, GUI changes and its normal
+file watcher/reload semantics; FCP may correct noncanonical TOML files.
+MCA migrates recognized old TOML setting paths before FCP loads the files,
+preserving backups named `mca-*.toml.pre-mca-migration.bak`.
+
+Fabric servers own SERVER settings in multiplayer. When both server and client
+have FCP, FCP's native synchronization is used; other Fabric combinations
+receive a validated MCA SERVER snapshot, without synchronizing private
+COMMON or CLIENT credentials. For FCP-backed live SERVER changes, connected
+clients with FCP must reconnect to receive FCP's native updated SERVER
+settings; MCA resends its snapshot to clients without FCP.
+
 ## Compatibilities
 
 MCA is usually compatible with every mod, except when it comes to recognising items (e.g. gifting).

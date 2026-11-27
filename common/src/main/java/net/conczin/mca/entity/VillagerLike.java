@@ -171,7 +171,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     }
 
     default boolean canBeAttractedTo(PlayerSaveData other) {
-        return !Config.getInstance().enableGenderCheckForPlayers || canBeAttractedTo(toVillager(other));
+        return !Config.SERVER.enableGenderCheckForPlayers.get() || canBeAttractedTo(toVillager(other));
     }
 
     default InteractionHand getDominantHand() {
@@ -454,12 +454,16 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
 
     /** Scale used by collision/physical dimensions. */
     default float getPhysicalHorizontalScaleFactor() {
-        return Math.min(MAX_PHYSICAL_SCALE, getVisualHorizontalScaleFactor());
+        if (getGenetics() == null || useSquidwardModelsForScaling()) {
+            return asEntity().isBaby() ? 0.5f : 1.0f;
+        } else {
+            return Math.min(MAX_PHYSICAL_SCALE, getVisualHorizontalScaleFactor());
+        }
     }
 
     /** Uncapped scale used by the rendered model. */
     default float getVisualHorizontalScaleFactor() {
-        if (getGenetics() == null || Config.getInstance().useSquidwardModels) {
+        if (getGenetics() == null || Config.COMMON.useSquidwardModels.get()) {
             return asEntity().isBaby() ? 0.5f : 1.0f;
         }
         return getGenetics().getHorizontalScaleFactor()
@@ -475,7 +479,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
 
     /** Uncapped scale used by the rendered model. */
     default float getVisualVerticalScaleFactor() {
-        if (getGenetics() == null || Config.getInstance().useSquidwardModels) {
+        if (getGenetics() == null || useSquidwardModelsForScaling()) {
             return asEntity().isBaby() ? 0.5f : 1.0f;
         } else {
             return getGenetics().getVerticalScaleFactor()
@@ -483,6 +487,10 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
                    * getVillagerDimensions().getHeight()
                    * getGenetics().getGender().getScaleFactor();
         }
+    }
+
+    private static boolean useSquidwardModelsForScaling() {
+        return Config.COMMON.useSquidwardModels.get();
     }
 
     /** Name tag anchor: vanilla's player name tag height, converted to the rendered PlayerModel scale. */
@@ -532,7 +540,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
 
         if (!isPlayer) {
             Mob entity = asEntity();
-            if (entity.getRandom().nextFloat() < Config.getInstance().coloredHairChance) {
+            if (entity.getRandom().nextFloat() < Config.SERVER.coloredHairChance.get().floatValue()) {
                 int n = entity.getRandom().nextInt(25);
                 int o = DyeColor.values().length;
                 int p = n % o;

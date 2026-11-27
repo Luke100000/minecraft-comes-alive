@@ -365,9 +365,9 @@ public final class HomeArrivalGameTests {
         level.setBlock(head, bed.setValue(BedBlock.PART, BedPart.HEAD), 3);
 
         configureNight(level);
-        originalAnyDoor = Config.getInstance().villagersInteractWithAnyDoor;
-        originalFenceGates = Config.getInstance().villagersInteractWithFenceGates;
-        Config.getInstance().villagersInteractWithAnyDoor = false;
+        originalAnyDoor = Config.SERVER.villagersInteractWithAnyDoor.get();
+        originalFenceGates = Config.SERVER.villagersInteractWithFenceGates.get();
+        Config.SERVER.villagersInteractWithAnyDoor.set(false);
         BlockState ironDoor = Blocks.IRON_DOOR.defaultBlockState().setValue(DoorBlock.FACING, Direction.NORTH);
         level.setBlock(bedsideDoor, ironDoor.setValue(DoorBlock.HALF, DoubleBlockHalf.LOWER), 3);
         level.setBlock(bedsideDoor.above(), ironDoor.setValue(DoorBlock.HALF, DoubleBlockHalf.UPPER), 3);
@@ -379,10 +379,10 @@ public final class HomeArrivalGameTests {
 
         level.setBlock(bedsideDoor.above(), Blocks.AIR.defaultBlockState(), 3);
         level.setBlock(bedsideDoor, Blocks.OAK_FENCE_GATE.defaultBlockState(), 3);
-        Config.getInstance().villagersInteractWithFenceGates = false;
+        Config.SERVER.villagersInteractWithFenceGates.set(false);
         helper.assertTrue(bedTarget.getPathTargets(villager).isEmpty(),
                 "non-operable closed fence gate beside a sealed bed was accepted as a bedside approach");
-        Config.getInstance().villagersInteractWithFenceGates = true;
+        Config.SERVER.villagersInteractWithFenceGates.set(true);
         helper.assertTrue(bedTarget.getPathTargets(villager).contains(bedsideDoor),
                 "operable closed fence gate beside a compact bed was rejected as a bedside approach");
         level.setBlock(bedsideDoor.above(), Blocks.OAK_FENCE_GATE.defaultBlockState(), 3);
@@ -445,8 +445,8 @@ public final class HomeArrivalGameTests {
         prepareHouse(helper, start, door, foot);
         if (fenceGateEntrance) {
             ServerLevel level = helper.getLevel();
-            originalFenceGates = Config.getInstance().villagersInteractWithFenceGates;
-            Config.getInstance().villagersInteractWithFenceGates = true;
+            originalFenceGates = Config.SERVER.villagersInteractWithFenceGates.get();
+            Config.SERVER.villagersInteractWithFenceGates.set(true);
             level.setBlock(door, Blocks.OAK_FENCE_GATE.defaultBlockState()
                     .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.EAST), 3);
             level.setBlock(door.above(), Blocks.AIR.defaultBlockState(), 3);
@@ -616,10 +616,10 @@ public final class HomeArrivalGameTests {
     private static void configureNight(ServerLevel level) {
         originalDayTime = level.getDayTime();
         originalDaylightCycle = level.getGameRules().getBoolean(GameRules.RULE_DAYLIGHT);
-        originalTeleport = Config.getInstance().allowVillagerTeleporting;
+        originalTeleport = Config.SERVER.allowVillagerTeleporting.get();
         level.getGameRules().getRule(GameRules.RULE_DAYLIGHT).set(false, level.getServer());
         level.setDayTime(16000);
-        Config.getInstance().allowVillagerTeleporting = false;
+        Config.SERVER.allowVillagerTeleporting.set(false);
     }
 
     private static String describe(VillagerEntityMCA villager) {
@@ -717,15 +717,15 @@ public final class HomeArrivalGameTests {
         if (originalDayTime != null) {
             level.setDayTime(originalDayTime);
             level.getGameRules().getRule(GameRules.RULE_DAYLIGHT).set(originalDaylightCycle, level.getServer());
-            Config.getInstance().allowVillagerTeleporting = originalTeleport;
+            Config.SERVER.allowVillagerTeleporting.set(originalTeleport);
             originalDayTime = null;
         }
         if (originalAnyDoor != null) {
-            Config.getInstance().villagersInteractWithAnyDoor = originalAnyDoor;
+            Config.SERVER.villagersInteractWithAnyDoor.set(originalAnyDoor);
             originalAnyDoor = null;
         }
         if (originalFenceGates != null) {
-            Config.getInstance().villagersInteractWithFenceGates = originalFenceGates;
+            Config.SERVER.villagersInteractWithFenceGates.set(originalFenceGates);
             originalFenceGates = null;
         }
     }

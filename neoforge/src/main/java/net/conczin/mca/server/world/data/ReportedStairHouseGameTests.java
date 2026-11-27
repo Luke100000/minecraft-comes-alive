@@ -209,12 +209,12 @@ public final class ReportedStairHouseGameTests {
         template.placeInWorld(level, origin, origin, new StructurePlaceSettings(), level.random, 2);
         // Exercise settled blocks, not only the tick in which the template was placed.
         helper.runAfterDelay(5, () -> {
-            var config = net.conczin.mca.Config.getInstance();
-            int previousSize = config.maxBuildingSize, previousRadius = config.maxBuildingRadius;
+            var config = net.conczin.mca.Config.SERVER;
+            int previousSize = config.maxBuildingSize.get(), previousRadius = config.maxBuildingRadius.get();
             try {
                 for (int[] limits : List.of(new int[]{2048, 32}, new int[]{8192, 320})) {
-                    config.maxBuildingSize = limits[0];
-                    config.maxBuildingRadius = limits[1];
+                    config.maxBuildingSize.set(limits[0]);
+                    config.maxBuildingRadius.set(limits[1]);
                     for (BlockPos registration : List.of(new BlockPos(18, 2, 11),
                             new BlockPos(18, 2, 10), new BlockPos(17, 2, 9))) {
                         VillageManager manager = new VillageManager(level);
@@ -268,8 +268,8 @@ public final class ReportedStairHouseGameTests {
                     }
                 }
             } finally {
-                config.maxBuildingSize = previousSize;
-                config.maxBuildingRadius = previousRadius;
+                config.maxBuildingSize.set(previousSize);
+                config.maxBuildingRadius.set(previousRadius);
                 for (BlockPos pos : BlockPos.betweenClosed(origin, origin.offset(23, 31, 20))) {
                     level.setBlock(pos, Blocks.AIR.defaultBlockState(), 2);
                 }

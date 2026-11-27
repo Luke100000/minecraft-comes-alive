@@ -368,7 +368,7 @@ public final class ChoreCombatHandoffGameTests {
             corrupted.put(UUID.randomUUID().toString(), missingUuid);
             villager.setTrackedValue(memoriesParam, corrupted);
 
-            villager.tickCount = Math.max(1, Config.getInstance().interactionFatigueCooldown);
+            villager.tickCount = Math.max(1, Config.SERVER.interactionFatigueCooldown.get());
             villager.getVillagerBrain().think();
 
             Memories updatedPrimary = villager.getVillagerBrain().getMemoriesForPlayer(player);
@@ -521,10 +521,10 @@ public final class ChoreCombatHandoffGameTests {
     public static void assigningChoreDuringRestKeepsRestActive(GameTestHelper helper) {
         VillagerEntityMCA villager = spawnChoreVillager(helper, Chore.CHOP);
         long previousDayTime = helper.getLevel().getDayTime();
-        boolean previousNightOwl = Config.getInstance().allowAnyNightOwl;
+        boolean previousNightOwl = Config.SERVER.allowAnyNightOwl.get();
         try {
             // Refreshing the brain inside assignJob chooses this villager's real schedule.
-            Config.getInstance().allowAnyNightOwl = false;
+            Config.SERVER.allowAnyNightOwl.set(false);
             helper.getLevel().setDayTime(14000L);
             villager.getVillagerBrain().assignJob(Chore.CHOP, helper.makeMockPlayer(GameType.SURVIVAL));
             var brain = villager.getBrain();
@@ -536,7 +536,7 @@ public final class ChoreCombatHandoffGameTests {
                     "rest-period assignment was discarded");
         } finally {
             helper.getLevel().setDayTime(previousDayTime);
-            Config.getInstance().allowAnyNightOwl = previousNightOwl;
+            Config.SERVER.allowAnyNightOwl.set(previousNightOwl);
             villager.discard();
         }
         helper.succeed();

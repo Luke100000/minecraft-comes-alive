@@ -6,6 +6,7 @@ import net.conczin.mca.resources.data.skin.Clothing;
 import net.conczin.mca.resources.data.skin.Hair;
 import net.conczin.mca.resources.data.skin.SkinListEntry;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
@@ -77,7 +78,9 @@ public final class SavedDataDiskRecoveryGameTests {
         CompoundTag initialData = new CompoundTag();
         initialData.putInt("lastVillageId", 37);
         initialData.putInt("lastBuildingId", 42);
+        initialData.put("villages", new ListTag());
         VillageManager initial = new VillageManager(world, initialData);
+        helper.assertTrue(!initial.hasUnreadableSavedData(), "Village round-trip fixture must contain a valid collection");
         first.set("mca_villages", initial);
         initial.setDirty();
         first.save();

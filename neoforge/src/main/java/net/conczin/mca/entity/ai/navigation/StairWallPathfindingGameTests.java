@@ -572,7 +572,7 @@ public final class StairWallPathfindingGameTests {
     @GameTest(batch = "mca_stair_spin_prolonged_encounter", templateNamespace = "mca",
             template = "gametest/copied_open_house", timeoutTicks = 560)
     public static void prolongedOpposingStairWalkersDoNotSpin(GameTestHelper helper) {
-        helper.assertTrue(Config.getServerConfig().enableVillagerCollisions,
+        helper.assertTrue(Config.SERVER.enableVillagerCollisions.get(),
                 "Villager collisions must be enabled for the encounter fixture");
         BlockPos lower = prepareThreeStepDescent(helper, true, null);
         // Both bodies must be able to traverse the flight before testing their encounter.

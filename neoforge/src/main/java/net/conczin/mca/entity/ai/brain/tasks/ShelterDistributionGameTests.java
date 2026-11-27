@@ -521,11 +521,11 @@ public final class ShelterDistributionGameTests {
             if (previousDayTime == null) {
                 previousDayTime = level.getDayTime();
                 previousDaylight = level.getGameRules().getBoolean(GameRules.RULE_DAYLIGHT);
-                previousTeleport = Config.getInstance().allowVillagerTeleporting;
+                previousTeleport = Config.SERVER.allowVillagerTeleporting.get();
             }
             level.setDayTime(13000L);
             level.getGameRules().getRule(GameRules.RULE_DAYLIGHT).set(false, level.getServer());
-            Config.getInstance().allowVillagerTeleporting = false;
+            Config.SERVER.allowVillagerTeleporting.set(false);
             claim(helper, nearest);
             claim(helper, alternative);
             choose(helper, first);
@@ -932,13 +932,13 @@ public final class ShelterDistributionGameTests {
             var vanilla = new Villager(EntityType.VILLAGER, helper.getLevel());
             vanilla.setPos(Vec3.atBottomCenterOf(center.east(2)));
             vanilla.setNoAi(true);
-            boolean overwrite = Config.getInstance().overwriteOriginalVillagers;
+            boolean overwrite = Config.SERVER.overwriteOriginalVillagers.get();
             try {
                 // Keep this fixture vanilla rather than enqueueing MCA's normal replacement.
-                Config.getInstance().overwriteOriginalVillagers = false;
+                Config.SERVER.overwriteOriginalVillagers.set(false);
                 helper.assertTrue(helper.getLevel().addFreshEntity(vanilla), "vanilla fixture spawn was rejected");
             } finally {
-                Config.getInstance().overwriteOriginalVillagers = overwrite;
+                Config.SERVER.overwriteOriginalVillagers.set(overwrite);
             }
             VILLAGERS.add(vanilla);
             helper.assertTrue(manager.getLoadedVillagers().contains(vanilla), "vanilla villager was not indexed");
@@ -1462,11 +1462,11 @@ public final class ShelterDistributionGameTests {
             if (previousDayTime == null) {
                 previousDayTime = level.getDayTime();
                 previousDaylight = level.getGameRules().getBoolean(GameRules.RULE_DAYLIGHT);
-                previousTeleport = Config.getInstance().allowVillagerTeleporting;
+                previousTeleport = Config.SERVER.allowVillagerTeleporting.get();
             }
             level.setDayTime(13000L);
             level.getGameRules().getRule(GameRules.RULE_DAYLIGHT).set(false, level.getServer());
-            Config.getInstance().allowVillagerTeleporting = false;
+            Config.SERVER.allowVillagerTeleporting.set(false);
             choose(helper, incoming);
             helper.assertTrue(selected(incoming).equals(alternative), "real arrival did not select the roomier house");
             incoming.setNoAi(false);
@@ -1634,7 +1634,7 @@ public final class ShelterDistributionGameTests {
         if (previousDayTime != null) {
             level.setDayTime(previousDayTime);
             level.getGameRules().getRule(GameRules.RULE_DAYLIGHT).set(previousDaylight, level.getServer());
-            Config.getInstance().allowVillagerTeleporting = previousTeleport;
+            Config.SERVER.allowVillagerTeleporting.set(previousTeleport);
             previousDayTime = null;
             previousDaylight = null;
             previousTeleport = null;

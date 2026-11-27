@@ -49,7 +49,7 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
         return command.split("\\.", 2);
     }
 
-    static Optional<ResourceLocation> resolveAllowedRumorStructure(String arg, List<String> allowedPool, RandomSource random) {
+    static Optional<ResourceLocation> resolveAllowedRumorStructure(String arg, List<? extends String> allowedPool, RandomSource random) {
         if (allowedPool.isEmpty()) {
             return Optional.empty();
         }
@@ -274,7 +274,7 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
             case "location" -> {
                 Optional<ResourceLocation> resolvedIdentifier = resolveAllowedRumorStructure(
                         arg,
-                        Config.getInstance().structuresInRumors,
+                        Config.SERVER.structuresInRumors.get(),
                         entity.getRandom()
                 );
                 if (resolvedIdentifier.isEmpty()) {

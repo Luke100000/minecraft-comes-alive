@@ -174,10 +174,10 @@ public final class ChorePathfindingGameTests {
                 Optional<Player> getAssigningPlayer() { return Optional.of(assigningPlayer); }
             };
         };
-        Config config = Config.getInstance();
-        int previousDistance = config.villagerPathfindingDistance;
+        var config = Config.SERVER;
+        int previousDistance = config.villagerPathfindingDistance.get();
         try {
-            config.villagerPathfindingDistance = 160;
+            config.villagerPathfindingDistance.set(160);
             long time = helper.getLevel().getGameTime();
             task.start(helper.getLevel(), villager, time);
             if (chore == Chore.FISH) {
@@ -213,7 +213,7 @@ public final class ChorePathfindingGameTests {
             helper.assertTrue(((PersistentPathTarget) walkTarget.getTarget()).isInactiveFor(villager),
                     chore + " work destination did not yield when REST became active");
         } finally {
-            config.villagerPathfindingDistance = previousDistance;
+            config.villagerPathfindingDistance.set(previousDistance);
             villager.discard();
         }
         helper.succeed();

@@ -8,7 +8,6 @@ import net.conczin.mca.entity.PlayerDimensions;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.network.Network;
-import net.conczin.mca.network.c2s.ConfigRequest;
 import net.conczin.mca.network.c2s.PlayerDataRequest;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.player.Player;
@@ -26,12 +25,13 @@ public class MCAClient {
     }
 
     public static void onLogin() {
-        Config.setServerConfig(null);
         playerData.clear();
         playerDataRequests.clear();
         ClientSkinCatalog.clear();
-        Network.sendToServer(new ConfigRequest());
         ClientSkinCatalog.sync();
+        // SERVER config is synchronized before entering play; refresh dimensions that
+        // previously depended on MCA's removed ConfigResponse callback.
+        refreshPlayerDataDependentDimensions();
     }
 
     public static Optional<VillagerLike<?>> getPlayerData(UUID uuid) {
@@ -54,7 +54,7 @@ public class MCAClient {
         boolean isTTSPackActive = Minecraft.getInstance().getResourceManager().listPacks().anyMatch(pack -> {
             return pack.packId().contains("MCAVoices");
         });
-        return !isTTSPackActive && Minecraft.getInstance().options.languageCode.equals("en_us") && !Config.getInstance().enableOnlineTTS;
+        return !isTTSPackActive && Minecraft.getInstance().options.languageCode.equals("en_us") && !Config.CLIENT.enableOnlineTTS.get();
     }
 
     public static Optional<VillagerLike<?>> getGeneticsPlayerData(UUID uuid) {
@@ -127,24 +127,24 @@ public class MCAClient {
     }
 
     private static boolean needsPlayerDataForDimensions() {
-        return Config.getServerConfig().scalePlayerHitboxWithSizeAndWidth
-                || Config.getInstance().scaleEyeHeightWithPlayerHeight;
+        return Config.SERVER.scalePlayerHitboxWithSizeAndWidth.get()
+                || Config.CLIENT.scaleEyeHeightWithPlayerHeight.get();
     }
 
     public static boolean isPlayerRendererAllowed() {
-        return Config.getInstance().enableVillagerPlayerModel && !isRendererBlocked("all", "block_player");
+        return Config.CLIENT.enableVillagerPlayerModel.get() && !isRendererBlocked("all", "block_player");
     }
 
     public static boolean isVillagerRendererAllowed() {
-        return !Config.getInstance().forceVillagerPlayerModel && !isRendererBlocked("all", "block_villager");
+        return !Config.CLIENT.forceVillagerPlayerModel.get() && !isRendererBlocked("all", "block_villager");
     }
 
     public static boolean areShadersAllowed(String key) {
-        return Config.getInstance().enablePlayerShaders && !isRendererBlocked("shaders", key);
+        return Config.CLIENT.enablePlayerShaders.get() && !isRendererBlocked("shaders", key);
     }
 
     private static boolean isRendererBlocked(String category, String key) {
-        for (var entry : Config.getInstance().playerRendererBlacklist.entrySet()) {
+        for (var entry : Config.CLIENT.playerRendererBlacklist().entrySet()) {
             String value = entry.getValue();
             if ((value.equals(category) || value.equals(key)) && MCA.platformHelper.isModLoaded(entry.getKey())) {
                 return true;

@@ -37,21 +37,15 @@ class GuardEnemiesSensorPriorityOrderTest {
 
     @Test
     void reorderingUnchangedTagPrioritiesRefreshesCachedLookup() throws ReflectiveOperationException {
-        Map<String, Integer> previous = Config.getInstance().guardsTargetEntities;
-        Map<String, Integer> undeadFirst = new LinkedHashMap<>();
-        undeadFirst.put("#minecraft:undead", -1);
-        undeadFirst.put("#minecraft:skeletons", 7);
-        Map<String, Integer> skeletonsFirst = new LinkedHashMap<>();
-        skeletonsFirst.put("#minecraft:skeletons", 7);
-        skeletonsFirst.put("#minecraft:undead", -1);
+        List<? extends String> previous = List.copyOf(Config.SERVER.guardsTargetEntities.get());
 
         try {
-            Config.getInstance().guardsTargetEntities = undeadFirst;
+            Config.SERVER.guardsTargetEntities.set(List.of("#minecraft:undead=-1", "#minecraft:skeletons=7"));
             assertEquals(List.of("minecraft:undead", "minecraft:skeletons"), cachedTagOrder());
-            Config.getInstance().guardsTargetEntities = skeletonsFirst;
+            Config.SERVER.guardsTargetEntities.set(List.of("#minecraft:skeletons=7", "#minecraft:undead=-1"));
             assertEquals(List.of("minecraft:skeletons", "minecraft:undead"), cachedTagOrder());
         } finally {
-            Config.getInstance().guardsTargetEntities = previous;
+            Config.SERVER.guardsTargetEntities.set(previous);
         }
     }
 

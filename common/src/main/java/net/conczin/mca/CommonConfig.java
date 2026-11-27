@@ -1,133 +1,75 @@
 package net.conczin.mca;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import net.conczin.mca.config.ConfigSchema;
+import net.conczin.mca.config.ConfigValue;
 
-public class CommonConfig {
+public final class CommonConfig {
+    public final ConfigValue<Boolean> useSquidwardModels;
+    public final ConfigValue<String> _read_this_before_using_villager_ai;
+    public final ConfigValue<String> villagerChatAIEndpoint;
+    public final ConfigValue<String> villagerChatAIToken;
+    public final ConfigValue<String> villagerChatAISystemPrompt;
+    public final ConfigValue<Boolean> villagerChatAIFuseSystemPrompt;
+    public final ConfigValue<Boolean> villagerChatAIUseLongTermMemory;
+    public final ConfigValue<Boolean> villagerChatAIUseSharedLongTermMemory;
+    public final ConfigValue<Boolean> villagerChatAIIncludeSessionInformation;
+    public final ConfigValue<String> inworldAIToken;
 
-    /**
-     * If true, MCA villagers push each other while crowding. Disable to let MCA villagers
-     * overlap more freely in narrow spaces. Other entities are unaffected.
-     */
-    public boolean enableVillagerCollisions = true;
+    CommonConfig(ConfigSchema.Builder builder) {
+        builder.translation("mca.configuration.section.villager_behavior").push("villager_behavior");
+        useSquidwardModels = builder
 
-    /**
-     * If true, arrows fired by MCA archers pass through villagers instead of hitting them.
-     */
-    public boolean archerArrowsIgnoreVillagers = true;
+                .comment("If true, villagers use the vanilla \"Squidward\" (nose) model.")
+                .translation("mca.configuration.useSquidwardModels")
+                .gameRestart()
+                .define("useSquidwardModels", false);
+        builder.pop();
 
-    /**
-     * If true, MCA villagers may path through and open or close fence gates.
-     */
-    public boolean villagersInteractWithFenceGates = true;
+        builder.translation("mca.configuration.section.ai").push("ai");
+        _read_this_before_using_villager_ai = builder
 
-    /**
-     * If true, MCA villagers may open or close any DoorBlock. Otherwise,
-     * DoorBlocks must be in #minecraft:mob_interactable_doors.
-     * Dramatic Doors follows its own interaction rules.
-     */
-    public boolean villagersInteractWithAnyDoor = false;
+                .translation("mca.configuration._read_this_before_using_villager_ai")
+                .define("_read_this_before_using_villager_ai", "https://github.com/Luke100000/minecraft-comes-alive/wiki/GPT3-based-conversations");
+        villagerChatAIEndpoint = builder
 
-    /**
-     * If true, binding a villager to a work station of another profession changes
-     * its profession, resets its level and re-rolls its trades. If false, an
-     * existing profession is kept. Villagers without a profession still adopt one.
-     */
-    public boolean villagersChangeProfession = true;
+                .comment("Chat completion endpoint for villager AI chat requests.")
+                .translation("mca.configuration.villagerChatAIEndpoint")
+                .define("villagerChatAIEndpoint", "https://api.conczin.net/v1/mca/chat");
+        villagerChatAIToken = builder
 
-    /**
-     * If true, a villager called with the whistle also starts following the player.
-     */
-    public boolean whistleCallMakesVillagersFollow = false;
+                .comment("Optional API token.")
+                .translation("mca.configuration.villagerChatAIToken")
+                .define("villagerChatAIToken", "");
+        villagerChatAISystemPrompt = builder
 
-    /**
-     * Time (in ticks) until a baby grows up when held as an item.
-     */
-    public int babyItemGrowUpTime = 24000;
+                .comment("System prompt used to guide global villager AI behavior.")
+                .translation("mca.configuration.villagerChatAISystemPrompt")
+                .define("villagerChatAISystemPrompt", "");
+        villagerChatAIFuseSystemPrompt = builder
 
-    /**
-     * Maximum villager lifetime in ticks (Time to grow fully up).
-     */
-    public int villagerMaxAgeTime = 384000;
+                .comment("Prepends the system prompt to the user message for endpoints that ignore the system role.")
+                .translation("mca.configuration.villagerChatAIFuseSystemPrompt")
+                .define("villagerChatAIFuseSystemPrompt", false);
+        villagerChatAIUseLongTermMemory = builder
 
-    /**
-     * Permission level required to add or remove skins from the server wide pool.
-     * On singleplayer the world owner always has access.
-     * Set to 0 to allow everyone.
-     */
-    public int addContentGloballyPermissionLevel = 3;
+                .comment("If true, AI uses long-term memory for persistent conversations.")
+                .translation("mca.configuration.villagerChatAIUseLongTermMemory")
+                .define("villagerChatAIUseLongTermMemory", false);
+        villagerChatAIUseSharedLongTermMemory = builder
 
-    /**
-     * Allow players to modify their size.
-     */
-    public boolean allowPlayerSizeAdjustment = true;
+                .comment("If false, villager will have separate memories per player.")
+                .translation("mca.configuration.villagerChatAIUseSharedLongTermMemory")
+                .define("villagerChatAIUseSharedLongTermMemory", false);
+        villagerChatAIIncludeSessionInformation = builder
 
-    /**
-     * Scale player hitboxes using MCA size and width genetics.
-     */
-    public boolean scalePlayerHitboxWithSizeAndWidth = false;
+                .comment("If true, session-specific information is included in AI requests. Only relevant if writing a custom backend.")
+                .translation("mca.configuration.villagerChatAIIncludeSessionInformation")
+                .define("villagerChatAIIncludeSessionInformation", false);
+        inworldAIToken = builder
 
-    /**
-     * Whether body customization (e.g., height, size) is available in the Destiny editor.
-     */
-    public boolean allowBodyCustomizationInDestiny = true;
-
-    /**
-     * Whether trait customization is available in the Destiny editor.
-     */
-    public boolean allowTraitCustomizationInDestiny = true;
-
-    /**
-     * Locations where the Destiny feature can teleport the player.
-     * <a href="https://github.com/Luke100000/minecraft-comes-alive/wiki/Custom-Rumors-and-Destiny-Structures">Wiki</a>
-     */
-    public List<String> destinySpawnLocations = List.of(
-            "somewhere",
-            "minecraft:shipwreck_beached",
-            "minecraft:village_desert",
-            "minecraft:village_taiga",
-            "minecraft:village_snowy",
-            "minecraft:village_plains",
-            "minecraft:village_savanna",
-            "minecraft:ancient_city"
-    );
-
-    /**
-     * Automatically adds registered village structures to the Destiny screen.
-     * Disable this to use {@link #destinySpawnLocations} as the complete manual list.
-     */
-    public boolean autoDiscoverDestinyLocations = true;
-
-    /**
-     * Removes matching locations from the Destiny screen after manual and automatic locations are combined.
-     * Supports simple '*' wildcards, including whole namespaces such as "ctov:*".
-     */
-    public List<String> destinySpawnLocationBlacklist = List.of();
-
-    /**
-     * Restricts dimension-bound Destiny destinations to the Overworld.
-     * Dimensionless choices such as "somewhere" remain available.
-     */
-    public boolean destinyOverworldOnly = false;
-
-    /**
-     * Removes Destiny destinations from matching dimensions after Minecraft determines where they can generate.
-     * Supports simple '*' wildcards, including whole namespaces such as "some_mod:*".
-     */
-    public List<String> destinyDimensionBlacklist = List.of();
-
-    /**
-     * Maps Destiny locations to translation keys for UI text.
-     */
-    public Map<String, String> destinyLocationsToTranslationMap = Map.of(
-            "default", "destiny.story.travelling",
-            "minecraft:shipwreck_beached", "destiny.story.sailing"
-    );
-
-    /**
-     * Map of enabled traits. Keys are trait IDs, values are true/false.
-     */
-    public Map<String, Boolean> enabledTraits = new HashMap<>();
-
+                .comment("Inworld API token.")
+                .translation("mca.configuration.inworldAIToken")
+                .define("inworldAIToken", "");
+        builder.pop();
+    }
 }

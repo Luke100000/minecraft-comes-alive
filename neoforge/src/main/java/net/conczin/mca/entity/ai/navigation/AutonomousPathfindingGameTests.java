@@ -109,10 +109,10 @@ public final class AutonomousPathfindingGameTests {
                 }
             }
         }
-        originalPathDistance = Config.getInstance().villagerPathfindingDistance;
-        originalTeleportConfig = Config.getInstance().allowVillagerTeleporting;
-        Config.getInstance().villagerPathfindingDistance = 160;
-        Config.getInstance().allowVillagerTeleporting = false;
+        originalPathDistance = Config.SERVER.villagerPathfindingDistance.get();
+        originalTeleportConfig = Config.SERVER.allowVillagerTeleporting.get();
+        Config.SERVER.villagerPathfindingDistance.set(160);
+        Config.SERVER.allowVillagerTeleporting.set(false);
         VillagerEntityMCA villager = spawnAutonomousVillager(helper, start, target, 0.5F, false);
         villager.getAttribute(Attributes.MOVEMENT_SPEED).setBaseValue(0.5D);
         // Match the work-count fixture's settled start, without directly starting a path.
@@ -171,10 +171,10 @@ public final class AutonomousPathfindingGameTests {
         level.setBlock(bedHead, bedState.setValue(BlockStateProperties.BED_PART,
                 net.minecraft.world.level.block.state.properties.BedPart.HEAD), 3);
 
-        originalPathDistance = Config.getInstance().villagerPathfindingDistance;
-        originalTeleportConfig = Config.getInstance().allowVillagerTeleporting;
-        Config.getInstance().villagerPathfindingDistance = 160;
-        Config.getInstance().allowVillagerTeleporting = false;
+        originalPathDistance = Config.SERVER.villagerPathfindingDistance.get();
+        originalTeleportConfig = Config.SERVER.allowVillagerTeleporting.get();
+        Config.SERVER.villagerPathfindingDistance.set(160);
+        Config.SERVER.allowVillagerTeleporting.set(false);
         VillagerEntityMCA villager = spawnAutonomousVillager(helper, start, bedHead, 0.5F, false, true);
         villager.getAttribute(Attributes.MOVEMENT_SPEED).setBaseValue(0.5D);
         BedApproachTarget approach = BedApproachTarget.create(level, bedHead).orElseThrow();
@@ -263,8 +263,8 @@ public final class AutonomousPathfindingGameTests {
                 .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.EAST)
                 .setValue(BlockStateProperties.BED_PART, net.minecraft.world.level.block.state.properties.BedPart.FOOT), 3);
 
-        originalTeleportConfig = Config.getInstance().allowVillagerTeleporting;
-        Config.getInstance().allowVillagerTeleporting = false;
+        originalTeleportConfig = Config.SERVER.allowVillagerTeleporting.get();
+        Config.SERVER.allowVillagerTeleporting.set(false);
         if (night) {
             originalShelfDayTime = level.getDayTime();
             originalShelfDaylightCycle = level.getGameRules().getBoolean(net.minecraft.world.level.GameRules.RULE_DAYLIGHT);
@@ -449,8 +449,8 @@ public final class AutonomousPathfindingGameTests {
         BlockPos gate = start.east(5);
         rememberArea(helper.getLevel(), start.east(5), 12);
         prepareFlatArea(helper, start.east(5), 12, 3);
-        originalGateConfig = Config.getInstance().villagersInteractWithFenceGates;
-        Config.getInstance().villagersInteractWithFenceGates = true;
+        originalGateConfig = Config.SERVER.villagersInteractWithFenceGates.get();
+        Config.SERVER.villagersInteractWithFenceGates.set(true);
 
         for (int z = -3; z <= 3; z++) {
             for (int y = 0; y < 3; y++) {
@@ -606,8 +606,8 @@ public final class AutonomousPathfindingGameTests {
                         && level.getBlockState(target).isAir(),
                 "hatch fixture must have an open, supported lower escape route");
 
-        originalTeleportConfig = Config.getInstance().allowVillagerTeleporting;
-        Config.getInstance().allowVillagerTeleporting = false;
+        originalTeleportConfig = Config.SERVER.allowVillagerTeleporting.get();
+        Config.SERVER.allowVillagerTeleporting.set(false);
         VillagerEntityMCA villager = spawnAutonomousVillager(helper, start, target, 0.7F, true);
         long started = level.getGameTime();
         boolean[] openedHatch = {false};
@@ -666,8 +666,8 @@ public final class AutonomousPathfindingGameTests {
                 .setValue(TrapDoorBlock.FACING, Direction.EAST)
                 .setValue(TrapDoorBlock.OPEN, true), 3);
 
-        originalTeleportConfig = Config.getInstance().allowVillagerTeleporting;
-        Config.getInstance().allowVillagerTeleporting = false;
+        originalTeleportConfig = Config.SERVER.allowVillagerTeleporting.get();
+        Config.SERVER.allowVillagerTeleporting.set(false);
         VillagerEntityMCA villager = spawnAutonomousVillager(helper, start, target, 0.7F, true);
         long started = level.getGameTime();
         boolean[] closedDoorway = {false};
@@ -1006,8 +1006,8 @@ public final class AutonomousPathfindingGameTests {
         BlockPos target = start.east(100);
         rememberPath(helper.getLevel(), start, target);
         prepareFlatPath(helper, start, target);
-        originalPathDistance = Config.getInstance().villagerPathfindingDistance;
-        Config.getInstance().villagerPathfindingDistance = 48;
+        originalPathDistance = Config.SERVER.villagerPathfindingDistance.get();
+        Config.SERVER.villagerPathfindingDistance.set(48);
         VillagerEntityMCA villager = spawnAutonomousVillager(helper, start, target, 1.0F, false);
         villager.getAttribute(Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
 
@@ -1063,8 +1063,8 @@ public final class AutonomousPathfindingGameTests {
             }
         }
 
-        originalPathDistance = Config.getInstance().villagerPathfindingDistance;
-        Config.getInstance().villagerPathfindingDistance = 48;
+        originalPathDistance = Config.SERVER.villagerPathfindingDistance.get();
+        Config.SERVER.villagerPathfindingDistance.set(48);
         VillagerEntityMCA villager = spawnAutonomousVillager(helper, start, target, 0.9F, false);
         var followRange = villager.getAttribute(Attributes.FOLLOW_RANGE);
         followRange.removeModifier(ResourceLocation.withDefaultNamespace("random_spawn_bonus"));
@@ -1118,10 +1118,10 @@ public final class AutonomousPathfindingGameTests {
                 level.setBlock(start.offset(1, y, z), Blocks.STONE.defaultBlockState(), 3);
             }
         }
-        originalPathDistance = Config.getInstance().villagerPathfindingDistance;
-        originalTeleportConfig = Config.getInstance().allowVillagerTeleporting;
-        Config.getInstance().villagerPathfindingDistance = 32;
-        Config.getInstance().allowVillagerTeleporting = false;
+        originalPathDistance = Config.SERVER.villagerPathfindingDistance.get();
+        originalTeleportConfig = Config.SERVER.allowVillagerTeleporting.get();
+        Config.SERVER.villagerPathfindingDistance.set(32);
+        Config.SERVER.allowVillagerTeleporting.set(false);
         VillagerEntityMCA villager = spawnAutonomousVillager(helper, start, target, 0.8F, false);
         var followRange = villager.getAttribute(Attributes.FOLLOW_RANGE);
         followRange.removeModifier(ResourceLocation.withDefaultNamespace("random_spawn_bonus"));
@@ -1333,15 +1333,15 @@ public final class AutonomousPathfindingGameTests {
     }
 
     private static void enableFenceGateMovementWithoutTeleporting() {
-        Config config = Config.getInstance();
+        var config = Config.SERVER;
         if (originalGateConfig == null) {
-            originalGateConfig = config.villagersInteractWithFenceGates;
+            originalGateConfig = config.villagersInteractWithFenceGates.get();
         }
         if (originalTeleportConfig == null) {
-            originalTeleportConfig = config.allowVillagerTeleporting;
+            originalTeleportConfig = config.allowVillagerTeleporting.get();
         }
-        config.villagersInteractWithFenceGates = true;
-        config.allowVillagerTeleporting = false;
+        config.villagersInteractWithFenceGates.set(true);
+        config.allowVillagerTeleporting.set(false);
     }
 
     private static void cleanup(ServerLevel level) {
@@ -1366,15 +1366,15 @@ public final class AutonomousPathfindingGameTests {
         FORCED_CHUNKS.forEach(chunk -> level.setChunkForced(chunk.x, chunk.z, false));
         FORCED_CHUNKS.clear();
         if (originalGateConfig != null) {
-            Config.getInstance().villagersInteractWithFenceGates = originalGateConfig;
+            Config.SERVER.villagersInteractWithFenceGates.set(originalGateConfig);
             originalGateConfig = null;
         }
         if (originalPathDistance != null) {
-            Config.getInstance().villagerPathfindingDistance = originalPathDistance;
+            Config.SERVER.villagerPathfindingDistance.set(originalPathDistance);
             originalPathDistance = null;
         }
         if (originalTeleportConfig != null) {
-            Config.getInstance().allowVillagerTeleporting = originalTeleportConfig;
+            Config.SERVER.allowVillagerTeleporting.set(originalTeleportConfig);
             originalTeleportConfig = null;
         }
     }

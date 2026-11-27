@@ -14,7 +14,7 @@ public class EngagementRingItem extends RelationshipItem {
 
     @Override
     protected int getHeartsRequired() {
-        return Config.getInstance().engagementHeartsRequirement;
+        return Config.SERVER.engagementHeartsRequirement.get();
     }
 
     @Override

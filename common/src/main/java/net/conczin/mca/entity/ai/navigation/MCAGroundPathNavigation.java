@@ -243,7 +243,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
     @Nullable
     public Path createPathForPersistentIntent(Set<BlockPos> targets, int reachRange) {
         float pathLength = Math.max(
-                (float)Config.getInstance().getVillagerPathfindingDistance(),
+                (float)Config.SERVER.villagerPathfindingDistance.get(),
                 getOrdinaryPathLength(this.mob)
         );
         return probe(targets, 8, false, reachRange, pathLength);
@@ -367,7 +367,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
             // stale failed-search backoff at its original position.
             boolean suppressExtended = skipRepeatedFailedExtendedSearch(target);
             float extendedPathLength = Math.max(
-                    (float)Config.getInstance().getVillagerPathfindingDistance(),
+                    (float)Config.SERVER.villagerPathfindingDistance(),
                     ordinaryPathLength
             );
             if (!suppressExtended && this.failedExtendedSearch != null
@@ -451,7 +451,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         if (failure == null) {
             return false;
         }
-        float extendedPathLength = Math.max((float)Config.getInstance().getVillagerPathfindingDistance(),
+        float extendedPathLength = Math.max((float)Config.SERVER.villagerPathfindingDistance.get(),
                 getOrdinaryPathLength(this.mob));
         if (!failure.target.equals(target) || !hasFailureEvidenceFor(target)
                 || failure.pathLength != extendedPathLength
@@ -1280,7 +1280,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         double flankZ = this.detour.step.getZ() * 0.5D;
         double stepDistance = Math.sqrt(flankX * flankX + flankZ * flankZ);
         double maxDetourDistance = Math.max(
-                Config.getInstance().getVillagerPathfindingDistance(),
+                Config.SERVER.villagerPathfindingDistance(),
                 getOrdinaryPathLength(this.mob)
         );
         if (stepDistance < 1.0D || this.detour.distance + stepDistance > maxDetourDistance) {

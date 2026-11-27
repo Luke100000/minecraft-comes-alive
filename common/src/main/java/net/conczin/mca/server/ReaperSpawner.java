@@ -63,7 +63,7 @@ public class ReaperSpawner {
     }
 
     public void trySpawnReaper(ServerLevel world, BlockPos pos) {
-        if (!Config.getInstance().allowGrimReaper) {
+        if (!Config.SERVER.allowGrimReaper.get()) {
             return;
         }
 
@@ -134,7 +134,7 @@ public class ReaperSpawner {
     private Set<BlockPos> getTotemsFires(Level world, BlockPos pos) {
         int groundY = pos.getY() - 1;
         int leftSkyHeight = world.getMaxBuildHeight() - groundY;
-        int minPillarHeight = Math.min(Config.getInstance().minPillarHeight, leftSkyHeight);
+        int minPillarHeight = Math.min(Config.SERVER.minPillarHeight.get(), leftSkyHeight);
         BlockPos.MutableBlockPos target = new BlockPos.MutableBlockPos();
         return Stream.of(HORIZONTALS).map(d -> target.set(pos).setY(groundY).move(d, 3)).filter(pillarPos -> {
             for (int height = 1; height <= leftSkyHeight; height++) {

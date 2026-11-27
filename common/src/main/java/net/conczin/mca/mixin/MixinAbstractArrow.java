@@ -18,7 +18,7 @@ import org.spongepowered.asm.mixin.injection.At;
 abstract class MixinAbstractArrow {
     @ModifyReturnValue(method = "canHitEntity", at = @At("RETURN"))
     private boolean mca$ignoreVillagersForArcherArrows(boolean original, Entity target) {
-        return original && !(Config.getServerConfig().archerArrowsIgnoreVillagers
+        return original && !(Config.SERVER.archerArrowsIgnoreVillagers.get()
                 && VillagerEntityMCA.isVillageFriendly(target)
                 && mca$getMcaArcherOwner() != null);
     }

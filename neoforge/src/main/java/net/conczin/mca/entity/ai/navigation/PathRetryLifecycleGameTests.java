@@ -154,8 +154,8 @@ public final class PathRetryLifecycleGameTests {
         for (int y = 0; y < 3; y++) {
             helper.getLevel().setBlock(target.east().above(y), Blocks.AIR.defaultBlockState(), 3);
         }
-        originalPathfindingDistance = Config.getInstance().villagerPathfindingDistance;
-        Config.getInstance().villagerPathfindingDistance = 32;
+        originalPathfindingDistance = Config.SERVER.villagerPathfindingDistance.get();
+        Config.SERVER.villagerPathfindingDistance.set(32);
         VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
                 .withAge(0).withPosition(Vec3.atBottomCenterOf(start)).spawn(MobSpawnType.STRUCTURE);
         ACTIVE_VILLAGERS.add(villager);
@@ -296,9 +296,9 @@ public final class PathRetryLifecycleGameTests {
                 .withAge(0)
                 .withPosition(Vec3.atBottomCenterOf(start))
                 .spawn(MobSpawnType.STRUCTURE);
-        int originalPathfindingDistance = Config.getInstance().villagerPathfindingDistance;
+        int originalPathfindingDistance = Config.SERVER.villagerPathfindingDistance.get();
         try {
-            Config.getInstance().villagerPathfindingDistance = 48;
+            Config.SERVER.villagerPathfindingDistance.set(48);
             villager.refreshBrain(helper.getLevel());
             villager.getBrain().removeAllBehaviors();
             villager.setNoAi(true);
@@ -325,7 +325,7 @@ public final class PathRetryLifecycleGameTests {
                     (vanillaSink ? "PLAY" : "CORE")
                             + " sink reset an existing failure episode without physical progress");
         } finally {
-            Config.getInstance().villagerPathfindingDistance = originalPathfindingDistance;
+            Config.SERVER.villagerPathfindingDistance.set(originalPathfindingDistance);
             villager.discard();
         }
         helper.succeed();
@@ -469,8 +469,8 @@ public final class PathRetryLifecycleGameTests {
         helper.assertTrue(PathRequestDiagnostics.enabled(), "path diagnostics must be enabled in GameTests");
         // The test server may override the default 160-block distance in
         // config/mca.json. Give this known 47-block-wall detour its tested budget.
-        originalPathfindingDistance = Config.getInstance().villagerPathfindingDistance;
-        Config.getInstance().villagerPathfindingDistance = 160;
+        originalPathfindingDistance = Config.SERVER.villagerPathfindingDistance.get();
+        Config.SERVER.villagerPathfindingDistance.set(160);
 
         // The fixture exceeds the GameTest template, so keep it well clear of
         // the adjacent templates and restore every changed block after the batch.
@@ -664,7 +664,7 @@ public final class PathRetryLifecycleGameTests {
         FORCED_CHUNKS.forEach(chunk -> level.setChunkForced(chunk.x, chunk.z, false));
         FORCED_CHUNKS.clear();
         if (originalPathfindingDistance != null) {
-            Config.getInstance().villagerPathfindingDistance = originalPathfindingDistance;
+            Config.SERVER.villagerPathfindingDistance.set(originalPathfindingDistance);
             originalPathfindingDistance = null;
         }
     }
@@ -1376,8 +1376,8 @@ public final class PathRetryLifecycleGameTests {
     }
 
     private static VillagerEntityMCA invalidationFixture(GameTestHelper helper, BlockPos start, BlockPos destination) {
-        originalPathfindingDistance = Config.getInstance().villagerPathfindingDistance;
-        Config.getInstance().villagerPathfindingDistance = 160;
+        originalPathfindingDistance = Config.SERVER.villagerPathfindingDistance.get();
+        Config.SERVER.villagerPathfindingDistance.set(160);
         rememberOriginalTerrain(helper.getLevel(), start, 30);
         var ownedChunks = new java.util.ArrayList<ChunkPos>();
         try {

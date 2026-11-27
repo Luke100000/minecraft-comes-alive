@@ -38,12 +38,12 @@ public class PlayImmersiveMelodyTask extends Behavior<VillagerEntityMCA> {
         if (!canPerform(villager)
             || level.getGameTime() < nextAttemptTime
             || level.getGameTime() < villager.getNextMelodyPerformanceTime()
-            || Config.getInstance().immersiveMelodiesChance <= 0.0f) {
+            || Config.SERVER.immersiveMelodiesChance.get().floatValue() <= 0.0f) {
             return false;
         }
         // Failed rolls consume the attempt too: RunOne can retry on the next brain tick.
         nextAttemptTime = level.getGameTime() + RETRY_COOLDOWN;
-        if (villager.getRandom().nextFloat() >= Config.getInstance().immersiveMelodiesChance) {
+        if (villager.getRandom().nextFloat() >= Config.SERVER.immersiveMelodiesChance.get().floatValue()) {
             return false;
         }
         selectedPlayback = closestMelody(level, villager)
@@ -122,7 +122,7 @@ public class PlayImmersiveMelodyTask extends Behavior<VillagerEntityMCA> {
     }
 
     private static boolean isAllowedMelody(ResourceLocation id) {
-        String namespace = Config.getInstance().immersiveMelodiesNamespace;
+        String namespace = Config.SERVER.immersiveMelodiesNamespace.get();
         return "*".equals(namespace) || id.getNamespace().equals(namespace);
     }
 

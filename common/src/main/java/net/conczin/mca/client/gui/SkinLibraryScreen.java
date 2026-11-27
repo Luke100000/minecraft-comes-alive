@@ -1040,7 +1040,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         addRenderableWidget(new ToggleableTooltipIconButtonWidget(width / 2 + 172, height / 2 + 82, 11 * 16, 16,
                 true,
                 Component.translatable("gui.skin_library.website"),
-                v -> openUri(Config.getInstance().immersiveLibraryUrl + "/mca")));
+                v -> openUri(Config.CLIENT.immersiveLibraryUrl.get() + "/mca")));
 
         //search, or the asset whose similar assets are listed
         if (similarTo != null) {
@@ -1849,7 +1849,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
             return true;
         }
         return minecraft.player != null
-               && minecraft.player.hasPermissions(Config.getServerConfig().addContentGloballyPermissionLevel);
+               && minecraft.player.hasPermissions(Config.SERVER.addContentGloballyPermissionLevel.get());
     }
 
     private void setSelectionPage(int p) {

@@ -62,7 +62,7 @@ public class Residency {
         PoiManager poiManager = level.getPoiManager();
         VillagerProfession currentProfession = entity.getVillagerData().getProfession();
         boolean keepsProfession = currentProfession != VillagerProfession.NONE
-                && !Config.getServerConfig().villagersChangeProfession;
+                && !Config.SERVER.villagersChangeProfession.get();
         Predicate<Holder<PoiType>> jobSiteFilter = keepsProfession
                 ? currentProfession.heldJobSite()
                 : VillagerProfession.ALL_ACQUIRABLE_JOBS;
@@ -246,7 +246,7 @@ public class Residency {
         if (entity.requiresHome() && (entity.tickCount == 1 || entity.tickCount % 600 == 0)) {
             Optional<Village> village = getHomeVillage();
             if (entity.tickCount % 600 == 0
-                    && (village.isEmpty() && Config.getInstance().enableAutoScanByDefault
+                    && (village.isEmpty() && Config.SERVER.enableAutoScanByDefault.get()
                     || village.filter(Village::isAutoScan).isPresent())) {
                 reportBuildings();
             }

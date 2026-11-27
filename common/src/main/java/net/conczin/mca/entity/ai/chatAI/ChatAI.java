@@ -2,7 +2,9 @@ package net.conczin.mca.entity.ai.chatAI;
 
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.server.world.data.ChatAIResourceData;
 import net.conczin.mca.util.WorldUtils;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.text.Normalizer;
@@ -32,6 +34,7 @@ public class ChatAI {
      * Map of villager UUIDs to strategies (i.e. managed by InworldAI or GPT3)
      */
     private static final Map<UUID, ChatAIStrategy> strategies = new HashMap<>();
+    private static final Map<UUID, String> strategyResourceNames = new HashMap<>();
 
     /**
      * Current conversation of player. <p>
@@ -50,7 +53,7 @@ public class ChatAI {
      */
     public static CompletableFuture<Optional<String>> answerAsync(ServerPlayer player, VillagerEntityMCA villager, String msg) {
         // Get villager-specific strategy
-        ChatAIStrategy strategy = computeStrategyIfAbsent(villager.getUUID());
+        ChatAIStrategy strategy = computeStrategyIfAbsent(player.serverLevel(), villager.getUUID());
 
         // Get answer
         return strategy.answerAsync(player, villager, msg);
@@ -69,11 +72,15 @@ public class ChatAI {
      * @param villagerID UUID of villager
      * @return Object implementing the ChatAIStrategy interface
      */
-    private static ChatAIStrategy computeStrategyIfAbsent(UUID villagerID) {
-        return strategies.computeIfAbsent(villagerID, v -> {
-            String inworldResourceName = Config.getInstance().inworldAIResourceNames.getOrDefault(v, "");
-            return inworldResourceName.isEmpty() ? new OpenAIChatAI() : new InworldAI(inworldResourceName);
-        });
+    private static ChatAIStrategy computeStrategyIfAbsent(ServerLevel level, UUID villagerID) {
+        String inworldResourceName = ChatAIResourceData.get(level).getResourceName(villagerID);
+        if (!strategyResourceNames.containsKey(villagerID)
+                || !Objects.equals(strategyResourceNames.get(villagerID), inworldResourceName)) {
+            strategies.remove(villagerID);
+            strategyResourceNames.put(villagerID, inworldResourceName);
+        }
+        return strategies.computeIfAbsent(villagerID,
+                ignored -> inworldResourceName.isEmpty() ? new OpenAIChatAI() : new InworldAI(inworldResourceName));
     }
 
     /**
@@ -83,6 +90,7 @@ public class ChatAI {
      */
     public static void clearStrategy(UUID villagerID) {
         strategies.remove(villagerID);
+        strategyResourceNames.remove(villagerID);
     }
 
     private static String getName(VillagerEntityMCA villager) {

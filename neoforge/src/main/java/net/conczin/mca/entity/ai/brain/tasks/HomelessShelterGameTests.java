@@ -166,8 +166,8 @@ public final class HomelessShelterGameTests {
     }
 
     private static void prepareRestNight(ServerLevel level) {
-        previousTeleport = Config.getInstance().allowVillagerTeleporting;
-        Config.getInstance().allowVillagerTeleporting = false;
+        previousTeleport = Config.SERVER.allowVillagerTeleporting.get();
+        Config.SERVER.allowVillagerTeleporting.set(false);
         previousDayTime = level.getDayTime();
         previousDaylightCycle = level.getGameRules().getBoolean(GameRules.RULE_DAYLIGHT);
         level.getGameRules().getRule(GameRules.RULE_DAYLIGHT).set(false, level.getServer());
@@ -667,8 +667,8 @@ public final class HomelessShelterGameTests {
         BlockPos foot = helper.absolutePos(new BlockPos(848, 2, 80));
         BlockPos head = foot.east();
         prepareStrollRoom(helper, foot);
-        previousTeleport = Config.getInstance().allowVillagerTeleporting;
-        Config.getInstance().allowVillagerTeleporting = false;
+        previousTeleport = Config.SERVER.allowVillagerTeleporting.get();
+        Config.SERVER.allowVillagerTeleporting.set(false);
         List<VillagerEntityMCA> walkers = new ArrayList<>();
         Map<VillagerEntityMCA, Set<BlockPos>> visited = new LinkedHashMap<>();
         Map<VillagerEntityMCA, WalkTarget> pending = new LinkedHashMap<>();
@@ -1033,7 +1033,7 @@ public final class HomelessShelterGameTests {
         STROLL_CHUNKS.forEach(chunk -> level.setChunkForced(chunk.x, chunk.z, false));
         STROLL_CHUNKS.clear();
         if (previousTeleport != null) {
-            Config.getInstance().allowVillagerTeleporting = previousTeleport;
+            Config.SERVER.allowVillagerTeleporting.set(previousTeleport);
             previousTeleport = null;
         }
         if (previousDayTime != null) {

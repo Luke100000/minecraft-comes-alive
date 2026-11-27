@@ -327,7 +327,7 @@ public final class StairDoorNavigationGameTests {
     @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena")
     public static void raisedSnowStartDoesNotPlanThroughIronDoor(GameTestHelper helper) {
         BlockPos snow = prepareSnowDoorCorridor(helper);
-        helper.assertTrue(!Config.getServerConfig().villagersInteractWithAnyDoor,
+        helper.assertTrue(!Config.SERVER.villagersInteractWithAnyDoor.get(),
                 "iron-door negative requires the normal interaction policy");
         var door = Blocks.IRON_DOOR.defaultBlockState().setValue(DoorBlock.FACING, Direction.EAST);
         helper.getLevel().setBlock(snow.east(), door, 3);
