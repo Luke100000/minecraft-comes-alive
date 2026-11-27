@@ -17,6 +17,8 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -24,11 +26,23 @@ import java.util.UUID;
 
 public final class DynamicSkinCache {
     private static final ResourceLocation STEVE = ResourceLocation.parse("textures/entity/steve.png");
-    private static final String IMMERSIVE_LIBRARY_PREFIX = "immersive_library:";
     private static final ResourceLocation EMPTY_LIBRARY_TEXTURE = MCA.locate("skins/empty.png");
 
     private static final Set<SkinKey> INCOMPLETE_CACHE = new HashSet<>();
     private static final Set<SkinKey> INCOMPLETE_FACE_CACHE = new HashSet<>();
+    private static final Map<ResourceLocation, Object> SLIM_TEXTURE_PENDING = new HashMap<>();
+    private static final Set<ResourceLocation> SLIM_TEXTURE_FAILED =
+            Collections.newSetFromMap(new MaxSizeHashMap<ResourceLocation, Boolean>(128));
+    private static final Map<ResourceLocation, ResourceLocation> SLIM_TEXTURE_CACHE = new MaxSizeHashMap<>(128) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<ResourceLocation, ResourceLocation> eldest) {
+            boolean remove = super.removeEldestEntry(eldest);
+            if (remove) {
+                releaseDynamicTexture(eldest.getValue());
+            }
+            return remove;
+        }
+    };
     private static final Map<SkinKey, ResourceLocation> CACHE = new MaxSizeHashMap<>(128) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<SkinKey, ResourceLocation> eldest) {
@@ -58,23 +72,42 @@ public final class DynamicSkinCache {
     public static void clear() {
         CACHE.values().forEach(DynamicSkinCache::releaseDynamicTexture);
         FACE_CACHE.values().forEach(DynamicSkinCache::releaseDynamicTexture);
+        SLIM_TEXTURE_CACHE.values().forEach(DynamicSkinCache::releaseDynamicTexture);
         CACHE.clear();
         FACE_CACHE.clear();
+        SLIM_TEXTURE_CACHE.clear();
+        SLIM_TEXTURE_PENDING.clear();
+        SLIM_TEXTURE_FAILED.clear();
         INCOMPLETE_CACHE.clear();
         INCOMPLETE_FACE_CACHE.clear();
     }
 
-    /** Evict stitched skins and face icons when a library texture changes under the same ID. */
+    /**
+     * Evicts derived textures whose source was replaced in-place (for example an
+     * Immersive Library asset receiving a new version under the same identifier).
+     */
     public static void invalidateSourceTexture(ResourceLocation source) {
         if (source == null) {
             return;
         }
-        invalidateDerivedSkins(CACHE, INCOMPLETE_CACHE, source.toString());
-        invalidateDerivedSkins(FACE_CACHE, INCOMPLETE_FACE_CACHE, source.toString());
+
+        ResourceLocation slim = SLIM_TEXTURE_CACHE.remove(source);
+        SLIM_TEXTURE_PENDING.remove(source);
+        SLIM_TEXTURE_FAILED.remove(source);
+        if (slim != null) {
+            releaseDynamicTexture(slim);
+        }
+
+        String sourceId = source.toString();
+        invalidateDerivedSkins(CACHE, INCOMPLETE_CACHE, sourceId);
+        invalidateDerivedSkins(FACE_CACHE, INCOMPLETE_FACE_CACHE, sourceId);
     }
 
-    private static void invalidateDerivedSkins(Map<SkinKey, ResourceLocation> cache,
-                                                Set<SkinKey> incomplete, String sourceId) {
+    private static void invalidateDerivedSkins(
+            Map<SkinKey, ResourceLocation> cache,
+            Set<SkinKey> incomplete,
+            String sourceId
+    ) {
         cache.entrySet().removeIf(entry -> {
             if (!entry.getKey().references(sourceId)) {
                 return false;
@@ -83,6 +116,66 @@ public final class DynamicSkinCache {
             incomplete.remove(entry.getKey());
             return true;
         });
+    }
+
+    public static ResourceLocation getOrCreateSlimTexture(ResourceLocation source) {
+        if (source == null) {
+            return null;
+        }
+        ResourceLocation cached = SLIM_TEXTURE_CACHE.get(source);
+        if (cached != null) {
+            return cached;
+        }
+        if (SLIM_TEXTURE_FAILED.contains(source) || SLIM_TEXTURE_PENDING.containsKey(source)) {
+            return source;
+        }
+        Minecraft client = Minecraft.getInstance();
+        if (client == null || !client.isSameThread()) {
+            return source;
+        }
+
+        Object request = new Object();
+        SLIM_TEXTURE_PENDING.put(source, request);
+        try {
+            SkinCache.loadSlimTextureAsync(source, image -> finishSlimTexture(source, request, image));
+        } catch (RuntimeException e) {
+            SLIM_TEXTURE_PENDING.remove(source, request);
+            MCA.LOGGER.error("Failed to schedule slim MCA texture {}", source, e);
+        }
+        return source;
+    }
+
+    private static void finishSlimTexture(ResourceLocation source, Object request, NativeImage image) {
+        DynamicTexture texture = null;
+        boolean registered = false;
+        try {
+            if (SLIM_TEXTURE_PENDING.get(source) != request) {
+                return;
+            }
+            if (image == null) {
+                SLIM_TEXTURE_FAILED.add(source);
+                return;
+            }
+            ResourceLocation id = MCA.locate("dynamic/slim/" + UUID.nameUUIDFromBytes(
+                    source.toString().getBytes(StandardCharsets.UTF_8)));
+            texture = new DynamicTexture(image);
+            Minecraft.getInstance().getTextureManager().register(id, texture);
+            registered = true;
+            SLIM_TEXTURE_CACHE.put(source, id);
+        } catch (Exception exception) {
+            MCA.LOGGER.error("Failed to generate slim MCA texture {}", source, exception);
+        } finally {
+            SLIM_TEXTURE_PENDING.remove(source, request);
+            if (!registered) {
+                if (texture == null) {
+                    if (image != null) {
+                        image.close();
+                    }
+                } else {
+                    texture.close();
+                }
+            }
+        }
     }
 
     public static ResourceLocation getOrCreateStitchedSkin(Entity entity) {
@@ -232,22 +325,11 @@ public final class DynamicSkinCache {
     }
 
     private static boolean isMissingImmersiveLibraryAsset(String identifier) {
-        Integer contentId = contentId(identifier);
+        Integer contentId = SkinCache.getContentId(identifier);
         if (contentId == null) {
             return false;
         }
         return EMPTY_LIBRARY_TEXTURE.equals(SkinCache.getTextureIdentifier(contentId));
-    }
-
-    private static Integer contentId(String identifier) {
-        if (MCA.isBlankString(identifier) || !identifier.startsWith(IMMERSIVE_LIBRARY_PREFIX)) {
-            return null;
-        }
-        try {
-            return Integer.parseInt(identifier.substring(IMMERSIVE_LIBRARY_PREFIX.length()));
-        } catch (NumberFormatException exception) {
-            return null;
-        }
     }
 
     private record SkinKey(

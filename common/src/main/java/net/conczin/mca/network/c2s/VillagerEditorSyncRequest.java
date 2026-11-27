@@ -52,6 +52,7 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
             "Clothes",
             "ClothingLocked",
             "Skin",
+            "Slim",
             "Hair",
             "HairStyle",
             "HairBase",

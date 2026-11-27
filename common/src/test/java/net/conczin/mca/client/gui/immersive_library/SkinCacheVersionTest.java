@@ -2,11 +2,13 @@ package net.conczin.mca.client.gui.immersive_library;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import net.conczin.mca.client.gui.SkinLibraryScreen;
+import net.conczin.mca.client.render.DynamicSkinCache;
 import net.conczin.mca.client.gui.immersive_library.responses.ContentListResponse;
 import net.conczin.mca.client.gui.immersive_library.responses.Response;
 import net.conczin.mca.client.gui.immersive_library.types.Content;
 import net.conczin.mca.client.gui.immersive_library.types.LiteContent;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.client.renderer.texture.TextureManager;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.thread.BlockableEventLoop;
@@ -40,6 +42,81 @@ import java.util.concurrent.TimeUnit;
 import static org.junit.jupiter.api.Assertions.*;
 
 class SkinCacheVersionTest {
+    @Test
+    void slimConversionRegistersOnlyAfterClientThreadCompletion() throws Exception {
+        int id = uniqueTestId();
+        ResourceLocation source = ResourceLocation.fromNamespaceAndPath("immersive_library", Integer.toString(id));
+        Path png = SkinCache.CACHE_DIR.resolve(id + ".png");
+        Minecraft formerMinecraft = (Minecraft) field(Minecraft.class, "instance").get(null);
+        Queue<Runnable> clientTasks = new ConcurrentLinkedQueue<>();
+        TextureManager textureManager = new TextureManager(null);
+        try {
+            SkinCache.writeAtomic(png, createSolidPng(0xFF123456));
+            Minecraft minecraft = allocate(Minecraft.class);
+            field(Minecraft.class, "gameThread").set(minecraft, Thread.currentThread());
+            field(BlockableEventLoop.class, "pendingRunnables").set(minecraft, clientTasks);
+            field(Minecraft.class, "textureManager").set(minecraft, textureManager);
+            field(Minecraft.class, "instance").set(null, minecraft);
+
+            assertEquals(source, DynamicSkinCache.getOrCreateSlimTexture(source),
+                    "The render path must continue before PNG decoding completes");
+            awaitClientTasks(clientTasks);
+            assertEquals(source, DynamicSkinCache.getOrCreateSlimTexture(source),
+                    "A pending conversion must continue using the source texture");
+
+            drain(clientTasks);
+            ResourceLocation slim = DynamicSkinCache.getOrCreateSlimTexture(source);
+            assertNotEquals(source, slim, "The converted texture should be cached after registration");
+            assertInstanceOf(DynamicTexture.class, textureManager.getTexture(slim, null));
+            DynamicTexture registered = (DynamicTexture) textureManager.getTexture(slim, null);
+            assertEquals(0xFF123456, registered.getPixels().getPixelRGBA(0, 0));
+        } finally {
+            drain(clientTasks);
+            DynamicSkinCache.invalidateSourceTexture(source);
+            field(Minecraft.class, "instance").set(null, formerMinecraft);
+            textureManager.close();
+            Files.deleteIfExists(png);
+        }
+    }
+
+    @Test
+    void invalidatedSlimDecodeDiscardsPixelsAndCanReload() throws Exception {
+        int id = uniqueTestId();
+        ResourceLocation source = ResourceLocation.fromNamespaceAndPath("immersive_library", Integer.toString(id));
+        Path png = SkinCache.CACHE_DIR.resolve(id + ".png");
+        Minecraft formerMinecraft = (Minecraft) field(Minecraft.class, "instance").get(null);
+        Queue<Runnable> clientTasks = new ConcurrentLinkedQueue<>();
+        TextureManager textureManager = new TextureManager(null);
+        try {
+            SkinCache.writeAtomic(png, createSolidPng(0xFF123456));
+            Minecraft minecraft = allocate(Minecraft.class);
+            field(Minecraft.class, "gameThread").set(minecraft, Thread.currentThread());
+            field(BlockableEventLoop.class, "pendingRunnables").set(minecraft, clientTasks);
+            field(Minecraft.class, "textureManager").set(minecraft, textureManager);
+            field(Minecraft.class, "instance").set(null, minecraft);
+
+            assertEquals(source, DynamicSkinCache.getOrCreateSlimTexture(source));
+            awaitClientTasks(clientTasks);
+            Runnable staleCompletion = clientTasks.remove();
+            NativeImage staleImage = capturedImage(staleCompletion);
+            DynamicSkinCache.invalidateSourceTexture(source);
+            staleCompletion.run();
+            assertThrows(IllegalStateException.class, () -> staleImage.getPixelRGBA(0, 0),
+                    "An obsolete decode must release its unregistered NativeImage");
+
+            assertEquals(source, DynamicSkinCache.getOrCreateSlimTexture(source));
+            awaitAndDrainClientTasks(clientTasks);
+            assertNotEquals(source, DynamicSkinCache.getOrCreateSlimTexture(source),
+                    "Invalidation must allow the new source to be converted");
+        } finally {
+            drain(clientTasks);
+            DynamicSkinCache.invalidateSourceTexture(source);
+            field(Minecraft.class, "instance").set(null, formerMinecraft);
+            textureManager.close();
+            Files.deleteIfExists(png);
+        }
+    }
+
     @Test
     void olderCompletionCannotReplaceNewerCachedVersion() throws Exception {
         int id = uniqueTestId();

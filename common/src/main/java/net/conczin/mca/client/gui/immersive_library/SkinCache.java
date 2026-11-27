@@ -10,12 +10,15 @@ import net.conczin.mca.client.gui.immersive_library.responses.Response;
 import net.conczin.mca.client.gui.immersive_library.types.Content;
 import net.conczin.mca.client.gui.immersive_library.types.LiteContent;
 import net.conczin.mca.client.render.DynamicSkinCache;
+import net.conczin.mca.client.resources.SkinExporter;
 import net.conczin.mca.client.resources.SkinMeta;
+import net.conczin.mca.client.resources.SkinPorter;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.client.renderer.texture.TextureManager;
 import net.minecraft.resources.ResourceLocation;
+import org.jetbrains.annotations.Nullable;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -28,10 +31,13 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
 import static net.conczin.mca.client.gui.immersive_library.Api.request;
 
 public class SkinCache {
+    private static final String LIBRARY_NAMESPACE = "immersive_library";
+    private static final String LIBRARY_PREFIX = LIBRARY_NAMESPACE + ":";
     static final Path CACHE_DIR = Path.of("immersive_library");
     static final Map<Integer, Boolean> requested = new ConcurrentHashMap<>();
     static final Map<Integer, Object> loading = new ConcurrentHashMap<>();
@@ -188,6 +194,41 @@ public class SkinCache {
         CompletableFuture.runAsync(() -> decodeResources(contentid, expectedVersion, load));
     }
 
+    /** Load and reshape a slim-arm texture off-thread, then return ownership on the client thread. */
+    public static void loadSlimTextureAsync(ResourceLocation source, Consumer<NativeImage> onLoaded) {
+        Minecraft client = Minecraft.getInstance();
+        CompletableFuture.runAsync(() -> {
+            NativeImage image = null;
+            try {
+                image = SkinExporter.loadTexture(source);
+                if (image != null) {
+                    if (image.getWidth() == 64 && image.getHeight() == 64) {
+                        SkinPorter.convertDefaultToSlim(image);
+                    } else {
+                        image.close();
+                        image = null;
+                    }
+                }
+            } catch (Exception e) {
+                if (image != null) {
+                    image.close();
+                    image = null;
+                }
+                MCA.LOGGER.warn("Failed to prepare slim MCA texture {}", source, e);
+            }
+
+            NativeImage converted = image;
+            try {
+                client.execute(() -> onLoaded.accept(converted));
+            } catch (RuntimeException e) {
+                if (converted != null) {
+                    converted.close();
+                }
+                MCA.LOGGER.warn("Failed to deliver slim MCA texture {}", source, e);
+            }
+        });
+    }
+
     private static boolean isCurrentLoad(int contentid, int expectedVersion, Object load) {
         return loading.get(contentid) == load && cachedVersions.getOrDefault(contentid, -1) == expectedVersion;
     }
@@ -244,7 +285,7 @@ public class SkinCache {
             if (textureManager == null) {
                 return;
             }
-            ResourceLocation identifier = ResourceLocation.fromNamespaceAndPath("immersive_library", String.valueOf(contentid));
+            ResourceLocation identifier = ResourceLocation.fromNamespaceAndPath(LIBRARY_NAMESPACE, String.valueOf(contentid));
             texture = new DynamicTexture(image);
             textureManager.register(identifier, texture);
             registered = true;
@@ -302,5 +343,37 @@ public class SkinCache {
     public static ResourceLocation getTextureIdentifier(int contentid) {
         sync(contentid, -2);
         return textureIdentifiers.getOrDefault(contentid, DEFAULT_SKIN);
+    }
+
+    public static String libraryIdentifier(int contentId) {
+        return LIBRARY_PREFIX + contentId;
+    }
+
+    public static boolean isLibraryIdentifier(String identifier) {
+        return !MCA.isBlankString(identifier) && identifier.startsWith(LIBRARY_PREFIX);
+    }
+
+    @Nullable
+    public static Integer getContentId(String identifier) {
+        if (!isLibraryIdentifier(identifier)) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(identifier.substring(LIBRARY_PREFIX.length()));
+        } catch (NumberFormatException exception) {
+            return null;
+        }
+    }
+
+    @Nullable
+    public static ResourceLocation resolveTextureIdentifier(String identifier) {
+        if (MCA.isBlankString(identifier)) {
+            return null;
+        }
+        if (!isLibraryIdentifier(identifier)) {
+            return ResourceLocation.tryParse(identifier);
+        }
+        Integer contentId = getContentId(identifier);
+        return contentId == null ? null : getTextureIdentifier(contentId);
     }
 }

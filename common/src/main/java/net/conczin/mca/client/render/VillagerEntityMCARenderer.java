@@ -1,40 +1,38 @@
 package net.conczin.mca.client.render;
 
 import com.mojang.blaze3d.vertex.PoseStack;
-import net.conczin.mca.client.model.VillagerEntityModelMCA;
-import net.conczin.mca.client.render.layer.*;
+import net.conczin.mca.client.model.MCAModelLayers;
+import net.conczin.mca.client.model.VillagerOverlayModel;
+import net.conczin.mca.client.model.VillagerPlayerModel;
+import net.conczin.mca.client.render.layer.ClothingLayer;
+import net.conczin.mca.client.render.layer.FaceLayer;
+import net.conczin.mca.client.render.layer.HairLayer;
+import net.conczin.mca.client.render.layer.MorphologyLayer;
+import net.conczin.mca.client.render.layer.VillagerFishingLineLayer;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerLike;
 import net.minecraft.client.model.geom.ModelLayers;
-import net.minecraft.client.model.geom.builders.CubeDeformation;
-import net.minecraft.client.model.geom.builders.LayerDefinition;
-import net.minecraft.client.model.geom.builders.MeshDefinition;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.core.Direction;
 import net.minecraft.world.entity.Pose;
 
 public class VillagerEntityMCARenderer extends VillagerLikeEntityMCARenderer<VillagerEntityMCA> {
     public VillagerEntityMCARenderer(EntityRendererProvider.Context ctx) {
-        super(ctx, createAnimationModel(ctx).hideWears());
+        super(ctx, new VillagerPlayerModel<>(ctx.bakeLayer(ModelLayers.PLAYER), false),
+                new VillagerPlayerModel<>(ctx.bakeLayer(ModelLayers.PLAYER_SLIM), true));
 
-        // The parent drives external animation; visible layers keep MCA geometry and textures.
-        layers.add(0, new SkinLayer<>(this, createVisibleModel(VillagerEntityModelMCA.bodyData(CubeDeformation.NONE)).hideWears()));
-        addLayer(new FaceLayer<>(this, createVisibleModel(VillagerEntityModelMCA.bodyData(new CubeDeformation(0.01F))).hideWears(), "normal"));
-        addLayer(new ClothingLayer<>(this, createVisibleModel(VillagerEntityModelMCA.bodyData(new CubeDeformation(0.0625F))), "normal"));
-        addLayer(new HairLayer<>(this, createVisibleModel(VillagerEntityModelMCA.hairData(new CubeDeformation(0.125F)))));
+        layers.add(0, new MorphologyLayer<>(this, ctx.bakeLayer(MCAModelLayers.PLAYER_ATTACHMENTS)));
+        addLayer(new FaceLayer<>(this, createOverlay(ctx, MCAModelLayers.VILLAGER_FACE).hideWears()));
+        addLayer(new ClothingLayer<>(this, createOverlay(ctx, MCAModelLayers.VILLAGER_CLOTHING), "normal"));
+        addLayer(new ClothingLayer<>(this, new VillagerOverlayModel<>(
+                ctx.bakeLayer(MCAModelLayers.VILLAGER_CLOTHING_SLIM), true), "normal", true));
+        addLayer(new HairLayer<>(this, createOverlay(ctx, MCAModelLayers.VILLAGER_HAIR)));
         addLayer(new VillagerFishingLineLayer(this));
     }
 
-    private static VillagerEntityModelMCA<VillagerEntityMCA> createAnimationModel(EntityRendererProvider.Context ctx) {
-        return new VillagerEntityModelMCA<>(ctx.bakeLayer(ModelLayers.PLAYER));
-    }
-
-    private static VillagerEntityModelMCA<VillagerEntityMCA> createVisibleModel(MeshDefinition data) {
-        return new VillagerEntityModelMCA<>(LayerDefinition.create(data, 64, 64).bakeRoot());
-    }
-
     @Override
-    protected void setupRotations(VillagerEntityMCA villager, PoseStack poseStack, float bob, float bodyRot, float partialTick, float scale) {
+    protected void setupRotations(VillagerEntityMCA villager, PoseStack poseStack, float bob, float bodyRot,
+                                  float partialTick, float scale) {
         if (villager.hasPose(Pose.SLEEPING)) {
             Direction direction = villager.getBedOrientation();
             if (direction != null) {

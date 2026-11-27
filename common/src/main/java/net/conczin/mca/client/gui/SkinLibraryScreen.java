@@ -5,13 +5,13 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
+import net.conczin.mca.MCAClient;
 import net.conczin.mca.client.gui.immersive_library.*;
 import net.conczin.mca.client.gui.immersive_library.responses.*;
 import net.conczin.mca.client.gui.immersive_library.types.Content;
 import net.conczin.mca.client.gui.immersive_library.types.LiteContent;
 import net.conczin.mca.client.gui.immersive_library.types.User;
 import net.conczin.mca.client.gui.widget.*;
-import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.client.resources.*;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerLike;
@@ -76,7 +76,6 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private static final ResourceLocation CANVAS_IDENTIFIER = MCA.locate("temp");
     private static final float CANVAS_SCALE = 2.35f;
     private static final long SEARCH_DEBOUNCE_MILLIS = 400;
-    private static final String LIBRARY_NAMESPACE = "immersive_library:";
     private static final Pattern WINDOWS_DRIVE_PATH = Pattern.compile("^[A-Za-z]:[\\\\/].*");
 
     private static final int PROFESSION_AREA_WIDTH = 105;
@@ -170,7 +169,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
             this.villagerVisualization.readAdditionalSaveData(saveEntityData(villagerVisualization));
         } else {
             assert Minecraft.getInstance().player != null;
-            VillagerLike<?> villagerLike = CommonVillagerModel.getVillager(Minecraft.getInstance().level, Minecraft.getInstance().player.getUUID());
+            VillagerLike<?> villagerLike = MCAClient.resolveVillager(Minecraft.getInstance().player);
             if (villagerLike instanceof VillagerEntityMCA villager) {
                 this.villagerVisualization.readAdditionalSaveData(saveEntityData(villager));
             }
@@ -865,11 +864,11 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                 } else {
                     if (selected.hasTag("clothing")) {
                         var villager = previousScreen.getVillager();
-                        villager.setClothes(LIBRARY_NAMESPACE + selected.content_id());
+                        villager.setClothes(SkinCache.libraryIdentifier(selected.content_id()));
                         previousScreen.markClothingSelected();
                         returnToPreviousScreen();
                     } else if (selected.hasTag("hair")) {
-                        previousScreen.applyLibraryHair(LIBRARY_NAMESPACE + selected.content_id());
+                        previousScreen.applyLibraryHair(SkinCache.libraryIdentifier(selected.content_id()));
                         returnToPreviousScreen();
                     }
                 }
@@ -1398,7 +1397,8 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         List<TooltipButtonWidget> widgets = new LinkedList<>();
 
         // subscribe
-        if (canEditServerWideContent()) {
+        if (canEditServerWideContent() || (Config.getServerConfig().allowEveryoneToAddContentGlobally
+                && getServerContentById(content.content_id()).isEmpty())) {
             widgets.add(new ToggleableTooltipIconButtonWidget(0, 0, 0, 3 * 16,
                     getServerContentById(content.content_id()).isPresent(),
                     Component.translatable("gui.skin_library.subscribe"),
@@ -1517,9 +1517,9 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private Optional<SkinListEntry> toListEntry(LiteContent content) {
         return SkinCache.getMeta(content).map(meta -> {
             if (content.hasTag("clothing")) {
-                return new Clothing(LIBRARY_NAMESPACE + content.content_id(), meta.getProfession(), meta.getTemperature(), false, meta.getGender());
+                return new Clothing(SkinCache.libraryIdentifier(content.content_id()), meta.getProfession(), meta.getTemperature(), false, meta.getGender());
             } else {
-                return new Hair(LIBRARY_NAMESPACE + content.content_id());
+                return new Hair(SkinCache.libraryIdentifier(content.content_id()));
             }
         });
     }
@@ -2281,14 +2281,12 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
     private <T> void addServerContent(Map<String, T> map, String type) {
         for (Map.Entry<String, T> entry : map.entrySet()) {
-            if (entry.getKey().startsWith(LIBRARY_NAMESPACE)) {
-                try {
-                    int contentid = Integer.parseInt(entry.getKey().substring(LIBRARY_NAMESPACE.length()));
+            if (SkinCache.isLibraryIdentifier(entry.getKey())) {
+                Integer contentid = SkinCache.getContentId(entry.getKey());
+                if (contentid != null) {
                     serverContent.add(getContentById(contentid).orElse(new LiteContent(
                             contentid, -1, "unknown", -1, Set.of(type), "unknown", -1, false, Set.of()
                     )));
-                } catch (NumberFormatException ignored) {
-                    //nop
                 }
             }
         }

@@ -7,6 +7,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Proxy;
+import java.lang.reflect.Field;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -15,6 +16,8 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 class MCAClientRendererPolicyTest {
+    private static final Map<UUID, VillagerLike<?>> playerData = clientState("playerData");
+    private static final Set<UUID> playerDataRequests = clientState("playerDataRequests");
     private final UUID playerId = UUID.randomUUID();
     private final CountingBlacklist blacklist = new CountingBlacklist();
     private final String installedMod = "mca_lookup_test_" + UUID.randomUUID().toString().replace("-", "");
@@ -52,8 +55,8 @@ class MCAClientRendererPolicyTest {
             }
         };
         blacklist.put("mca_lookup_test_absent", "all");
-        MCAClient.playerDataRequests.add(playerId);
-        MCAClient.playerData.put(playerId, playerData(VillagerLike.PlayerModel.VILLAGER));
+        playerDataRequests.add(playerId);
+        playerData.put(playerId, playerData(VillagerLike.PlayerModel.VILLAGER));
     }
 
     @AfterEach
@@ -66,8 +69,8 @@ class MCAClientRendererPolicyTest {
         MCA.platformHelper = previousPlatform;
         config.scaleEyeHeightWithPlayerHeight = previousEyeScaling;
         Config.getServerConfig().scalePlayerHitboxWithSizeAndWidth = previousHitboxScaling;
-        MCAClient.playerData.remove(playerId);
-        MCAClient.playerDataRequests.remove(playerId);
+        playerData.remove(playerId);
+        playerDataRequests.remove(playerId);
     }
 
     @Test
@@ -87,7 +90,7 @@ class MCAClientRendererPolicyTest {
         assertFalse(MCAClient.useVillagerRenderer(playerId));
 
         Config.getInstance().enableVillagerPlayerModel = true;
-        MCAClient.playerData.put(playerId, playerData(VillagerLike.PlayerModel.VANILLA));
+        playerData.put(playerId, playerData(VillagerLike.PlayerModel.VANILLA));
         assertFalse(MCAClient.useVillagerRenderer(playerId));
         assertFalse(MCAClient.useGeneticsRenderer(playerId));
     }
@@ -98,11 +101,11 @@ class MCAClientRendererPolicyTest {
         config.enableVillagerPlayerModel = false;
         config.scaleEyeHeightWithPlayerHeight = true;
         Config.getServerConfig().scalePlayerHitboxWithSizeAndWidth = false;
-        assertSame(MCAClient.playerData.get(playerId), MCAClient.getPlayerData(playerId).orElseThrow());
+        assertSame(playerData.get(playerId), MCAClient.getPlayerData(playerId).orElseThrow());
 
         config.scaleEyeHeightWithPlayerHeight = false;
         assertTrue(MCAClient.getPlayerData(playerId).isEmpty());
-        assertTrue(MCAClient.playerDataRequests.contains(playerId));
+        assertTrue(playerDataRequests.contains(playerId));
     }
 
     @Test
@@ -132,6 +135,17 @@ class MCAClientRendererPolicyTest {
         assertFalse(MCAClient.areShadersAllowed("sirben_shader"));
         blacklist.remove(installedMod);
         assertTrue(MCAClient.areShadersAllowed("sirben_shader"));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> T clientState(String name) {
+        try {
+            Field field = MCAClient.class.getDeclaredField(name);
+            field.setAccessible(true);
+            return (T) field.get(null);
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError("Unable to prepare MCA client state", e);
+        }
     }
 
     private static VillagerLike<?> playerData(VillagerLike.PlayerModel model) {
