@@ -358,17 +358,13 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
                 }
             }
 
-            if (!raisedSurface) {
-                BlockState support = this.currentContext.getBlockState(
-                        this.collisionPos.set(candidate.x, candidate.y - 1, candidate.z));
-                if (isBarrierSupport(support)) {
-                    if (originBox == null) originBox = getDepartureBox(origin);
-                    if (destinationBox == null) destinationBox = getMobBoxAt(candidate);
-                    boolean raisedBarrierTop = destinationBox.minY > originBox.minY + RAISED_START_EPSILON;
-                    if (raisedBarrierTop && !canSweepTo(originBox, destinationBox,
-                            new PathingCollisionView(this.currentContext.level(), origin, candidate, this.mob))) {
-                        continue;
-                    }
+            if (!raisedSurface && requiresRaisedSurfaceSweep(candidate)) {
+                if (originBox == null) originBox = getDepartureBox(origin);
+                if (destinationBox == null) destinationBox = getMobBoxAt(candidate);
+                boolean raisedDestination = destinationBox.minY > originBox.minY + RAISED_START_EPSILON;
+                if (raisedDestination && !canSweepTo(originBox, destinationBox,
+                        new PathingCollisionView(this.currentContext.level(), origin, candidate, this.mob))) {
+                    continue;
                 }
             }
 
