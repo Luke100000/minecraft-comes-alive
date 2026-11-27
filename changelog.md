@@ -48,7 +48,7 @@
 * Added `villagersInteractWithAnyDoor` to optionally let villagers operate all vanilla-style doors instead of only mob-interactable ones.
 * Villagers can open, close, and walk through fence gates. This is controlled by `villagersInteractWithFenceGates`.
 * Improved home, bed, workplace, and resident assignment, including support for more modded beds.
-* Temporary inn guests free their beds when their stay ends. Datapacks can customize the inn's wandering-trader visitor pool with the `mca:spawn_at_inn` entity type tag.
+* Temporary inn guests free their beds when their stay ends. Datapacks can customize the inn's visitor pool with the `mca:spawn_at_inn` entity type tag. Wandering traders are the default.
 * Added `villagersChangeProfession` so assigning a workplace can preserve a villager's existing profession instead of changing it.
 * **Set Home** only assigns a bed the villager can reach. If no reachable replacement is available, the current home is kept.
 * Villagers move into a safe position beside their bed before going to sleep.
@@ -128,7 +128,7 @@
 * Fixed the Destiny screen repeatedly reopening over other mods' menus when joining a world.
 * Added `autoDiscoverDestinyLocations`, `destinySpawnLocationBlacklist`, `destinyOverworldOnly`, and `destinyDimensionBlacklist`. Blacklists support simple `*` wildcards such as `ctov:*`.
 * Destiny no longer teleports to locations that have since been disabled.
-* Destiny and villager structure lookups now run without blocking normal server work.
+* Structure searches for Destiny and villager rumours run asynchronously.
 
 ## Skin Library
 
