@@ -20,9 +20,11 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.toasts.SystemToast;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.Style;
+import net.minecraft.network.chat.contents.PlainTextContents;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.ItemStack;
@@ -341,7 +343,10 @@ public class ClientHandlerImpl implements ClientHandler {
      */
     public static final class DialoguePresentation {
         public static final long CHARACTER_REVEAL_MILLIS = 40L;
+        private static final int MAX_REVEAL_CATCH_UP = 4;
         private static final int MAX_REVIEW_LINES = 64;
+        private static final Component EMPTY_LINE = Component.empty();
+        private static final Component PAPER_PLACEHOLDER = Component.literal("...");
 
         private InteractionDialogueOptionsResponse options;
         private UUID sessionId;
@@ -366,6 +371,9 @@ public class ClientHandlerImpl implements ClientHandler {
         private ReplyRequest pendingReply;
         private boolean pendingAsync;
         private Component pendingLine = Component.empty();
+        private Component prefixSource;
+        private int prefixLength;
+        private Component prefix;
 
         public boolean acceptOptions(InteractionDialogueOptionsResponse response) {
             return acceptOptions(response, 0L, Locale.ENGLISH, UnaryOperator.identity());
@@ -566,18 +574,29 @@ public class ClientHandlerImpl implements ClientHandler {
             }
             if (!nodeVisible) {
                 if (nowMillis >= previewNextRevealAt) {
-                    previewRevealed++;
-                    previewNextRevealAt = saturatingAdd(nowMillis, CHARACTER_REVEAL_MILLIS);
+                    int step = revealStep(nowMillis, previewNextRevealAt);
+                    previewRevealed = Math.min(previewCuts.size(), previewRevealed + step);
+                    previewNextRevealAt = nextRevealDeadline(nowMillis, previewNextRevealAt, step);
                 }
                 return;
             }
             if (nowMillis >= nextRevealAt) {
-                revealedCharacters++;
-                long scheduledNext = saturatingAdd(nextRevealAt, CHARACTER_REVEAL_MILLIS);
-                nextRevealAt = nowMillis >= scheduledNext
-                        ? saturatingAdd(nowMillis, CHARACTER_REVEAL_MILLIS)
-                        : scheduledNext;
+                int step = revealStep(nowMillis, nextRevealAt);
+                revealedCharacters = Math.min(revealCuts.size(), revealedCharacters + step);
+                nextRevealAt = nextRevealDeadline(nowMillis, nextRevealAt, step);
             }
+        }
+
+        private static int revealStep(long now, long deadline) {
+            long late = now - deadline;
+            // Keep normal slow frames on schedule, but never dump a line after a long stall.
+            return late < 0 || late >= MAX_REVEAL_CATCH_UP * CHARACTER_REVEAL_MILLIS
+                    ? 1 : 1 + (int) (late / CHARACTER_REVEAL_MILLIS);
+        }
+
+        private static long nextRevealDeadline(long now, long deadline, int step) {
+            long scheduled = saturatingAdd(deadline, step * CHARACTER_REVEAL_MILLIS);
+            return now >= scheduled ? saturatingAdd(now, CHARACTER_REVEAL_MILLIS) : scheduled;
         }
 
         public void pause() {
@@ -698,11 +717,11 @@ public class ClientHandlerImpl implements ClientHandler {
          * menu while a server response is pending.
          */
         public Component paperFullLine() {
-            return nodeVisible || hasPreview() ? fullLine() : Component.literal("...");
+            return nodeVisible || hasPreview() ? fullLine() : PAPER_PLACEHOLDER;
         }
 
         public Component paperVisibleLine() {
-            return nodeVisible || hasPreview() ? visibleLine() : Component.literal("...");
+            return nodeVisible || hasPreview() ? visibleLine() : PAPER_PLACEHOLDER;
         }
 
         public Component visibleLine() {
@@ -710,22 +729,25 @@ public class ClientHandlerImpl implements ClientHandler {
                 return speechHistory.get(reviewIndex).line();
             }
             if (hasPreview() && !nodeVisible) {
-                if (previewRevealed == 0 || previewLine.getString().isEmpty()) {
-                    return Component.empty();
-                }
-                return previewRevealed >= previewCuts.size()
-                        ? previewLine : head(previewLine, previewCuts.get(previewRevealed - 1));
+                return visiblePrefix(previewLine, previewCuts, previewRevealed);
             }
-            if ((!nodeVisible && !hasPreview()) || resolvedLine.getString().isEmpty()) {
-                return Component.empty();
+            return nodeVisible ? visiblePrefix(resolvedLine, revealCuts, revealedCharacters) : EMPTY_LINE;
+        }
+
+        private Component visiblePrefix(Component source, List<Integer> cuts, int revealed) {
+            if (revealed == 0) {
+                return EMPTY_LINE;
             }
-            if (revealedCharacters <= 0) {
-                return Component.empty();
+            if (revealed >= cuts.size()) {
+                return source;
             }
-            if (isFullyRevealed()) {
-                return resolvedLine;
+            int length = cuts.get(revealed - 1);
+            if (prefixSource != source || prefixLength != length) {
+                prefix = head(source, length);
+                prefixSource = source;
+                prefixLength = length;
             }
-            return head(resolvedLine, revealCuts.get(revealedCharacters - 1));
+            return prefix;
         }
 
         public boolean revealFully() {
@@ -872,6 +894,8 @@ public class ClientHandlerImpl implements ClientHandler {
         private record ReplyRequest(UUID sessionId, long offerToken, Optional<String> choiceId, int historyIndex) { }
 
         private void dropSnapshot() {
+            prefixSource = null;
+            prefix = null;
             clearPending();
             pendingReply = null;
             speechHistory.clear();
@@ -918,14 +942,28 @@ public class ClientHandlerImpl implements ClientHandler {
         private static ResolvedLine resolveOnce(Component source) {
             MutableComponent resolved = Component.empty();
             StringBuilder plain = new StringBuilder();
-            source.visit((style, text) -> {
+            appendResolved(source, Style.EMPTY, resolved, plain);
+            return new ResolvedLine(resolved, plain.toString());
+        }
+
+        private static void appendResolved(Component source, Style parent, MutableComponent resolved, StringBuilder plain) {
+            Style style = source.getStyle().applyTo(parent);
+            ClickEvent click = source.getStyle().getClickEvent();
+            if (source.getContents() == PlainTextContents.EMPTY && click != null
+                    && click.getAction() == ClickEvent.Action.COPY_TO_CLIPBOARD) {
+                // Rich-text closing markers have no glyphs and are skipped by Component.visit.
+                resolved.append(Component.empty().setStyle(style));
+            }
+            source.getContents().visit((partStyle, text) -> {
                 if (!text.isEmpty()) {
-                    resolved.append(Component.literal(text).setStyle(style));
+                    resolved.append(Component.literal(text).setStyle(partStyle));
                     plain.append(text);
                 }
                 return Optional.empty();
-            }, Style.EMPTY);
-            return new ResolvedLine(resolved, plain.toString());
+            }, style);
+            for (Component sibling : source.getSiblings()) {
+                appendResolved(sibling, style, resolved, plain);
+            }
         }
 
         private static List<Integer> revealCuts(String text, Locale locale) {

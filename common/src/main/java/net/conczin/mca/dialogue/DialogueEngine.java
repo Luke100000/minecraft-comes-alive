@@ -56,12 +56,14 @@ public final class DialogueEngine {
     private final DialogueEvents events;
     private final Map<UUID, DialogueSession> sessions = new HashMap<>();
     private final Map<UUID, DialogueOptions> offers = new HashMap<>();
+    private final Map<UUID, BeginMenus> beginMenus = new HashMap<>();
     private final Map<UUID, LinkedHashMap<UUID, ResourceLocation>> recentPreviews = new HashMap<>();
     private final List<PendingSlap> pendingSlaps = new ArrayList<>();
     private final DialoguePendingRequests pendingRequests = new DialoguePendingRequests();
     private final RandomSource random;
     private long tokenSequence;
     private long previewGeneration = Long.MIN_VALUE;
+    private int beginMenusTick = Integer.MIN_VALUE;
 
     public DialogueEngine(DialogueEvents events) {
         this(events, RandomSource.create());
@@ -79,12 +81,69 @@ public final class DialogueEngine {
 
     /** Checks the current interaction before creating an offer or changing dialogue history. */
     public Optional<DialogueOptions> beginIfEligible(ServerPlayer player, VillagerEntityMCA villager, boolean showOpening) {
-        return canInteract(player, villager)
-                ? Optional.of(begin(player, villager, showOpening))
-                : Optional.empty();
+        UUID playerId = player.getUUID();
+        if (!canInteract(player, villager)) {
+            beginMenus.remove(playerId);
+            return Optional.empty();
+        }
+        refreshBeginMenusTick(Objects.requireNonNull(player.getServer(), "server"));
+        BeginMenus menus = beginMenus.get(playerId);
+        DialogueOptions latest = offers.get(playerId);
+        DialogueSession session = sessions.get(playerId);
+        int fatiguePoints = effectiveFatiguePoints(player, villager);
+        if (menus != null && (latest != menus.latest() || latest.consumed()
+                || session != menus.session() || menus.fatiguePoints() != fatiguePoints
+                || latest.generation() != events.generation()
+                || !latest.villagerId().equals(villager.getUUID())
+                || !villager.getInteractions().matchesInteraction(player, latest.interactionId()))) {
+            menus = null;
+        }
+
+        DialogueOptions cached = menus == null ? null : (showOpening ? menus.opening() : menus.topics());
+        DialogueOptions result;
+        if (cached != null) {
+            result = cached.withToken(nextToken());
+            offers.put(playerId, result);
+        } else {
+            result = createMenu(player, villager, showOpening, fatiguePoints);
+        }
+
+        // Refusals must be evaluated against current fatigue, even within a tick.
+        if (result.preview().flatMap(preview -> events.get(preview.eventId()))
+                .filter(DialogueEngine::terminalRefusal).isPresent()) {
+            beginMenus.remove(playerId);
+        } else {
+            DialogueSession current = sessions.get(playerId);
+            if (menus == null || current != session) {
+                menus = new BeginMenus(null, null, result, current, fatiguePoints);
+            }
+            beginMenus.put(playerId, new BeginMenus(
+                    showOpening ? result : menus.opening(),
+                    showOpening ? menus.topics() : result,
+                    result, current, fatiguePoints));
+        }
+        return Optional.of(result);
     }
 
     public DialogueOptions begin(ServerPlayer player, VillagerEntityMCA villager, boolean showOpening) {
+        beginMenus.remove(player.getUUID());
+        return createMenu(player, villager, showOpening, effectiveFatiguePoints(player, villager));
+    }
+
+    private void refreshBeginMenusTick(MinecraftServer server) {
+        int tick = server.getTickCount();
+        if (beginMenusTick != tick) {
+            beginMenus.clear();
+            beginMenusTick = tick;
+        }
+    }
+
+    private record BeginMenus(DialogueOptions opening, DialogueOptions topics,
+                              DialogueOptions latest, DialogueSession session, int fatiguePoints) {
+    }
+
+    private DialogueOptions createMenu(ServerPlayer player, VillagerEntityMCA villager, boolean showOpening,
+                                       int fatiguePoints) {
         Objects.requireNonNull(player, "player");
         Objects.requireNonNull(villager, "villager");
         UUID playerId = player.getUUID();
@@ -118,7 +177,7 @@ public final class DialogueEngine {
         }
         if (refusal != null && canInteract(player, villager)) {
             DialogueContext check = context(player, villager);
-            if (eventEligible(refusal, check, check.history(), gameTime)) {
+            if (eventEligible(refusal, check, check.history(), gameTime, fatiguePoints)) {
                 if (activeRefusal) {
                     invalidatePending(playerId);
                     sessions.remove(playerId);
@@ -149,7 +208,7 @@ public final class DialogueEngine {
                 : null;
         List<DialogueEvent> eligible = eligibleCandidates(
                 events.all(),
-                event -> eventEligible(event, context, history, gameTime),
+                event -> eventEligible(event, context, history, gameTime, fatiguePoints),
                 pausedEvent
         );
         SelectionPlan plan = planSelection(eligible);
@@ -164,19 +223,17 @@ public final class DialogueEngine {
                     return first.lines().size() > 1 || first.next().isPresent()
                             || first.choices().isEmpty()
                             || first.choices().orElseThrow().stream().anyMatch(choice ->
-                                    choiceEligible(choice, context));
+                                    choiceEligible(choice, context, fatiguePoints));
                 })
                 .toList();
         ResourceLocation last = recentPreviews.getOrDefault(playerId, new LinkedHashMap<>()).get(villager.getUUID());
-        Config config = Config.getInstance();
-        Optional<DialogueEvent> selectedPreview = pickPreview(previewCandidates, last, random,
-                pairFatigue(context), config.interactionChanceFatigue, config.interactionFatigueEnabled);
+        Optional<DialogueEvent> selectedPreview = pickPreview(previewCandidates, last, random, fatiguePoints);
         boolean refusing = selectedPreview.filter(DialogueEngine::terminalRefusal).isPresent();
         Optional<AmbientPreview> preview = selectedPreview.map(event -> {
             DialogueEvent.Node node = event.nodes().get(event.start());
             List<ChoiceView> choices = node.lines().size() == 1
                     ? node.choices().orElse(List.of()).stream()
-                            .filter(choice -> choiceEligible(choice, context))
+                            .filter(choice -> choiceEligible(choice, context, fatiguePoints))
                             .map(choice -> new ChoiceView(choice.id(), Component.translatable(choice.text())))
                             .toList()
                     : List.of();
@@ -283,7 +340,12 @@ public final class DialogueEngine {
             List<DialogueEvent> candidates, @Nullable ResourceLocation previous, RandomSource random,
             int pairFatigue, float multiplier, boolean fatigueEnabled
     ) {
-        int points = legacyFatiguePoints(pairFatigue, multiplier, fatigueEnabled);
+        return pickPreview(candidates, previous, random, legacyFatiguePoints(pairFatigue, multiplier, fatigueEnabled));
+    }
+
+    private static Optional<DialogueEvent> pickPreview(
+            List<DialogueEvent> candidates, @Nullable ResourceLocation previous, RandomSource random, int points
+    ) {
         List<DialogueEvent> safe = candidates.stream().filter(DialogueEngine::previewable)
                 .filter(event -> effectiveEventWeight(event, points) > 0.0)
                 .sorted(CANONICAL_ORDER).toList();
@@ -361,13 +423,14 @@ public final class DialogueEngine {
             return Optional.of(view(resumed, context));
         }
 
+        int points = effectiveFatiguePoints(player, villager);
         DialogueEvent selected;
         if (selection == DialogueSelection.EVENT) {
             if (eventId == null || !offer.containsEvent(eventId)) {
                 return Optional.empty();
             }
             selected = events.get(eventId).orElse(null);
-            if (selected == null || !eventEligible(selected, context, history, gameTime)) {
+            if (selected == null || !eventEligible(selected, context, history, gameTime, points)) {
                 return Optional.empty();
             }
         } else if (selection == DialogueSelection.AMBIENT) {
@@ -377,12 +440,9 @@ public final class DialogueEngine {
             List<DialogueEvent> candidates = offer.ambientCandidates().stream()
                     .map(events::get)
                     .flatMap(Optional::stream)
-                    .filter(event -> eventEligible(event, context, history, gameTime))
+                    .filter(event -> eventEligible(event, context, history, gameTime, points))
                     .sorted(CANONICAL_ORDER)
                     .toList();
-            Config config = Config.getInstance();
-            int points = legacyFatiguePoints(pairFatigue(context),
-                    config.interactionChanceFatigue, config.interactionFatigueEnabled);
             selected = weightedPick(candidates, event -> effectiveEventWeight(event, points), random)
                     .orElse(null);
             if (selected == null) {
@@ -469,7 +529,7 @@ public final class DialogueEngine {
                     condition -> matches(condition, context)
             );
             DialogueEvent.Outcome outcome = pickOutcome(eligible, random,
-                    context.villager().getVillagerBrain().getMemoriesForPlayer(context.player()).getInteractionFatigue(),
+                    pairFatigue(context),
                     Config.getInstance().interactionChanceFatigue,
                     Config.getInstance().interactionFatigueEnabled).orElse(null);
             if (outcome == null) {
@@ -690,6 +750,7 @@ public final class DialogueEngine {
         invalidatePending(player.getUUID());
         sessions.remove(player.getUUID());
         offers.remove(player.getUUID());
+        beginMenus.remove(player.getUUID());
     }
 
     public void onVillagerLeave(VillagerEntityMCA villager) {
@@ -725,6 +786,7 @@ public final class DialogueEngine {
 
     public void tick(MinecraftServer server) {
         Objects.requireNonNull(server, "server");
+        refreshBeginMenusTick(server);
         long generation = events.generation();
         long gameTime = server.overworld().getGameTime();
         for (Iterator<PendingSlap> iterator = pendingSlaps.iterator(); iterator.hasNext();) {
@@ -845,6 +907,7 @@ public final class DialogueEngine {
         }
         sessions.clear();
         offers.clear();
+        beginMenus.clear();
         recentPreviews.clear();
         pendingSlaps.clear();
     }
@@ -868,7 +931,8 @@ public final class DialogueEngine {
         }
         DialogueContext context = context(player, villager);
         DialogueEvent event = events.get(offer.preview().orElseThrow().eventId()).orElse(null);
-        if (event == null || !eventEligible(event, context, context.history(), overworldTime(player))) {
+        if (event == null || !eventEligible(event, context, context.history(), overworldTime(player),
+                effectiveFatiguePoints(player, villager))) {
             return TransitionResult.rejected();
         }
         AmbientPreview preview = offer.preview().orElseThrow();
@@ -1012,23 +1076,34 @@ public final class DialogueEngine {
 
     static boolean choiceEligible(DialogueEvent.Choice choice, Predicate<DialogueCondition> conditionMatches,
                                   int pairFatigue, float multiplier, boolean fatigueEnabled) {
+        return choiceEligible(choice, conditionMatches, legacyFatiguePoints(pairFatigue, multiplier, fatigueEnabled));
+    }
+
+    private static boolean choiceEligible(DialogueEvent.Choice choice, Predicate<DialogueCondition> conditionMatches,
+                                          int points) {
         if (!choice.requirements().stream().allMatch(conditionMatches)) {
             return false;
         }
-        int points = legacyFatiguePoints(pairFatigue, multiplier, fatigueEnabled);
         return choice.outcomes().isEmpty() || eligibleOutcomes(choice, conditionMatches).stream()
                 .anyMatch(outcome -> effectiveOutcomeWeight(outcome, points) > 0.0);
     }
 
     private static boolean choiceEligible(DialogueEvent.Choice choice, DialogueContext context) {
+        return choiceEligible(choice, context, effectiveFatiguePoints(context.player(), context.villager()));
+    }
+
+    private static boolean choiceEligible(DialogueEvent.Choice choice, DialogueContext context, int points) {
+        return choiceEligible(choice, condition -> matches(condition, context), points);
+    }
+
+    private static int effectiveFatiguePoints(ServerPlayer player, VillagerEntityMCA villager) {
         Config config = Config.getInstance();
-        return choiceEligible(choice, condition -> matches(condition, context), pairFatigue(context),
+        return legacyFatiguePoints(villager.getVillagerBrain().getInteractionFatigueForPlayer(player),
                 config.interactionChanceFatigue, config.interactionFatigueEnabled);
     }
 
     private static int pairFatigue(DialogueContext context) {
-        return context.villager().getVillagerBrain()
-                .getMemoriesForPlayer(context.player()).getInteractionFatigue();
+        return context.villager().getVillagerBrain().getInteractionFatigueForPlayer(context.player());
     }
 
     static List<DialogueEvent.Outcome> eligibleOutcomes(
@@ -1186,7 +1261,8 @@ public final class DialogueEngine {
             DialogueEvent event,
             DialogueContext context,
             DialogueEventHistory history,
-            long gameTime
+            long gameTime,
+            int points
     ) {
         if (!history.writable()) {
             return false;
@@ -1194,9 +1270,6 @@ public final class DialogueEngine {
         if (event.trigger() != DialogueEvent.Trigger.TALK) {
             return false;
         }
-        Config config = Config.getInstance();
-        int points = legacyFatiguePoints(pairFatigue(context),
-                config.interactionChanceFatigue, config.interactionFatigueEnabled);
         if (effectiveEventWeight(event, points) <= 0.0) {
             return false;
         }
@@ -1218,8 +1291,9 @@ public final class DialogueEngine {
                 || node.choices().isEmpty()) {
             return session.withOfferedChoices(List.of());
         }
+        int points = effectiveFatiguePoints(context.player(), context.villager());
         List<String> choices = node.choices().orElseThrow().stream()
-                .filter(choice -> choiceEligible(choice, context))
+                .filter(choice -> choiceEligible(choice, context, points))
                 .map(DialogueEvent.Choice::id)
                 .toList();
         return session.withOfferedChoices(choices);
@@ -1681,6 +1755,11 @@ public final class DialogueEngine {
             return token;
         }
 
+        private DialogueOptions withToken(long token) {
+            return new DialogueOptions(villagerId, generation, highlighted, ask, ambientAvailable,
+                    continuationPrompt, token, ambientCandidates, continuationSessionId, preview, interactionId);
+        }
+
         public Optional<AmbientPreview> preview() {
             return preview;
         }
@@ -1761,7 +1840,7 @@ public final class DialogueEngine {
                 condition -> matches(condition, context),
                 random,
                 this::nextToken,
-                context.villager().getVillagerBrain().getMemoriesForPlayer(context.player()).getInteractionFatigue(),
+                pairFatigue(context),
                 Config.getInstance().interactionChanceFatigue,
                 Config.getInstance().interactionFatigueEnabled
         );

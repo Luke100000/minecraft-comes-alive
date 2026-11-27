@@ -417,7 +417,7 @@ public sealed interface DialogueCondition permits DialogueCondition.Defined, Dia
     }
 
     private static Evaluation evaluateHearts(Defined condition, DialogueContext context) {
-        int hearts = context.villager().getVillagerBrain().getMemoriesForPlayer(context.player()).getHearts();
+        int hearts = context.villager().getVillagerBrain().getHeartsForPlayer(context.player());
         return result(inIntRange(condition.definition(), hearts));
     }
 

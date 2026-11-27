@@ -1,5 +1,8 @@
 package net.conczin.mca.client.gui;
 
+import net.conczin.mca.dialogue.DialogueEngine;
+import net.conczin.mca.network.ClientHandlerImpl;
+import net.conczin.mca.network.s2c.InteractionDialogueNodeResponse;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.HoverEvent;
@@ -7,10 +10,14 @@ import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.TextColor;
 import net.minecraft.SharedConstants;
 import net.minecraft.server.Bootstrap;
+import net.minecraft.resources.ResourceLocation;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
+import java.util.List;
+import java.util.Locale;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -59,7 +66,7 @@ class DialogueTextHitTestTest {
         Component complete = Component.literal("Find ")
                 .append(Component.literal("234,70,-980").setStyle(coordinates));
 
-        Component masked = DialogueTextHitTest.readyCopySpans(full, incomplete);
+        Component masked = DialogueTextHitTest.prepareCopySpans(full).ready(incomplete);
         Style waiting = masked.getSiblings().get(1).getStyle();
         assertEquals("Find 234,70,-98", masked.getString());
         assertTrue(waiting.isUnderlined());
@@ -67,7 +74,7 @@ class DialogueTextHitTestTest {
         assertNull(waiting.getClickEvent(), "a partially revealed coordinate must not copy a hidden suffix");
         assertNull(waiting.getHoverEvent(), "copy tooltip should appear only after the coordinates finish");
 
-        Component enabled = DialogueTextHitTest.readyCopySpans(full, complete);
+        Component enabled = DialogueTextHitTest.prepareCopySpans(full).ready(complete);
         assertEquals(Optional.of("234 70 -980"),
                 DialogueTextHitTest.copyValue(enabled.getSiblings().getFirst().getStyle()),
                 "the rest of the sentence may still be revealing");
@@ -83,7 +90,7 @@ class DialogueTextHitTestTest {
         Component visible = Component.literal("Visit ").append(Component.literal("bridge").setStyle(first))
                 .append(" then ").append(Component.literal("hid").setStyle(second));
 
-        Component result = DialogueTextHitTest.readyCopySpans(full, visible);
+        Component result = DialogueTextHitTest.prepareCopySpans(full).ready(visible);
         assertEquals(Optional.of("bridge"), DialogueTextHitTest.copyValue(result.getSiblings().get(1).getStyle()));
         assertTrue(DialogueTextHitTest.copyValue(result.getSiblings().get(3).getStyle()).isEmpty());
         assertTrue(DialogueTextHitTest.copyValue(Style.EMPTY).isEmpty(),
@@ -94,17 +101,17 @@ class DialogueTextHitTestTest {
     void nestedCopyCannotExposeOuterTextWhileInnerTextReveals() {
         Component full = DialogueRichText.parse(Component.literal("<copy>Go <copy>north</copy> now</copy>!"));
 
-        Component early = DialogueTextHitTest.readyCopySpans(full, visiblePrefix(full, 3));
+        Component early = DialogueTextHitTest.prepareCopySpans(full).ready(visiblePrefix(full, 3));
         assertTrue(DialogueTextHitTest.copyValue(styleAt(early, 1)).isEmpty(),
                 "the outer phrase must not copy the hidden 'north now'");
 
-        Component middle = DialogueTextHitTest.readyCopySpans(full, visiblePrefix(full, 8));
+        Component middle = DialogueTextHitTest.prepareCopySpans(full).ready(visiblePrefix(full, 8));
         assertTrue(DialogueTextHitTest.copyValue(styleAt(middle, 1)).isEmpty(),
                 "the unfinished outer phrase must still be inert");
         assertEquals(Optional.of("north"), DialogueTextHitTest.copyValue(styleAt(middle, 4)),
                 "the completed inner phrase may be copied");
 
-        Component complete = DialogueTextHitTest.readyCopySpans(full, visiblePrefix(full, 12));
+        Component complete = DialogueTextHitTest.prepareCopySpans(full).ready(visiblePrefix(full, 12));
         assertEquals(Optional.of("Go north now"), DialogueTextHitTest.copyValue(styleAt(complete, 1)));
     }
 
@@ -112,10 +119,28 @@ class DialogueTextHitTestTest {
     void outerCopyEndingImmediatelyAfterInnerRemainsLockedUntilInnerFinishes() {
         Component full = DialogueRichText.parse(Component.literal("<copy>Go <copy>north</copy></copy>!"));
 
-        Component early = DialogueTextHitTest.readyCopySpans(full, visiblePrefix(full, 3));
+        Component early = DialogueTextHitTest.prepareCopySpans(full).ready(visiblePrefix(full, 3));
         assertTrue(DialogueTextHitTest.copyValue(styleAt(early, 1)).isEmpty());
 
-        Component complete = DialogueTextHitTest.readyCopySpans(full, visiblePrefix(full, 8));
+        Component complete = DialogueTextHitTest.prepareCopySpans(full).ready(visiblePrefix(full, 8));
+        assertEquals(Optional.of("Go north"), DialogueTextHitTest.copyValue(styleAt(complete, 1)));
+        assertEquals(Optional.of("north"), DialogueTextHitTest.copyValue(styleAt(complete, 4)));
+    }
+
+    @Test
+    void resolvedSpeechRetainsNestedCopyScopeEnd() {
+        var presentation = new ClientHandlerImpl.DialoguePresentation();
+        var node = new InteractionDialogueNodeResponse.Node(ResourceLocation.parse("mca:test/story"),
+                Component.literal("<copy>Go <copy>north</copy></copy>!"), false,
+                DialogueEngine.AdvanceKind.NEXT, List.of());
+        assertTrue(presentation.acceptNode(new InteractionDialogueNodeResponse(UUID.randomUUID(), 1L,
+                InteractionDialogueNodeResponse.State.ACTIVE, Optional.of(node)),
+                0L, Locale.ENGLISH, DialogueRichText::parse));
+
+        Component full = presentation.paperFullLine();
+        Component early = DialogueTextHitTest.prepareCopySpans(full).ready(visiblePrefix(full, 3));
+        assertTrue(DialogueTextHitTest.copyValue(styleAt(early, 1)).isEmpty());
+        Component complete = DialogueTextHitTest.prepareCopySpans(full).ready(visiblePrefix(full, 8));
         assertEquals(Optional.of("Go north"), DialogueTextHitTest.copyValue(styleAt(complete, 1)));
         assertEquals(Optional.of("north"), DialogueTextHitTest.copyValue(styleAt(complete, 4)));
     }
@@ -123,7 +148,7 @@ class DialogueTextHitTestTest {
     @Test
     void adjacentEqualValueCopiesActivateIndependently() {
         Component full = DialogueRichText.parse(Component.literal("<copy>bridge</copy><copy>bridge</copy>!"));
-        Component partial = DialogueTextHitTest.readyCopySpans(full, visiblePrefix(full, 9));
+        Component partial = DialogueTextHitTest.prepareCopySpans(full).ready(visiblePrefix(full, 9));
 
         assertEquals(Optional.of("bridge"), DialogueTextHitTest.copyValue(styleAt(partial, 1)));
         assertTrue(DialogueTextHitTest.copyValue(styleAt(partial, 7)).isEmpty(),

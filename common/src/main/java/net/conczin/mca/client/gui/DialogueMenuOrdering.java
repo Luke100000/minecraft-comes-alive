@@ -28,4 +28,14 @@ final class DialogueMenuOrdering {
 
     record Selection<T>(Optional<T> featured, List<T> remaining) {
     }
+
+    static int nextFocus(int index, int size, int direction) {
+        if (size == 0) {
+            return -1;
+        }
+        if (index < 0 || index >= size) {
+            return direction < 0 ? size - 1 : 0;
+        }
+        return Math.floorMod(index + direction, size);
+    }
 }

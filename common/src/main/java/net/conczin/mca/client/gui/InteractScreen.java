@@ -7,10 +7,11 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.dialogue.DialogueEngine;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.Genetics;
-import net.conczin.mca.entity.ai.Memories;
+import net.conczin.mca.entity.ai.Mood;
 import net.conczin.mca.entity.ai.Traits;
 import net.conczin.mca.entity.ai.brain.VillagerBrain;
 import net.conczin.mca.entity.ai.relationship.CompassionateEntity;
+import net.conczin.mca.entity.ai.relationship.Personality;
 import net.conczin.mca.entity.ai.relationship.RelationshipState;
 import net.conczin.mca.entity.interaction.Constraint;
 import net.conczin.mca.network.Network;
@@ -36,7 +37,6 @@ import org.joml.Vector2i;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 public class InteractScreen extends AbstractDynamicScreen {
     public static final ResourceLocation ICON_TEXTURES = MCA.locate("textures/gui.png");
@@ -47,6 +47,7 @@ public class InteractScreen extends AbstractDynamicScreen {
     private static final int INSPECTOR_X = 10;
     // The vanilla tooltip starts 12 pixels after its anchor and its background extends 4 more.
     private static final int INSPECTOR_TEXT_RIGHT_INSET = 16;
+    private static final Component GIVE_GIFT_LABEL = Component.translatable("gui.interact.label.giveGift");
     private static Analysis analysis;
     private final VillagerLike<?> villager;
     private final UUID interactionId;
@@ -57,12 +58,21 @@ public class InteractScreen extends AbstractDynamicScreen {
     private String mother;
     private RelationshipState marriageState;
     private Component spouse;
+    private Mood inspectorMood;
+    private Component inspectorMoodLabel;
+    private Personality inspectorPersonality;
+    private Component inspectorPersonalityLabel;
+    private List<Component> inspectorPersonalityDetails = List.of();
+    private Set<Traits.Trait> inspectorTraits = Set.of();
+    private Component inspectorTraitsLabel;
+    private List<Component> inspectorTraitDetails = List.of();
     private boolean dialogueMode;
     private final EnumSet<DialogueTopicSection> expandedSections = EnumSet.noneOf(DialogueTopicSection.class);
     private final List<DialogueHit> dialogueHits = new ArrayList<>();
     private final List<DialogueTextTarget> dialogueTextTargets = new ArrayList<>();
     private final DialogueMenuScrollWidget dialogueScroller = new DialogueMenuScrollWidget();
     private final DialogueMenuScrollWidget dialogueSpeechScroller = new DialogueMenuScrollWidget();
+    private final DialogueRenderContent dialogueContent = new DialogueRenderContent((text, width) -> font.split(text, width));
     private boolean dialogueSpeechAutoFollow = true;
     private int dialogueSpeechTextHeight = -1;
     private DialogueViewport dialogueListViewport;
@@ -126,6 +136,7 @@ public class InteractScreen extends AbstractDynamicScreen {
 
     @Override
     public void init() {
+        dialogueContent.invalidateLayout();
         dialogueSectionToReveal = null;
         dialogueHits.clear();
         dialogueScroller.reset();
@@ -162,9 +173,10 @@ public class InteractScreen extends AbstractDynamicScreen {
             dialoguePresentation().ifPresent(presentation ->
                     presentation.tick(System.nanoTime() / 1_000_000L));
         }
-        drawIcons(context);
+        int hearts = villager.getVillagerBrain().getHeartsForPlayer(player);
+        drawIcons(context, hearts);
         boolean docked = dialogueMode && Config.getInstance().dialogueSpeechAboveChoices;
-        int inspectorRight = drawTextPopups(context, docked);
+        int inspectorRight = drawTextPopups(context, docked, hearts);
         drawDialogueEventState(context, mouseX, mouseY, tickDelta, docked, inspectorRight);
     }
 
@@ -296,10 +308,8 @@ public class InteractScreen extends AbstractDynamicScreen {
             return true;
         }
         if (dialogueMode && (keyChar == GLFW.GLFW_KEY_UP || keyChar == GLFW.GLFW_KEY_DOWN)) {
-            if (!dialogueHits.isEmpty()) {
-                int direction = keyChar == GLFW.GLFW_KEY_DOWN ? 1 : -1;
-                dialogueKeyboardIndex = Math.floorMod(dialogueKeyboardIndex + direction, dialogueHits.size());
-            }
+            int direction = keyChar == GLFW.GLFW_KEY_DOWN ? 1 : -1;
+            dialogueKeyboardIndex = DialogueMenuOrdering.nextFocus(dialogueKeyboardIndex, dialogueHits.size(), direction);
             return true;
         }
         if (dialogueMode && (keyChar == GLFW.GLFW_KEY_ENTER || keyChar == GLFW.GLFW_KEY_KP_ENTER
@@ -348,9 +358,8 @@ public class InteractScreen extends AbstractDynamicScreen {
         }
     }
 
-    private void drawIcons(GuiGraphics context) {
+    private void drawIcons(GuiGraphics context, int hearts) {
         final PoseStack matrices = context.pose();
-        Memories memory = villager.getVillagerBrain().getMemoriesForPlayer(player);
 
         matrices.pushPose();
         matrices.scale(iconScale, iconScale, iconScale);
@@ -359,17 +368,12 @@ public class InteractScreen extends AbstractDynamicScreen {
             drawIcon(context, ICON_TEXTURES, marriageState.getIcon());
         }
 
-        drawIcon(context, ICON_TEXTURES, memory.getHearts() < 0 ? "blackHeart" : memory.getHearts() >= 100 ? "goldHeart" : "redHeart");
-        // drawIcon(transform, "neutralEmerald");
+        drawIcon(context, ICON_TEXTURES, hearts < 0 ? "blackHeart" : hearts >= 100 ? "goldHeart" : "redHeart");
         drawIcon(context, ICON_TEXTURES, "genes");
 
         if (canDrawParentsIcon()) {
             drawIcon(context, ICON_TEXTURES, "parents");
         }
-        if (canDrawGiftIcon()) {
-            drawIcon(context, ICON_TEXTURES, "gift");
-        }
-
         if (analysis != null) {
             drawIcon(context, ICON_TEXTURES, "analysis");
         }
@@ -377,44 +381,29 @@ public class InteractScreen extends AbstractDynamicScreen {
         matrices.popPose();
     }
 
-    private int drawTextPopups(GuiGraphics context, boolean docked) {
+    private int drawTextPopups(GuiGraphics context, boolean docked, int hearts) {
         int h = 17;
         int labelWidth = docked ? Math.max(font.width("…"),
                 DialogueOverlayLayout.inspectorRightLimit(width, height) - INSPECTOR_X - INSPECTOR_TEXT_RIGHT_INSET)
                 : Integer.MAX_VALUE;
-        Component name = inGiftMode ? Component.translatable("gui.interact.label.giveGift") : villager.asEntity().getName();
+        Component name = inGiftMode ? GIVE_GIFT_LABEL : villager.asEntity().getName();
         int inspectorRight = drawInspectorLabel(context, name, List.of(), 28, labelWidth);
         Component profession = villager.asEntity().isBaby() ? villager.getAgeState().getName() : villager.getProfessionText();
         inspectorRight = Math.max(inspectorRight, drawInspectorLabel(context, profession, List.of(), 30 + h, labelWidth));
 
         VillagerBrain<?> brain = villager.getVillagerBrain();
-        Component mood = Component.translatable("gui.interact.label.mood", brain.getMood().getText())
-                .withStyle(brain.getMood().getColor());
-        inspectorRight = Math.max(inspectorRight, drawInspectorLabel(context, mood, List.of(), 30 + h * 2, labelWidth));
-
-        Component personality = Component.translatable("gui.interact.label.personality", brain.getPersonality().getName())
-                .withStyle(ChatFormatting.WHITE);
-        inspectorRight = Math.max(inspectorRight, drawInspectorLabel(context, personality,
-                List.of(brain.getPersonality().getDescription()), 30 + h * 3, labelWidth));
-
-        Set<Traits.Trait> traits = villager.getTraits().getTraits();
-        if (!traits.isEmpty()) {
-            MutableComponent traitText = Component.translatable("traits.title");
-            traits.stream().map(Traits.Trait::getName).forEach(t -> {
-                if (!traitText.getSiblings().isEmpty()) {
-                    traitText.append(Component.literal(", "));
-                }
-                traitText.append(t);
-            });
-            List<Component> traitDetails = traits.stream().map(Traits.Trait::getDescription).collect(Collectors.toList());
-            traitDetails.addFirst(Component.translatable("traits.title"));
+        updateInspectorLabels(brain);
+        inspectorRight = Math.max(inspectorRight,
+                drawInspectorLabel(context, inspectorMoodLabel, List.of(), 30 + h * 2, labelWidth));
+        inspectorRight = Math.max(inspectorRight, drawInspectorLabel(context, inspectorPersonalityLabel,
+                inspectorPersonalityDetails, 30 + h * 3, labelWidth));
+        if (!inspectorTraits.isEmpty()) {
             inspectorRight = Math.max(inspectorRight,
-                    drawInspectorLabel(context, traitText, traitDetails, 30 + h * 4, labelWidth));
+                    drawInspectorLabel(context, inspectorTraitsLabel, inspectorTraitDetails, 30 + h * 4, labelWidth));
         }
 
         //hearts
         if (hoveringOverIcon("redHeart")) {
-            int hearts = brain.getMemoriesForPlayer(player).getHearts();
             drawHoveringIconText(context, Component.literal(hearts + " hearts"), "redHeart");
         }
 
@@ -430,11 +419,6 @@ public class InteractScreen extends AbstractDynamicScreen {
                     father == null ? Component.translatable("gui.interact.label.parentUnknown") : father,
                     mother == null ? Component.translatable("gui.interact.label.parentUnknown") : mother
             ), "parents");
-        }
-
-        //gift
-        if (canDrawGiftIcon() && hoveringOverIcon("gift")) {
-            drawHoveringIconText(context, Component.translatable("gui.interact.label.gift"), "gift");
         }
 
         //genes
@@ -473,6 +457,38 @@ public class InteractScreen extends AbstractDynamicScreen {
         return docked ? inspectorRight : 0;
     }
 
+    private void updateInspectorLabels(VillagerBrain<?> brain) {
+        Mood mood = brain.getMood();
+        if (inspectorMood != mood) {
+            inspectorMood = mood;
+            inspectorMoodLabel = Component.translatable("gui.interact.label.mood", mood.getText()).withStyle(mood.getColor());
+        }
+        Personality personality = brain.getPersonality();
+        // Addon subclasses may provide dynamic labels.
+        if (inspectorPersonality != personality || personality.getClass() != Personality.class) {
+            inspectorPersonality = personality;
+            inspectorPersonalityLabel = Component.translatable("gui.interact.label.personality", personality.getName())
+                    .withStyle(ChatFormatting.WHITE);
+            inspectorPersonalityDetails = List.of(personality.getDescription());
+        }
+        Set<Traits.Trait> traits = villager.getTraits().getTraits();
+        if (!inspectorTraits.equals(traits)) {
+            inspectorTraits = Set.copyOf(traits);
+            MutableComponent label = Component.translatable("traits.title");
+            List<Component> details = new ArrayList<>(traits.size() + 1);
+            details.add(Component.translatable("traits.title"));
+            for (Traits.Trait trait : traits) {
+                if (!label.getSiblings().isEmpty()) {
+                    label.append(", ");
+                }
+                label.append(trait.getName());
+                details.add(trait.getDescription());
+            }
+            inspectorTraitsLabel = label;
+            inspectorTraitDetails = List.copyOf(details);
+        }
+    }
+
     private int drawInspectorLabel(GuiGraphics context, Component label, List<Component> details, int y, int maxWidth) {
         if (maxWidth == Integer.MAX_VALUE) {
             if (!details.isEmpty() && hoveringOver(INSPECTOR_X + 8, y - 16, 128, 16)) {
@@ -505,10 +521,6 @@ public class InteractScreen extends AbstractDynamicScreen {
 
     private boolean canDrawParentsIcon() {
         return father != null || mother != null;
-    }
-
-    private boolean canDrawGiftIcon() {
-        return false;//villager.getVillagerBrain().getMemoriesForPlayer(player).isGiftPresent();
     }
 
     public boolean isDialogueMode() {
@@ -625,8 +637,8 @@ public class InteractScreen extends AbstractDynamicScreen {
                 : Optional.empty();
     }
 
-    private List<DialogueRow> dialogueRows(ClientHandlerImpl.DialoguePresentation presentation,
-                                           ReplyIndicators indicators) {
+    static List<DialogueRow> buildDialogueRows(ClientHandlerImpl.DialoguePresentation presentation,
+                                               ReplyIndicators indicators, Set<DialogueTopicSection> expandedSections) {
         List<DialogueRow> rows = new ArrayList<>();
         boolean preview = presentation.hasPreview() && !presentation.nodeVisible();
         if (!presentation.nodeVisible() && !indicators.placeholder()) {
@@ -640,10 +652,13 @@ public class InteractScreen extends AbstractDynamicScreen {
                 options.continuation().ifPresent(prompt -> rows.add(new DialogueRow(
                         Component.translatable("gui.dialogue.resume_topic", prompt),
                         new DialogueClick(DialogueClickKind.SELECT, DialogueEngine.DialogueSelection.RESUME, null, null))));
+                Map<DialogueTopicSection, List<InteractionDialogueOptionsResponse.EventOption>> groups =
+                        new EnumMap<>(DialogueTopicSection.class);
+                for (var option : selected.remaining()) {
+                    groups.computeIfAbsent(DialogueTopicSection.fromTopic(option.topic()), key -> new ArrayList<>()).add(option);
+                }
                 for (DialogueTopicSection section : DialogueTopicSection.values()) {
-                    List<InteractionDialogueOptionsResponse.EventOption> group = selected.remaining().stream()
-                            .filter(option -> DialogueTopicSection.fromTopic(option.topic()) == section)
-                            .toList();
+                    var group = groups.getOrDefault(section, List.of());
                     boolean ambient = section == DialogueTopicSection.CONVERSATIONS && options.ambientAvailable();
                     if (group.isEmpty() && !ambient) {
                         continue;
@@ -720,7 +735,7 @@ public class InteractScreen extends AbstractDynamicScreen {
     private int dialoguePaperHeight(ClientHandlerImpl.DialoguePresentation presentation,
                                     ReplyIndicators indicators, int bubbleWidth) {
         Component speech = indicators.progress() ? presentation.pendingLine() : presentation.paperFullLine();
-        int lines = dialogueLines(speech, bubbleWidth - dialoguePixels(32)).size();
+        int lines = dialogueContent.fullSpeech(speech, bubbleWidth - dialoguePixels(32)).size();
         return DialogueOverlayLayout.minimumSpeechHeight(lines, dialogueHistoryHeight(presentation),
                 indicators.progress(), dialogueTextScale());
     }
@@ -764,10 +779,15 @@ public class InteractScreen extends AbstractDynamicScreen {
         ReplyIndicators indicators = replyIndicators(presentation.awaitingReply(),
                 presentation.nodeVisible() && presentation.revealingLine(),
                 presentation.pendingAsync(), presentation.reviewingHistory());
-        List<DialogueRow> rows = dialogueRows(presentation, indicators);
+        var fontOptions = Minecraft.getInstance().options;
+        int fontFlags = (fontOptions.forceUnicodeFont().get() ? 1 : 0)
+                | (fontOptions.japaneseGlyphVariants().get() ? 2 : 0);
+        dialogueContent.layout(font, Language.getInstance(), dialogueTextScale(), fontFlags);
+        List<DialogueRow> rows = dialogueContent.rows(presentation, indicators, expandedSections);
         DialogueOverlayLayout.Column column = DialogueOverlayLayout.menuColumn(width, height, inspectorRight);
-        List<MeasuredDialogueRow> measuredRows = measureDialogueRows(rows, column.width());
-        int rowsHeight = measuredRows.stream().mapToInt(MeasuredDialogueRow::height).sum();
+        var measurements = dialogueContent.measureRows(rows, column.width());
+        var measuredRows = measurements.rows();
+        int rowsHeight = measurements.height();
         int paperWidth = docked ? column.width() : DialogueOverlayLayout.cornerBubbleWidth(width);
         // A shorter reply should shrink the menu again instead of retaining
         // the largest height reached anywhere in the ongoing conversation.
@@ -827,10 +847,10 @@ public class InteractScreen extends AbstractDynamicScreen {
                     ? DialogueOverlayLayout.progressStrip(bubble, historyHeight, dialogueTextScale())
                     : new DialogueOverlayLayout.Rect(0, 0, 0, 0);
             if (textBottom > textTop) {
-                Component speech = indicators.progress() ? presentation.pendingLine()
-                        : DialogueTextHitTest.readyCopySpans(presentation.paperFullLine(), presentation.paperVisibleLine());
                 int speechWidth = bubble.width() - dialoguePixels(32);
-                List<FormattedCharSequence> lines = dialogueLines(speech, speechWidth);
+                List<FormattedCharSequence> lines = indicators.progress()
+                        ? dialogueContent.fullSpeech(presentation.pendingLine(), speechWidth)
+                        : dialogueContent.visibleSpeech(presentation.paperFullLine(), presentation.paperVisibleLine(), speechWidth);
                 int totalTextHeight = lines.size() * dialoguePixels(10);
                 int speechTextRight = bubble.right() - 16;
                 dialogueSpeechScroller.layout(speechTextRight - 8, textTop, 8,
@@ -852,9 +872,16 @@ public class InteractScreen extends AbstractDynamicScreen {
                                 clipRight - (bubble.x() + 11), textBottom - textTop)));
                 context.enableScissor(bubble.x() + 11, textTop, clipRight, textBottom);
                 int y = textTop - passageOffset;
+                int lineStep = dialoguePixels(10);
+                int glyphHeight = dialoguePixels(font.lineHeight);
                 for (FormattedCharSequence line : lines) {
-                    drawDialogueText(context, line, bubble.x() + dialoguePixels(16), y, INK, false);
-                    y += dialoguePixels(10);
+                    if (y >= textBottom) {
+                        break;
+                    }
+                    if (y + glyphHeight > textTop) {
+                        drawDialogueText(context, line, bubble.x() + dialoguePixels(16), y, INK, false);
+                    }
+                    y += lineStep;
                 }
                 context.disableScissor();
                 if (scrollable) {
@@ -883,14 +910,15 @@ public class InteractScreen extends AbstractDynamicScreen {
             boolean needsScrollbar = !loadingOnly && rowsHeight > settledViewportHeight;
             int rowPanelWidth = panelWidth - (needsScrollbar ? 8 : 0);
             if (needsScrollbar) {
-                measuredRows = measureDialogueRows(rows, rowPanelWidth);
-                rowsHeight = measuredRows.stream().mapToInt(MeasuredDialogueRow::height).sum();
+                measurements = dialogueContent.measureRows(rows, rowPanelWidth);
+                measuredRows = measurements.rows();
+                rowsHeight = measurements.height();
             }
             dialogueScroller.layout(left + 8, clipTop, rowPanelWidth - 16, viewportHeight, rowsHeight,
                     settledViewportHeight);
             if (dialogueSectionToReveal != null) {
                 int rowTop = 0;
-                for (MeasuredDialogueRow measured : measuredRows) {
+                for (DialogueRenderContent.MeasuredRow measured : measuredRows) {
                     DialogueRow row = measured.row();
                     if (row.click() != null && row.click().kind() == DialogueClickKind.TOGGLE_SECTION
                             && dialogueSectionToReveal.name().equals(row.click().choiceId())) {
@@ -913,7 +941,14 @@ public class InteractScreen extends AbstractDynamicScreen {
             }
             context.enableScissor(left + 8, clipTop, contentRight, clipBottom);
             int y = clipTop - dialogueScroll;
-            for (MeasuredDialogueRow measured : measuredRows) {
+            for (DialogueRenderContent.MeasuredRow measured : measuredRows) {
+                if (y >= clipBottom) {
+                    break;
+                }
+                if (y + measured.height() <= clipTop) {
+                    y += measured.height();
+                    continue;
+                }
                 y = drawDialogueRow(context, measured, left, rowPanelWidth, y, clipTop, clipBottom, nowMillis);
             }
             context.disableScissor();
@@ -1050,10 +1085,6 @@ public class InteractScreen extends AbstractDynamicScreen {
         return dialoguePixels(32);
     }
 
-    private List<FormattedCharSequence> dialogueLines(Component text, int availableWidth) {
-        return font.split(text, Math.max(1, (int) (availableWidth / dialogueTextScale())));
-    }
-
     private void drawDialogueText(GuiGraphics context, Component text, float x, float y, int colour, boolean shadow) {
         drawDialogueText(context, text.getVisualOrderText(), x, y, colour, shadow);
     }
@@ -1065,17 +1096,6 @@ public class InteractScreen extends AbstractDynamicScreen {
         context.pose().scale(dialogueTextScale(), dialogueTextScale(), 1);
         context.drawString(font, text, 0, 0, colour, shadow);
         context.pose().popPose();
-    }
-
-    private List<MeasuredDialogueRow> measureDialogueRows(List<DialogueRow> rows, int panelWidth) {
-        float scale = dialogueTextScale();
-        return rows.stream().map(row -> {
-            DialogueRowLayout.Insets insets = DialogueRowLayout.insets(panelWidth, scale, row.kind());
-            List<FormattedCharSequence> lines = row.placeholder() ? List.of() : dialogueLines(row.text(), insets.textWidth());
-            int rowHeight = row.placeholder() ? dialoguePixels(26)
-                    : DialogueRowLayout.height(scale, lines.size(), row.kind());
-            return new MeasuredDialogueRow(row, insets, lines, rowHeight);
-        }).toList();
     }
 
     static float loadingSquareRise(long nowMillis, int index, boolean animate) {
@@ -1100,7 +1120,7 @@ public class InteractScreen extends AbstractDynamicScreen {
         }
     }
 
-    private int drawDialogueRow(GuiGraphics context, MeasuredDialogueRow measured,
+    private int drawDialogueRow(GuiGraphics context, DialogueRenderContent.MeasuredRow measured,
                                 int left, int panelWidth, int y, int clipTop, int clipBottom, long nowMillis) {
         DialogueRow row = measured.row();
         int rowHeight = measured.height();
@@ -1397,10 +1417,6 @@ public class InteractScreen extends AbstractDynamicScreen {
     ) { }
 
     record ReplyIndicators(boolean placeholder, boolean progress) {
-    }
-
-    private record MeasuredDialogueRow(DialogueRow row, DialogueRowLayout.Insets insets,
-                                       List<FormattedCharSequence> lines, int height) {
     }
 
     record DialogueRow(Component text, DialogueClick click, boolean featured, int iconIndex,

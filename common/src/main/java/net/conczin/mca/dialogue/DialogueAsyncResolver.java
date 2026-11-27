@@ -165,6 +165,12 @@ public sealed interface DialogueAsyncResolver permits DialogueAsyncResolver.Stru
         return json.has(field) ? requiredString(json, field) : fallback;
     }
 
+    /**
+     * Starts and cancels dialogue operations on the server thread. Implementations should return
+     * promptly and schedule expensive work asynchronously, without accessing live world or entity
+     * state off-thread. Capture any required server-owned inputs before handing work off.
+     * The engine handles completion on the server thread and discards results for obsolete operations.
+     */
     @FunctionalInterface
     interface Provider<T> {
         CompletionStage<Result> resolve(T parameters, DialogueContext context, UUID operationId);

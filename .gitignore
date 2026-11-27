@@ -39,3 +39,6 @@ fabric/run*/
 
 # Local dev/runtime output
 fabric/config/
+
+# Local port references and planning archives
+/local-sources/

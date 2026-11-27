@@ -121,6 +121,157 @@ public final class DialogueEngineGameTests {
     }
 
     @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void repeatedBeginRequestsReuseSchedulingPreviewWithinTick(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        DialogueEvent greeting = DialogueEvent.decode(ResourceLocation.parse("mca:test/coalesced_greeting"),
+                JsonParser.parseString("""
+                        {
+                          "trigger":"talk",
+                          "presentation":{"mode":"ambient","resume_prompt":"dialogue.test.resume"},
+                          "history":"scheduling",
+                          "repeat":{"type":"cooldown","seconds":60},
+                          "start":"main",
+                          "nodes":{"main":{"line":"dialogue.test.one","complete":true}}
+                        }
+                        """).getAsJsonObject());
+        DialogueEngine engine = engine(greeting);
+        try {
+            var first = engine.beginIfEligible(fixture.player(), fixture.villager(), true).orElseThrow();
+            helper.assertTrue(first.preview().map(p -> p.eventId().equals(greeting.id())).orElse(false),
+                    "the initial request must schedule the greeting");
+            var retry = engine.beginIfEligible(fixture.player(), fixture.villager(), true).orElseThrow();
+            helper.assertTrue(retry.preview().equals(first.preview()),
+                    "a same-tick retry must recover the original greeting despite its scheduling cooldown");
+            helper.assertTrue(retry.token() != first.token(), "a retry must provide a fresh response token");
+            var topics = engine.beginIfEligible(fixture.player(), fixture.villager(), false).orElseThrow();
+            helper.assertTrue(topics.preview().isEmpty(), "Topics must not show the opening");
+            var openingAgain = engine.beginIfEligible(fixture.player(), fixture.villager(), true).orElseThrow();
+            helper.assertTrue(openingAgain.preview().equals(first.preview()) && openingAgain.token() != topics.token(),
+                    "alternating same-tick requests must reuse the corresponding menu and rotate its token");
+            helper.assertTrue(engine.advance(fixture.player(), first.token()).status() == DialogueEngine.TransitionStatus.REJECTED,
+                    "superseded response tokens must still be rejected");
+            seedEvents(events(engine), 2L);
+            var reloaded = engine.beginIfEligible(fixture.player(), fixture.villager(), true).orElseThrow();
+            helper.assertTrue(reloaded.preview().isEmpty() && reloaded.generation() == 2L,
+                    "a resource reload must invalidate cached menus immediately");
+        } finally {
+            fixture.villager().getInteractions().stopInteracting();
+            fixture.villager().discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void sameTickBeginRefreshesWhenFatigueChanges(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        var memory = fixture.villager().getVillagerBrain().getMemoriesForPlayer(fixture.player());
+        DialogueEvent refusal = DialogueEvent.decode(ResourceLocation.parse("mca:test/coalesced_refusal"),
+                JsonParser.parseString("""
+                        {
+                          "trigger":"talk",
+                          "presentation":{"mode":"ambient","resume_prompt":"dialogue.test.resume"},
+                          "weight":-3,"fatigue":1,
+                          "history":"scheduling",
+                          "repeat":{"type":"cooldown","seconds":0},
+                          "start":"main",
+                          "nodes":{"main":{"line":"dialogue.busy","complete":true,"close_interaction":true}}
+                        }
+                        """).getAsJsonObject());
+        DialogueEvent topic = simpleEvent(ResourceLocation.parse("mca:test/coalesced_topic"));
+        DialogueEngine engine = engine(refusal, topic);
+        Config config = Config.getInstance();
+        boolean enabled = config.interactionFatigueEnabled;
+        float multiplier = config.interactionChanceFatigue;
+        try {
+            config.interactionFatigueEnabled = true;
+            config.interactionChanceFatigue = 1.0f;
+            memory.setInteractionFatigue(0);
+            var first = engine.beginIfEligible(fixture.player(), fixture.villager(), true).orElseThrow();
+            helper.assertTrue(first.preview().isEmpty() && first.ask().stream().anyMatch(o -> o.id().equals(topic.id())),
+                    "an unfatigued villager must offer the ordinary topic");
+            var topics = engine.beginIfEligible(fixture.player(), fixture.villager(), false).orElseThrow();
+            memory.setInteractionFatigue(6);
+            var refusing = engine.beginIfEligible(fixture.player(), fixture.villager(), true).orElseThrow();
+            helper.assertTrue(refusing.preview().map(p -> p.eventId().equals(refusal.id())).orElse(false)
+                            && refusing.ask().isEmpty() && !refusing.ambientAvailable(),
+                    "same-tick fatigue changes must invalidate the cached opening and expose the refusal");
+            var locked = engine.beginIfEligible(fixture.player(), fixture.villager(), false).orElseThrow();
+            helper.assertTrue(locked.preview().equals(refusing.preview()) && locked.ask().isEmpty(),
+                    "a previously cached Topics menu must not bypass the refusal");
+            helper.assertTrue(engine.select(fixture.player(), topics.token(),
+                    DialogueEngine.DialogueSelection.EVENT, topic.id()).isEmpty(),
+                    "the superseded topic offer must not be accepted");
+            memory.setInteractionFatigue(0);
+            var recovered = engine.beginIfEligible(fixture.player(), fixture.villager(), true).orElseThrow();
+            helper.assertTrue(recovered.preview().isEmpty() && !recovered.ask().isEmpty(),
+                    "recovering from fatigue must unlock ordinary dialogue immediately");
+        } finally {
+            config.interactionFatigueEnabled = enabled;
+            config.interactionChanceFatigue = multiplier;
+            fixture.villager().getInteractions().stopInteracting();
+            fixture.villager().discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void displayingHeartsReadsCurrentMemoryWithoutCreatingOne(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        var brain = fixture.villager().getVillagerBrain();
+        ServerPlayer other = new FakePlayer(helper.getLevel(),
+                new GameProfile(UUID.randomUUID(), "dialogue-heart-read"));
+        try {
+            helper.assertTrue(!brain.getMemories().containsKey(other.getUUID()), "fixture must start without a memory");
+            helper.assertTrue(brain.getHeartsForPlayer(other) == 0, "a missing memory must display zero hearts");
+            helper.assertTrue(!brain.getMemories().containsKey(other.getUUID()), "display must not create a memory");
+            var memory = brain.getMemoriesForPlayer(other);
+            memory.setHearts(-12);
+            helper.assertTrue(brain.getHeartsForPlayer(other) == -12, "negative hearts must be preserved");
+            memory.setHearts(105);
+            helper.assertTrue(brain.getHeartsForPlayer(other) == 105, "a later update must be visible immediately");
+        } finally {
+            fixture.villager().getInteractions().stopInteracting();
+            fixture.villager().discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void preparingTopicsDoesNotCreateRelationshipMemory(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        var brain = fixture.villager().getVillagerBrain();
+        ServerPlayer other = new FakePlayer(helper.getLevel(),
+                new GameProfile(UUID.randomUUID(), "dialogue-menu-read"));
+        DialogueEvent topic = DialogueEvent.decode(ResourceLocation.parse("mca:test/neutral_topic"),
+                JsonParser.parseString("""
+                        {
+                          "trigger":"talk",
+                          "presentation":{"mode":"ask","prompt":"dialogue.test.prompt","resume_prompt":"dialogue.test.resume"},
+                          "requirements":[{"type":"mca:hearts","min":0,"max":0}],
+                          "repeat":{"type":"always"},
+                          "start":"main",
+                          "nodes":{"main":{"line":"dialogue.test.line","complete":true}}
+                        }
+                        """).getAsJsonObject());
+        DialogueEngine engine = engine(topic);
+        try {
+            helper.assertTrue(!brain.getMemories().containsKey(other.getUUID()), "fixture must start without a memory");
+            var first = engine.begin(other, fixture.villager(), false);
+            helper.assertTrue(first.ask().stream().anyMatch(option -> option.id().equals(topic.id())),
+                    "an unknown relationship must be evaluated as neutral");
+            helper.assertTrue(!brain.getMemories().containsKey(other.getUUID()),
+                    "preparing topics must not persist a relationship memory");
+            brain.getMemoriesForPlayer(other).setHearts(5);
+            var changed = engine.begin(other, fixture.villager(), false);
+            helper.assertTrue(changed.ask().isEmpty(), "a new menu must reflect the updated hearts immediately");
+        } finally {
+            fixture.villager().getInteractions().stopInteracting();
+            fixture.villager().discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
     public static void clickingSleepingVillagerWakesBeforeDialogue(GameTestHelper helper) {
         Fixture fixture = fixture(helper);
         DialogueEvent chat = simpleEvent(ResourceLocation.parse("mca:test/sleeping_chat"));

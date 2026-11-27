@@ -4,6 +4,7 @@ import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.Style;
+import net.minecraft.network.chat.contents.PlainTextContents;
 
 import java.util.IdentityHashMap;
 import java.util.Map;
@@ -16,50 +17,65 @@ final class DialogueTextHitTest {
 
     record Position(int lineIndex, int unscaledX) {}
 
-    /** Keeps a copy action inert until its whole styled phrase has been drawn. */
-    static Component readyCopySpans(Component full, Component visible) {
-        int visibleLength = visible.getString().length();
-        if (visibleLength == 0 || visibleLength >= full.getString().length()) {
-            return visible;
-        }
-
+    static CopySpans prepareCopySpans(Component full) {
         Map<ClickEvent, Integer> copyEnds = new IdentityHashMap<>();
-        int[] offset = {0};
-        full.visit((style, part) -> {
+        collectCopyEnds(full, Style.EMPTY, new int[]{0}, copyEnds);
+        int lastEnd = copyEnds.values().stream().mapToInt(Integer::intValue).max().orElse(0);
+        return new CopySpans(copyEnds, lastEnd);
+    }
+
+    private static void collectCopyEnds(Component component, Style parent, int[] offset,
+                                        Map<ClickEvent, Integer> copyEnds) {
+        Style style = component.getStyle().applyTo(parent);
+        // A closing marker has no glyphs, but retains the end of its copy scope.
+        ClickEvent marker = component.getStyle().getClickEvent();
+        if (component.getContents() == PlainTextContents.EMPTY && marker != null
+                && marker.getAction() == ClickEvent.Action.COPY_TO_CLIPBOARD) {
+            copyEnds.put(marker, offset[0]);
+        }
+        component.getContents().visit((partStyle, part) -> {
             offset[0] += part.length();
-            ClickEvent click = style.getClickEvent();
+            ClickEvent click = partStyle.getClickEvent();
             if (click != null && click.getAction() == ClickEvent.Action.COPY_TO_CLIPBOARD && !part.isEmpty()) {
                 copyEnds.put(click, offset[0]);
             }
             return Optional.empty();
-        }, Style.EMPTY);
+        }, style);
+        for (Component sibling : component.getSiblings()) {
+            collectCopyEnds(sibling, style, offset, copyEnds);
+        }
+    }
 
-        // Empty components from rich-text closing tags retain the end of nested copy scopes.
-        int markerOffset = 0;
-        for (Component part : full.getSiblings()) {
-            String text = part.getString();
-            markerOffset += text.length();
-            ClickEvent click = part.getStyle().getClickEvent();
-            if (text.isEmpty() && click != null && click.getAction() == ClickEvent.Action.COPY_TO_CLIPBOARD) {
-                copyEnds.put(click, markerOffset);
-            }
+    static final class CopySpans {
+        private final Map<ClickEvent, Integer> ends;
+        private final int lastEnd;
+
+        private CopySpans(Map<ClickEvent, Integer> ends, int lastEnd) {
+            this.ends = ends;
+            this.lastEnd = lastEnd;
         }
 
-        if (copyEnds.values().stream().noneMatch(end -> end > visibleLength)) {
-            return visible;
-        }
-
-        MutableComponent ready = Component.empty();
-        visible.visit((style, part) -> {
-            if (!part.isEmpty()) {
-                ClickEvent click = style.getClickEvent();
-                Style effective = click != null && copyEnds.getOrDefault(click, 0) > visibleLength
-                        ? style.withClickEvent(null).withHoverEvent(null) : style;
-                ready.append(Component.literal(part).setStyle(effective));
+        /** Keeps a copy action inert until its whole styled phrase has been drawn. */
+        Component ready(Component visible) {
+            if (ends.isEmpty()) {
+                return visible;
             }
-            return Optional.empty();
-        }, Style.EMPTY);
-        return ready;
+            int visibleLength = visible.getString().length();
+            if (visibleLength == 0 || visibleLength >= lastEnd) {
+                return visible;
+            }
+            MutableComponent ready = Component.empty();
+            visible.visit((style, part) -> {
+                if (!part.isEmpty()) {
+                    ClickEvent click = style.getClickEvent();
+                    Style effective = click != null && ends.getOrDefault(click, 0) > visibleLength
+                            ? style.withClickEvent(null).withHoverEvent(null) : style;
+                    ready.append(Component.literal(part).setStyle(effective));
+                }
+                return Optional.empty();
+            }, Style.EMPTY);
+            return ready;
+        }
     }
 
     static Optional<Position> locate(double mouseX, double mouseY, int originX, int originY,

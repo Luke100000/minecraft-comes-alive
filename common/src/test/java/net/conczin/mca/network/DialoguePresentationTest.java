@@ -20,6 +20,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DialoguePresentationTest {
@@ -537,6 +538,47 @@ class DialoguePresentationTest {
                 .map(InteractionDialogueNodeResponse.Choice::id).toList(),
                 "the server's stable choice ID must survive missing client localization");
         assertEquals(unknownReply, presentation.visibleChoices().getFirst().text().getString());
+    }
+
+    @Test
+    void visiblePrefixIsReusedUntilTheNextGrapheme() {
+        var presentation = new ClientHandlerImpl.DialoguePresentation();
+        presentation.acceptNode(active(UUID.randomUUID(), 41L, Component.literal("ABCDE"),
+                DialogueEngine.AdvanceKind.NEXT, List.of()), 1000L, Locale.ENGLISH);
+        presentation.tick(1040L);
+        Component first = presentation.visibleLine();
+        assertEquals("A", first.getString());
+        presentation.tick(1060L);
+        assertSame(first, presentation.visibleLine(), "a redraw must not allocate another styled prefix");
+        presentation.tick(1080L);
+        assertEquals("AB", presentation.visibleLine().getString());
+    }
+
+    @Test
+    void regularLowFrameRateDoesNotSlowActiveReveal() {
+        var presentation = new ClientHandlerImpl.DialoguePresentation();
+        presentation.acceptNode(active(UUID.randomUUID(), 42L, Component.literal("ABCDE"),
+                DialogueEngine.AdvanceKind.NEXT, List.of()), 1000L, Locale.ENGLISH);
+        for (long time = 1050L; time <= 1200L; time += 50L) {
+            presentation.tick(time);
+        }
+        assertEquals("ABCDE", presentation.visibleLine().getString());
+        assertTrue(presentation.canAdvance());
+    }
+
+    @Test
+    void regularLowFrameRateDoesNotSlowPreviewReveal() {
+        var presentation = new ClientHandlerImpl.DialoguePresentation();
+        var opening = new InteractionDialogueNodeResponse.Node(ResourceLocation.parse("test:ambient"),
+                Component.literal("ABCDE"), false, DialogueEngine.AdvanceKind.NEXT, List.of());
+        presentation.beginRequest();
+        assertTrue(presentation.acceptOptions(new InteractionDialogueOptionsResponse(
+                43L, Optional.empty(), List.of(), true, Optional.of(opening)), 1000L, Locale.ENGLISH, line -> line));
+        for (long time = 1050L; time <= 1200L; time += 50L) {
+            presentation.tick(time);
+        }
+        assertEquals("ABCDE", presentation.visibleLine().getString());
+        assertTrue(presentation.canAdvance());
     }
 
     @Test

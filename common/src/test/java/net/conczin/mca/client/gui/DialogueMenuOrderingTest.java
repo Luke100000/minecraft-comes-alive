@@ -33,4 +33,19 @@ class DialogueMenuOrderingTest {
         assertTrue(selection.featured().isEmpty());
         assertTrue(selection.remaining().isEmpty());
     }
+
+    @Test
+    void keyboardStartsAtFirstOrLastVisibleTarget() {
+        assertEquals(0, DialogueMenuOrdering.nextFocus(-1, 4, 1));
+        assertEquals(3, DialogueMenuOrdering.nextFocus(-1, 4, -1));
+    }
+
+    @Test
+    void keyboardWrapsAndResetsAnInvalidFocusAfterLayoutChanges() {
+        assertEquals(0, DialogueMenuOrdering.nextFocus(3, 4, 1));
+        assertEquals(3, DialogueMenuOrdering.nextFocus(0, 4, -1));
+        assertEquals(0, DialogueMenuOrdering.nextFocus(5, 4, 1));
+        assertEquals(3, DialogueMenuOrdering.nextFocus(5, 4, -1));
+        assertEquals(-1, DialogueMenuOrdering.nextFocus(2, 0, 1));
+    }
 }

@@ -170,6 +170,17 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
         return returnMemories;
     }
 
+    /** Reads the displayed relationship without creating or deserializing a memory. */
+    public int getHeartsForPlayer(Player player) {
+        CompoundTag memories = entity.getTrackedValue(MEMORIES);
+        return memories == null ? 0 : memories.getCompound(player.getUUID().toString()).getInt("hearts");
+    }
+
+    public int getInteractionFatigueForPlayer(Player player) {
+        CompoundTag memories = entity.getTrackedValue(MEMORIES);
+        return memories == null ? 0 : memories.getCompound(player.getUUID().toString()).getInt("interactionFatigue");
+    }
+
     public Personality getPersonality() {
         return Personality.get(getPersonalityId()).orElse(Personality.UNASSIGNED);
     }
