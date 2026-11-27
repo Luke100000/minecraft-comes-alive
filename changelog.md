@@ -1,4 +1,4 @@
-# 7.8.0
+# 7.8.0-beta.1
 
 **Back up your world before updating.** MCA converts building and floor data from 7.7.36 when you load the world.
 
