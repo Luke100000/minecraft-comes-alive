@@ -9,24 +9,42 @@ import net.conczin.mca.resources.Rank;
 import net.conczin.mca.resources.Tasks;
 import net.conczin.mca.server.world.data.GraveyardManager;
 import net.conczin.mca.server.world.data.Village;
+import net.conczin.mca.util.MaxSizeHashMap;
+import net.minecraft.Util;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.level.ServerPlayer;
 
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 
 public record GetVillageRequest() implements HandleablePayload {
-    public static final CustomPacketPayload.Type<GetVillageRequest> TYPE = new CustomPacketPayload.Type<>(MCA.locate("get_village_request"));
-    public static final StreamCodec<FriendlyByteBuf, GetVillageRequest> STREAM_CODEC = StreamCodec.unit(new GetVillageRequest());
+    public static final CustomPacketPayload.Type<GetVillageRequest> TYPE =
+            new CustomPacketPayload.Type<>(MCA.locate("get_village_request"));
+    public static final StreamCodec<FriendlyByteBuf, GetVillageRequest> STREAM_CODEC =
+            StreamCodec.unit(new GetVillageRequest());
+    static final long REQUEST_COOLDOWN_MS = 200L;
+    private static final Map<UUID, Long> REQUEST_COOLDOWNS = Collections.synchronizedMap(new MaxSizeHashMap<>(256));
 
     @Override
     public void handleServer(ServerPlayer player) {
+        if (!ReportBuildingMessage.canUseBlueprint(player)) {
+            return;
+        }
+        long now = Util.getMillis();
+        Long nextAllowed = REQUEST_COOLDOWNS.get(player.getUUID());
+        if (nextAllowed != null && now < nextAllowed) {
+            return;
+        }
+        REQUEST_COOLDOWNS.put(player.getUUID(), now + REQUEST_COOLDOWN_MS);
+        sendResponse(player);
+    }
+
+    static void sendResponse(ServerPlayer player) {
         Optional<Village> village = Village.findNearest(player);
         if (village.isPresent()) {
             GraveyardManager.get(player.serverLevel()).reportToVillageManager(player);
-            village.get().updateMaxPopulation();
+            village.get().getMaxPopulation();
             int reputation = village.get().getReputation(player);
             boolean isVillage = village.get().isVillage();
             Rank rank = Tasks.getRank(village.get(), player);

@@ -1,0 +1,85 @@
+package net.conczin.mca.server.world.data;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Vec3i;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/** A grouped/open-air village site such as a Graveyard or Town Center. */
+public final class ExternalBuilding extends Building {
+    public ExternalBuilding(BlockPos pos) {
+        super(pos);
+    }
+
+    public ExternalBuilding(CompoundTag tag) {
+        super(tag);
+    }
+
+    @Override
+    public boolean isFunctionalRoom() {
+        return false;
+    }
+
+    @Override
+    public boolean isStrictScan() {
+        return false;
+    }
+
+    @Override
+    public boolean containsPos(Vec3i pos) {
+        return pos.closerThan(getCenter(), getBuildingType().getMargin());
+    }
+
+    public void validateBlocks(Level world) {
+        boolean changed = false;
+        var iterator = blocks.entrySet().iterator();
+        while (iterator.hasNext()) {
+            var positions = iterator.next();
+            changed |= positions.getValue().removeIf(pos -> {
+                if (world instanceof ServerLevel serverLevel
+                        && !serverLevel.hasChunk(pos.getX() >> 4, pos.getZ() >> 4)) {
+                    return false;
+                }
+                return !BuiltInRegistries.BLOCK.getKey(world.getBlockState(pos).getBlock()).equals(positions.getKey());
+            });
+            if (positions.getValue().isEmpty()) {
+                iterator.remove();
+                changed = true;
+            }
+        }
+        if (changed) invalidateBlocksView();
+    }
+
+    public void addPOI(Level world, BlockPos pos) {
+        if (world instanceof ServerLevel serverLevel && !serverLevel.hasChunk(pos.getX() >> 4, pos.getZ() >> 4)) {
+            return;
+        }
+        Block block = world.getBlockState(pos).getBlock();
+        removeBlock(block, pos);
+        addBlock(block, pos);
+        validateBlocks(world);
+
+        List<BlockPos> positions = new ArrayList<>(getBlockPosStream().toList());
+        if (positions.isEmpty()) {
+            return;
+        }
+        long sumX = 0L;
+        long sumY = 0L;
+        long sumZ = 0L;
+        for (BlockPos p : positions) {
+            sumX += p.getX();
+            sumY += p.getY();
+            sumZ += p.getZ();
+        }
+        int n = positions.size();
+        // External sites use their grouped POIs as display geometry; a one-cell footprint is enough.
+        BlockPos centroid = new BlockPos((int) (sumX / n), (int) (sumY / n), (int) (sumZ / n));
+        setGeometry(centroid, centroid, List.of());
+    }
+}

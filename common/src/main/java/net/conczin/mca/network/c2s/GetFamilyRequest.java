@@ -13,7 +13,6 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Mob;
 
-import java.util.stream.Stream;
 
 public record GetFamilyRequest() implements HandleablePayload {
     public static final CustomPacketPayload.Type<GetFamilyRequest> TYPE = new CustomPacketPayload.Type<>(MCA.locate("get_family_request"));
@@ -23,12 +22,9 @@ public record GetFamilyRequest() implements HandleablePayload {
     public void handleServer(ServerPlayer player) {
         CompoundTag familyData = new CompoundTag();
         PlayerSaveData playerData = PlayerSaveData.get(player);
-        Stream.concat(
-                        playerData.getFamilyEntry().getAllRelatives(4),
-                        playerData.getPartnerUUID().stream()
-                ).distinct()
+        playerData.getCallableFamilyIds().stream()
                 .map(uuid -> player.serverLevel().getEntity(uuid))
-                .filter(e -> e instanceof VillagerLike<?>)
+                .filter(e -> e instanceof VillagerLike<?> && e.isAlive())
                 .limit(100)
                 .forEach(e -> {
                     CompoundTag nbt = new CompoundTag();

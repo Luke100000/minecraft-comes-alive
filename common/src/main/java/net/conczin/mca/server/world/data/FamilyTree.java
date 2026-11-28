@@ -14,14 +14,11 @@ import net.minecraft.world.level.saveddata.SavedData;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.text.Normalizer;
 import java.util.*;
-import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 public class FamilyTree extends SavedData {
     private static final String DATA_ID = "MCA-FamilyTree";
-    private static final Pattern COMBINING_MARKS = Pattern.compile("\\p{M}");
 
     private final Map<UUID, FamilyTreeNode> entries;
 
@@ -46,30 +43,68 @@ public class FamilyTree extends SavedData {
         return id == null ? Optional.empty() : Optional.ofNullable(entries.get(id));
     }
 
+    public boolean isOrphan(FamilyTreeNode node) {
+        return node.streamParents()
+                .map(this::getOrEmpty)
+                .flatMap(Optional::stream)
+                .allMatch(FamilyTreeNode::isDeceased);
+    }
+
     public Stream<FamilyTreeNode> getAllWithName(String name) {
-        return entries.values().stream().filter(n -> n.getName().toLowerCase(Locale.ROOT).equals(name.toLowerCase(Locale.ROOT)));
+        String query = name.toLowerCase(Locale.ROOT);
+        return entries.values().stream().filter(n -> n.getName().toLowerCase(Locale.ROOT).equals(query));
     }
 
     public Stream<FamilyTreeNode> getAllWithNameContaining(String name) {
-        String query = normalizeNameSearch(name.trim());
+        String query = FamilyTreeNode.normalizeSearchName(name.trim());
         if (query.isEmpty()) {
             return Stream.empty();
         }
 
         return entries.values().stream()
-                .map(n -> new NameSearchResult(n, normalizeNameSearch(n.getName())))
+                .map(n -> new NameSearchResult(n, n.normalizedSearchName()))
                 .filter(result -> result.normalizedName().contains(query))
-                .sorted(Comparator
-                        .comparingInt((NameSearchResult result) -> result.normalizedName().startsWith(query) ? 0 : 1)
-                        .thenComparing(NameSearchResult::normalizedName)
-                        .thenComparing(result -> result.node().id()))
+                .sorted(nameSearchOrder(query))
                 .map(NameSearchResult::node);
     }
 
-    private static String normalizeNameSearch(String name) {
-        String normalized = Normalizer.normalize(name, Normalizer.Form.NFD);
-        return COMBINING_MARKS.matcher(normalized).replaceAll("")
-                .toLowerCase(Locale.ROOT);
+    public List<FamilyTreeNode> getAllWithNameContaining(String name, int limit) {
+        if (limit <= 0) {
+            return List.of();
+        }
+
+        String query = FamilyTreeNode.normalizeSearchName(name.trim());
+        if (query.isEmpty()) {
+            return List.of();
+        }
+
+        Comparator<NameSearchResult> order = nameSearchOrder(query);
+        PriorityQueue<NameSearchResult> bestMatches = new PriorityQueue<>(limit, order.reversed());
+        for (FamilyTreeNode node : entries.values()) {
+            String normalizedName = node.normalizedSearchName();
+            if (!normalizedName.contains(query)) {
+                continue;
+            }
+
+            NameSearchResult result = new NameSearchResult(node, normalizedName);
+            if (bestMatches.size() < limit) {
+                bestMatches.offer(result);
+            } else if (order.compare(result, bestMatches.peek()) < 0) {
+                bestMatches.poll();
+                bestMatches.offer(result);
+            }
+        }
+
+        List<NameSearchResult> ordered = new ArrayList<>(bestMatches);
+        ordered.sort(order);
+        return ordered.stream().map(NameSearchResult::node).toList();
+    }
+
+    private static Comparator<NameSearchResult> nameSearchOrder(String query) {
+        return Comparator
+                .comparingInt((NameSearchResult result) -> result.normalizedName().startsWith(query) ? 0 : 1)
+                .thenComparing(NameSearchResult::normalizedName)
+                .thenComparing(result -> result.node().id());
     }
 
     private record NameSearchResult(FamilyTreeNode node, String normalizedName) {

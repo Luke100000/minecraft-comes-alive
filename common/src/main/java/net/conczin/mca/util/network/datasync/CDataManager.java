@@ -32,6 +32,11 @@ public class CDataManager<E extends Entity> {
         return entry != null && entry.parameter == parameter;
     }
 
+    public boolean isParam(CParameter<?, ?> parameter, SynchedEntityData.DataValue<?> data) {
+        Entry<E, ?, ?> entry = forwardLookup.get(parameter);
+        return entry != null && entry.data.id() == data.id();
+    }
+
     @SuppressWarnings({"unchecked", "RedundantSuppression"})
     public <T, TrackedType> T get(E entity, CParameter<T, TrackedType> parameter) {
         //noinspection RedundantCast
@@ -100,7 +105,7 @@ public class CDataManager<E extends Entity> {
         }
 
         public void register(SynchedEntityData.Builder builder) {
-            builder.define(data, parameter.getDefault());
+            builder.define(data, data.serializer().copy(parameter.getDefault()));
         }
     }
 }

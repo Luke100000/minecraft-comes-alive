@@ -12,6 +12,7 @@ import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 
 public record AddCustomClothingMessage(String identifier, boolean isHair, String json) implements HandleablePayload {
@@ -31,17 +32,42 @@ public record AddCustomClothingMessage(String identifier, boolean isHair, String
 
     @Override
     public void handleServer(ServerPlayer player) {
-        if (!CustomClothingManager.canEdit(player)) {
+        if (!isValidLibraryId(identifier) || json.length() > 4096) {
             return;
         }
 
-        JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
-        if (isHair) {
-            Hair hair = new Hair(identifier, obj);
-            CustomClothingManager.getHair().addEntry(identifier, hair);
-        } else {
-            Clothing clothing = new Clothing(identifier, obj);
-            CustomClothingManager.getClothing().addEntry(identifier, clothing);
+        boolean alreadyExists = isHair
+                ? CustomClothingManager.getHair().getEntries().containsKey(identifier)
+                : CustomClothingManager.getClothing().getEntries().containsKey(identifier);
+        if (!CustomClothingManager.canAdd(player, alreadyExists)) {
+            return;
+        }
+
+        try {
+            JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
+            if (isHair) {
+                CustomClothingManager.getHair().addEntry(identifier, new Hair(identifier, obj));
+            } else {
+                CustomClothingManager.getClothing().addEntry(identifier, new Clothing(identifier, obj));
+            }
+        } catch (RuntimeException invalidPayload) {
+            MCA.LOGGER.warn("Ignoring invalid global skin data for {}", identifier);
+        }
+    }
+
+    static boolean isValidLibraryId(String identifier) {
+        ResourceLocation id = ResourceLocation.tryParse(identifier);
+        if (id == null || !"immersive_library".equals(id.getNamespace())
+                || !id.getPath().matches("[0-9]{1,10}")) {
+            return false;
+        }
+
+        // The library and its client-side texture cache both use integer content IDs.
+        // Reject aliases ("0012") so server entry keys match client cache keys.
+        try {
+            return id.getPath().equals(Integer.toString(Integer.parseInt(id.getPath())));
+        } catch (NumberFormatException outOfRange) {
+            return false;
         }
     }
 

@@ -3,7 +3,6 @@ package net.conczin.mca.client.gui.immersive_library;
 import com.google.gson.JsonObject;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
-import net.minecraft.Util;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -14,11 +13,12 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.Objects;
 
 public class Auth {
     private static final SecureRandom RANDOM = new SecureRandom();
 
-    private static String currentToken;
+    private static volatile String currentToken;
 
     private static String newToken() {
         byte[] bytes = new byte[32];
@@ -43,6 +43,10 @@ public class Auth {
 
     public static boolean hasToken() {
         return getToken() != null;
+    }
+
+    public static boolean isCurrentToken(String token) {
+        return Objects.equals(currentToken, token);
     }
 
     public static void saveToken() {
@@ -75,9 +79,8 @@ public class Auth {
         return Base64.getEncoder().encodeToString(json.toString().getBytes(StandardCharsets.UTF_8));
     }
 
-    public static void authenticate(String username) {
+    public static String authenticate(String username) {
         currentToken = newToken();
-        String url = Config.getInstance().immersiveLibraryUrl + "/v1/login?state=" + createDataState(username, currentToken);
-        Util.getPlatform().openUri(url);
+        return Config.getInstance().immersiveLibraryUrl + "/v1/login?state=" + createDataState(username, currentToken);
     }
 }

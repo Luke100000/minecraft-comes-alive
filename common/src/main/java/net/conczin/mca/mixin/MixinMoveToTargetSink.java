@@ -3,28 +3,146 @@ package net.conczin.mca.mixin;
 import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
+import net.conczin.mca.entity.ai.navigation.CombatEscapePositionTracker;
+import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
 import net.conczin.mca.entity.ai.navigation.MultiTargetPositionTracker;
+import net.conczin.mca.entity.ai.navigation.PathRequestDiagnostics;
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.PathfinderMob;
+import net.minecraft.world.entity.ai.behavior.EntityTracker;
 import net.minecraft.world.entity.ai.behavior.MoveToTargetSink;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.ai.navigation.PathNavigation;
 import net.minecraft.world.level.pathfinder.Path;
+import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
-
-import java.util.Set;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(MoveToTargetSink.class)
 abstract class MixinMoveToTargetSink {
+    @Shadow
+    @Nullable
+    private Path path;
+
+    @Unique
+    @Nullable
+    private WalkTarget mca$startedCommand;
+
     @Unique
     private static final String MCA_TRY_COMPUTE_PATH =
             "tryComputePath(Lnet/minecraft/world/entity/Mob;Lnet/minecraft/world/entity/ai/memory/WalkTarget;J)Z";
     @Unique
     private static final String MCA_REACHED_TARGET =
             "reachedTarget(Lnet/minecraft/world/entity/Mob;Lnet/minecraft/world/entity/ai/memory/WalkTarget;)Z";
+
+    @Inject(
+            method = "checkExtraStartConditions(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/entity/Mob;)Z",
+            at = @At("HEAD"),
+            cancellable = true
+    )
+    private void mca$waitForNativeSearchReadiness(ServerLevel level, Mob mob, CallbackInfoReturnable<Boolean> cir) {
+        if (mob instanceof VillagerEntityMCA
+                && mob.getNavigation() instanceof MCAGroundPathNavigation navigation
+                && !navigation.canUpdatePath()) {
+            cir.setReturnValue(false);
+        }
+    }
+
+    @Inject(method = MCA_TRY_COMPUTE_PATH, at = @At("HEAD"))
+    private void mca$clearFailureFromPreviousTarget(
+            Mob mob,
+            WalkTarget walkTarget,
+            long gameTime,
+            CallbackInfoReturnable<Boolean> cir
+    ) {
+        if (mob instanceof VillagerEntityMCA villager) {
+            WalkTargetFailureMemory.clearIfTargetChanged(villager, walkTarget);
+        }
+    }
+
+    @Inject(method = MCA_TRY_COMPUTE_PATH, at = @At("RETURN"))
+    private void mca$rememberFailureTarget(
+            Mob mob,
+            WalkTarget walkTarget,
+            long gameTime,
+            CallbackInfoReturnable<Boolean> cir
+    ) {
+        if (mob instanceof VillagerEntityMCA villager) {
+            WalkTargetFailureMemory.syncAfterVanillaPathAttempt(villager, walkTarget);
+        }
+    }
+
+    @WrapOperation(method = "start(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/entity/Mob;J)V",
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/ai/navigation/PathNavigation;moveTo(Lnet/minecraft/world/level/pathfinder/Path;D)Z"))
+    private boolean mca$trackAdmittedCommand(PathNavigation navigation, Path path, double speed,
+                                             Operation<Boolean> original, ServerLevel world, Mob mob, long gameTime) {
+        boolean admitted = original.call(navigation, path, speed);
+        if (mob instanceof VillagerEntityMCA && navigation instanceof MCAGroundPathNavigation mcaNavigation) {
+            mca$startedCommand = mob.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
+            if (admitted && mca$startedCommand != null) {
+                mcaNavigation.rememberAdmittedWalkTarget(mca$startedCommand, path);
+            }
+        }
+        return admitted;
+    }
+
+    @Inject(method = "tick(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/entity/Mob;J)V", at = @At("RETURN"))
+    private void mca$syncAdmittedPathMemory(ServerLevel world, Mob mob, long gameTime, CallbackInfo ci) {
+        if (mca$startedCommand != null && mob.getNavigation() instanceof MCAGroundPathNavigation navigation) {
+            navigation.syncAdmittedPathMemory(mca$startedCommand);
+        }
+    }
+
+    @Inject(method = "stop(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/entity/Mob;J)V",
+            at = @At("HEAD"), cancellable = true)
+    private void mca$preserveReplacementCommand(ServerLevel world, Mob mob, long gameTime, CallbackInfo ci) {
+        if (mca$startedCommand == null || !(mob.getNavigation() instanceof MCAGroundPathNavigation navigation)) {
+            return;
+        }
+        WalkTarget replacement = mob.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
+        if (replacement != null && replacement != mca$startedCommand
+                && !mca$isRepublishedEntityApproach(mca$startedCommand, replacement)) {
+            if (!navigation.retractWalkTarget(mca$startedCommand)
+                    && mob.getBrain().getMemoryInternal(MemoryModuleType.PATH).orElse(null) == path) {
+                mob.getBrain().eraseMemory(MemoryModuleType.PATH);
+            }
+            mca$startedCommand = null;
+            path = null;
+            ci.cancel();
+        }
+    }
+
+    @Unique
+    private static boolean mca$isRepublishedEntityApproach(WalkTarget started, WalkTarget replacement) {
+        // InteractTask republishes a new plain WalkTarget for the same player every tick.
+        // It is not a foreign takeover: allow vanilla stop to retire its failed path and
+        // erase WALK_TARGET, so the producer's retry delay can take effect.
+        return started.getClass() == WalkTarget.class && replacement.getClass() == WalkTarget.class
+                && started.getTarget() instanceof EntityTracker previousTarget
+                && replacement.getTarget() instanceof EntityTracker currentTarget
+                && previousTarget.getEntity() == currentTarget.getEntity()
+                && started.getSpeedModifier() == replacement.getSpeedModifier()
+                && started.getCloseEnoughDist() == replacement.getCloseEnoughDist();
+    }
+
+    @Inject(method = "stop(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/entity/Mob;J)V", at = @At("RETURN"))
+    private void mca$forgetStoppedCommand(ServerLevel world, Mob mob, long gameTime, CallbackInfo ci) {
+        if (mca$startedCommand != null && mob.getNavigation() instanceof MCAGroundPathNavigation navigation) {
+            navigation.forgetAdmittedWalkTarget(mca$startedCommand);
+        }
+        mca$startedCommand = null;
+    }
 
     @WrapOperation(
             method = MCA_TRY_COMPUTE_PATH,
@@ -43,18 +161,46 @@ abstract class MixinMoveToTargetSink {
             WalkTarget walkTarget,
             long gameTime
     ) {
-        if (!(walkTarget.getTarget() instanceof MultiTargetPositionTracker multiTarget)) {
-            return original.call(navigation, target, reachRange);
-        }
+        PathRequestDiagnostics.beginSinkRequest(mob);
+        try {
+            if (!(walkTarget.getTarget() instanceof MultiTargetPositionTracker multiTarget)) {
+                return original.call(navigation, target, reachRange);
+            }
 
-        Set<BlockPos> pathTargets = multiTarget.getPathTargets(mob);
-        if (pathTargets.isEmpty()) {
+            // Preserve vanilla MoveToTargetSink semantics: a non-null partial path is still
+            // useful progress, while vanilla tracks CANT_REACH_WALK_TARGET_SINCE separately.
+            return multiTarget.createPath(navigation, mob, reachRange);
+        } finally {
+            PathRequestDiagnostics.endSinkRequest();
+        }
+    }
+
+    @WrapOperation(
+            method = MCA_TRY_COMPUTE_PATH,
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lnet/minecraft/world/entity/ai/util/DefaultRandomPos;getPosTowards(Lnet/minecraft/world/entity/PathfinderMob;IILnet/minecraft/world/phys/Vec3;D)Lnet/minecraft/world/phys/Vec3;"
+            )
+    )
+    @Nullable
+    private Vec3 mca$skipRandomFallbackForCombatEscape(
+            PathfinderMob pathfinderMob,
+            int horizontalRange,
+            int verticalRange,
+            Vec3 target,
+            double maxAngle,
+            Operation<Vec3> original,
+            Mob mob,
+            WalkTarget walkTarget,
+            long gameTime
+    ) {
+        if (walkTarget.getTarget() instanceof CombatEscapePositionTracker) {
+            // Combat escape already supplies vetted tactical endpoints. If none can be
+            // pathfound this tick, let the producer retry instead of walking to an
+            // arbitrary vanilla fallback position that may point back into danger.
             return null;
         }
-
-        // Preserve vanilla MoveToTargetSink semantics: a non-null partial path is still
-        // useful progress, while vanilla tracks CANT_REACH_WALK_TARGET_SINCE separately.
-        return navigation.createPath(pathTargets, reachRange);
+        return original.call(pathfinderMob, horizontalRange, verticalRange, target, maxAngle);
     }
 
     @ModifyReturnValue(method = MCA_REACHED_TARGET, at = @At("RETURN"))

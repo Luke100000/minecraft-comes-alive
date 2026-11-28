@@ -16,6 +16,7 @@ import net.conczin.mca.util.network.datasync.CDataManager;
 import net.conczin.mca.util.network.datasync.CDataParameter;
 import net.conczin.mca.util.network.datasync.CParameter;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionResult;
@@ -34,7 +35,16 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
     private static final CDataParameter<Boolean> IS_PROCREATING = CParameter.create("IsProcreating", false);
     private static final CDataParameter<Integer> LAST_PROCREATION = CParameter.create("LastProcreation", 0);
     private final Pregnancy pregnancy;
-    private int procreateTick = -1;
+    private PendingProcreation pendingProcreation;
+
+    private static final class PendingProcreation {
+        private final int babyCount;
+        private int animationTicks = 60;
+
+        private PendingProcreation(int babyCount) {
+            this.babyCount = babyCount;
+        }
+    }
 
     public BreedableRelationship(VillagerEntityMCA entity) {
         super(entity);
@@ -55,17 +65,30 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
         return entity.getTrackedValue(IS_PROCREATING);
     }
 
-    public boolean mayProcreateAgain(long time) {
-        int intTime = (int) time;
-        Integer trackedValue = entity.getTrackedValue(LAST_PROCREATION);
-        int delta = intTime - trackedValue;
-        return trackedValue == 0 || delta < 0 || delta > Config.getInstance().procreationCooldown;
+    public void clearProcreation() {
+        pendingProcreation = null;
+        entity.setTrackedValue(IS_PROCREATING, false);
     }
 
-    public void startProcreating(long time) {
-        procreateTick = 60;
+    public boolean mayProcreateAgain(long time) {
+        int lastProcreation = entity.getTrackedValue(LAST_PROCREATION);
+        int elapsed = (int) time - lastProcreation;
+        return pendingProcreation == null
+                && (lastProcreation == 0 || elapsed < 0 || elapsed > Config.getInstance().procreationCooldown);
+    }
+
+    public boolean startProcreating(Entity spouse, long time) {
+        if (!mayProcreateAgain(time)) {
+            return false;
+        }
+        int count = pregnancy.rollBabyCount();
+        if (!pregnancy.hasRoomForBabies(spouse, count)) {
+            return false;
+        }
+
+        pendingProcreation = new PendingProcreation(count);
         entity.setTrackedValue(IS_PROCREATING, true);
-        entity.setTrackedValue(LAST_PROCREATION, (int) time);
+        return true;
     }
 
     public void tick(int age) {
@@ -73,22 +96,27 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
             pregnancy.tick();
         }
 
-        if (!isProcreating()) {
+        PendingProcreation attempt = pendingProcreation;
+        if (attempt == null) {
             return;
         }
 
-        if (procreateTick > 0) {
-            procreateTick--;
+        if (attempt.animationTicks > 0) {
+            attempt.animationTicks--;
             entity.getNavigation().stop();
             entity.level().broadcastEntityEvent(entity, Status.VILLAGER_HEARTS);
-        } else {
-            getFamilyTree().getOrCreate(entity);
-            getPartner().ifPresent(spouse -> {
-                pregnancy.procreate(spouse);
-
-                entity.setTrackedValue(IS_PROCREATING, false);
-            });
+            return;
         }
+
+        clearProcreation();
+        getFamilyTree().getOrCreate(entity);
+        getPartner().ifPresent(spouse -> {
+            if (pregnancy.procreate(spouse, attempt.babyCount)) {
+                entity.setTrackedValue(LAST_PROCREATION, (int) entity.level().getGameTime());
+            } else if (spouse instanceof ServerPlayer player) {
+                player.sendSystemMessage(Component.translatable("interaction.procreate.fail.inventoryfull"));
+            }
+        });
     }
 
     public void giveGift(ServerPlayer player, Memories memory) {
@@ -249,7 +277,7 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
 
         if (item == Items.GOLDEN_APPLE && entity.isBaby()) {
             // increase age by 20 minutes
-            entity.ageUp(1200 * 20);
+            entity.ageUp(1200);
             stack.shrink(1);
             return true;
         }

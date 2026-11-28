@@ -73,6 +73,18 @@ public class SkinPorter {
         stretch(image, 48, 52);
     }
 
+    /**
+     * Converts the four default-width arm UV islands to the vanilla slim layout.
+     * Four-pixel-wide side faces stay intact while the faces that become three
+     * pixels wide lose one center column.
+     */
+    public static void convertDefaultToSlim(NativeImage image) {
+        squeeze(image, 40, 20);
+        squeeze(image, 40, 36);
+        squeeze(image, 32, 52);
+        squeeze(image, 48, 52);
+    }
+
     private static void stretch(NativeImage image, int offsetX, int offsetY) {
         int target = offsetX + 16 - 1;
         int original = offsetX + 14 - 1;
@@ -97,6 +109,32 @@ public class SkinPorter {
             if (p != 1 && p != 5) {
                 original--;
             }
+        }
+    }
+
+    private static void squeeze(NativeImage image, int offsetX, int offsetY) {
+        // Side strip: default uses 4 + 4 + 4 columns after the west face,
+        // while slim uses 3 + 4 + 3. Preserve the 4-wide east face intact.
+        int[] sideSource = {4, 5, 7, 8, 9, 10, 11, 12, 13, 15};
+        for (int y = 0; y < 12; y++) {
+            for (int p = 0; p < sideSource.length; p++) {
+                image.setPixelRGBA(offsetX + 4 + p, offsetY + y,
+                        image.getPixelRGBA(offsetX + sideSource[p], offsetY + y));
+            }
+            image.setPixelRGBA(offsetX + 14, offsetY + y, 0);
+            image.setPixelRGBA(offsetX + 15, offsetY + y, 0);
+        }
+
+        // Top and bottom faces shrink from 4+4 columns to 3+3 columns.
+        int topY = offsetY - 4;
+        int[] topSource = {4, 5, 7, 8, 9, 11};
+        for (int y = 0; y < 4; y++) {
+            for (int p = 0; p < topSource.length; p++) {
+                image.setPixelRGBA(offsetX + 4 + p, topY + y,
+                        image.getPixelRGBA(offsetX + topSource[p], topY + y));
+            }
+            image.setPixelRGBA(offsetX + 10, topY + y, 0);
+            image.setPixelRGBA(offsetX + 11, topY + y, 0);
         }
     }
 

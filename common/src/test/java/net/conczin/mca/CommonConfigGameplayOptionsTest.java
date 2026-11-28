@@ -1,0 +1,83 @@
+package net.conczin.mca;
+
+import com.google.gson.Gson;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+class CommonConfigGameplayOptionsTest {
+    private static final Gson GSON = new Gson();
+
+    @Test
+    void gameplaySafetyOptionsDefaultEnabled() {
+        CommonConfig config = new CommonConfig();
+
+        assertTrue(config.archerArrowsIgnoreVillagers);
+        assertTrue(config.villagersInteractWithFenceGates);
+        assertFalse(config.villagersInteractWithAnyDoor);
+    }
+
+    @Test
+    void gameplaySafetyOptionsCanBeDisabledFromServerConfig() {
+        CommonConfig config = GSON.fromJson("""
+                {
+                  "archerArrowsIgnoreVillagers": false,
+                  "villagersInteractWithFenceGates": false,
+                  "villagersInteractWithAnyDoor": true
+                }
+                """, CommonConfig.class);
+
+        assertFalse(config.archerArrowsIgnoreVillagers);
+        assertFalse(config.villagersInteractWithFenceGates);
+        assertTrue(config.villagersInteractWithAnyDoor);
+    }
+
+    @Test
+    void destinyDiscoveryDefaultsToAutomaticWithNoBlacklist() {
+        CommonConfig config = new CommonConfig();
+
+        assertTrue(config.autoDiscoverDestinyLocations);
+        assertEquals(java.util.List.of(), config.destinySpawnLocationBlacklist);
+        assertFalse(config.destinyOverworldOnly);
+        assertEquals(java.util.List.of(), config.destinyDimensionBlacklist);
+    }
+
+    @Test
+    void destinyDiscoveryAndBlacklistsCanBeConfigured() {
+        CommonConfig config = GSON.fromJson("""
+                {
+                  "autoDiscoverDestinyLocations": false,
+                  "destinySpawnLocationBlacklist": ["ctov:*", "othermod:*large*"],
+                  "destinyOverworldOnly": true,
+                  "destinyDimensionBlacklist": ["minecraft:the_nether", "some_mod:*"]
+                }
+                """, CommonConfig.class);
+
+        assertFalse(config.autoDiscoverDestinyLocations);
+        assertEquals(
+                java.util.List.of("ctov:*", "othermod:*large*"),
+                config.destinySpawnLocationBlacklist
+        );
+        assertTrue(config.destinyOverworldOnly);
+        assertEquals(
+                java.util.List.of("minecraft:the_nether", "some_mod:*"),
+                config.destinyDimensionBlacklist
+        );
+    }
+
+    @Test
+    void publicSkinContributionsAreOptInAndDoNotChangeManagePermission() {
+        CommonConfig defaults = new CommonConfig();
+        assertFalse(defaults.allowEveryoneToAddContentGlobally);
+        assertEquals(3, defaults.addContentGloballyPermissionLevel);
+
+        CommonConfig contributionsAllowed = GSON.fromJson("""
+                {
+                  "allowEveryoneToAddContentGlobally": true,
+                  "addContentGloballyPermissionLevel": 4
+                }
+                """, CommonConfig.class);
+        assertTrue(contributionsAllowed.allowEveryoneToAddContentGlobally);
+        assertEquals(4, contributionsAllowed.addContentGloballyPermissionLevel);
+    }
+}

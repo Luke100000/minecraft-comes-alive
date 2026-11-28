@@ -16,7 +16,6 @@ import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FastColor;
-import net.minecraft.util.Mth;
 import net.minecraft.world.entity.animal.Sheep;
 import net.minecraft.world.item.DyeColor;
 
@@ -84,7 +83,10 @@ public class SkinExporter {
 
     public static ResourceLocation getSkin(VillagerLike<?> villager) {
         if (!MCA.isBlankString(villager.getSkin())) {
-            return ResourceLocation.parse(villager.getSkin());
+            ResourceLocation skin = ResourceLocation.tryParse(villager.getSkin());
+            if (skin != null) {
+                return skin;
+            }
         }
         int skin = (int) Math.min(4, Math.max(0, villager.getGenetics().getGene(Genetics.SKIN) * 5));
         return ResourceLocation.fromNamespaceAndPath("mca", "skins/skin/" + villager.getGenetics().getGender().getDataName() + "/" + skin + ".png");
@@ -122,10 +124,13 @@ public class SkinExporter {
         if (MCA.isBlankString(identifier)) {
             return null;
         }
-        if (identifier.startsWith("immersive_library:")) {
-            return SkinCache.getTextureIdentifier(Integer.parseInt(identifier.substring(18)));
+        if (SkinCache.isLibraryIdentifier(identifier)) {
+            return SkinCache.resolveTextureIdentifier(identifier);
         }
-        ResourceLocation id = ResourceLocation.parse(identifier);
+        ResourceLocation id = ResourceLocation.tryParse(identifier);
+        if (id == null) {
+            return null;
+        }
         ResourceLocation variantId = ResourceLocation.fromNamespaceAndPath(id.getNamespace(), id.getPath().replace("normal", variant));
         return Minecraft.getInstance().getResourceManager().getResource(variantId).isPresent() ? variantId : id;
     }
@@ -148,16 +153,17 @@ public class SkinExporter {
     }
 
     private static ResourceLocation getLibraryOrResourceIdentifier(String identifier) {
-        return identifier.startsWith("immersive_library:")
-                ? SkinCache.getTextureIdentifier(Integer.parseInt(identifier.substring(18)))
-                : ResourceLocation.parse(identifier);
+        return SkinCache.resolveTextureIdentifier(identifier);
     }
 
     private static ResourceLocation getOverlayIdentifier(String identifier) {
-        if (identifier.startsWith("immersive_library:") || !identifier.endsWith(".png")) {
+        if (SkinCache.isLibraryIdentifier(identifier) || !identifier.endsWith(".png")) {
             return null;
         }
-        ResourceLocation id = ResourceLocation.parse(identifier);
+        ResourceLocation id = ResourceLocation.tryParse(identifier);
+        if (id == null) {
+            return null;
+        }
         ResourceLocation overlay = ResourceLocation.fromNamespaceAndPath(id.getNamespace(), id.getPath().replace(".png", "_overlay.png"));
         return Minecraft.getInstance().getResourceManager().getResource(overlay).isPresent() ? overlay : null;
     }

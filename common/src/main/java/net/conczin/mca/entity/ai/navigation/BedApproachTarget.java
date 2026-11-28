@@ -1,19 +1,24 @@
 package net.conczin.mca.entity.ai.navigation;
 
+import net.conczin.mca.entity.ai.BedPoiCompatibility;
+import net.conczin.mca.entity.ai.PathingBlockInteraction;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.SectionPos;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.tags.BlockTags;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.vehicle.DismountHelper;
+import net.minecraft.world.level.CollisionGetter;
 import net.minecraft.world.level.block.BedBlock;
+import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.pathfinder.PathType;
-import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.Shapes;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.HashSet;
@@ -37,7 +42,7 @@ public final class BedApproachTarget implements MultiTargetPositionTracker {
 
     public static Optional<BedApproachTarget> create(ServerLevel level, BlockPos bedPos) {
         BlockState state = level.getBlockState(bedPos);
-        if (!isBedState(state)) {
+        if (!BedPoiCompatibility.isCompatibleBedState(state)) {
             return Optional.empty();
         }
 
@@ -46,7 +51,7 @@ public final class BedApproachTarget implements MultiTargetPositionTracker {
                 ? bedPos
                 : bedPos.relative(facing);
         BlockState headState = level.getBlockState(head);
-        return isBedHead(headState) && headState.getValue(BedBlock.FACING) == facing
+        return BedPoiCompatibility.isHomePoiState(headState) && headState.getValue(BedBlock.FACING) == facing
                 ? Optional.of(new BedApproachTarget(head))
                 : Optional.empty();
     }
@@ -91,27 +96,22 @@ public final class BedApproachTarget implements MultiTargetPositionTracker {
         }
 
         BlockPos navigationPos = navigationPosition(mob);
+        BlockPos behindFoot = getBehindFootPosition(bedState);
         for (BlockPos approach : getApproachPositions(bedState)) {
-            if (isAtApproach(mob, navigationPos, approach, closeEnoughDistance)) {
+            if (isAtApproach(mob, navigationPos, approach, closeEnoughDistance)
+                    && (approach.equals(behindFoot)
+                    || bedHead.closerToCenterThan(mob.position(), 2.0D))
+                    && mob.level().noCollision(mob, mob.getBoundingBox())) {
                 return true;
             }
         }
         return false;
     }
 
-    public boolean isAtBehindFootApproach(Mob mob) {
-        BlockState bedState = getBedHeadState(mob);
-        if (bedState == null) {
-            return false;
-        }
-
-        return isAtApproach(mob, navigationPosition(mob), getBehindFootPosition(bedState), 0);
-    }
-
     @Nullable
     private BlockState getBedHeadState(Mob mob) {
         BlockState state = mob.level().getBlockState(bedHead);
-        return isBedHead(state) ? state : null;
+        return BedPoiCompatibility.isHomePoiState(state) ? state : null;
     }
 
     private List<BlockPos> getApproachPositions(BlockState bedState) {
@@ -156,7 +156,7 @@ public final class BedApproachTarget implements MultiTargetPositionTracker {
                 standPosition.y + 0.5D,
                 standPosition.z
         );
-        PathType pathType = WalkNodeEvaluator.getPathTypeStatic(mob, pathTarget);
+        PathType pathType = MCAGroundPathNavigation.getLivePathType(mob, pathTarget);
         return pathType != PathType.OPEN && mob.getPathfindingMalus(pathType) >= 0.0F
                 ? pathTarget
                 : null;
@@ -167,6 +167,36 @@ public final class BedApproachTarget implements MultiTargetPositionTracker {
         Vec3 standPosition = DismountHelper.findSafeDismountLocation(
                 mob.getType(), mob.level(), approach, true
         );
+        BlockState state = mob.level().getBlockState(approach);
+        boolean doorway = state.getBlock() instanceof DoorBlock
+                || PathingBlockInteraction.canInteractWithFenceGate(state)
+                || PathingBlockInteraction.isDramaticDoorOpenable(state);
+        if (standPosition == null && doorway) {
+            // DismountHelper rejects 1-block-tall door panels and closed operable gates.
+            // Measure the supporting floor below and project operable doorways open here;
+            // isReached still requires live noCollision before sleep can start.
+            double floor = mob.level().getBlockFloorHeight(
+                    Shapes.empty(),
+                    () -> DismountHelper.nonClimbableShape(mob.level(), approach.below())
+            );
+            if (DismountHelper.isBlockFloorValid(floor)
+                    && (floor > 0.0D || !mob.getType().isBlockDangerous(mob.level().getBlockState(approach.below())))) {
+                Vec3 candidate = Vec3.upFromBottomCenterOf(approach, floor);
+                AABB typeBox = mob.getType().getDimensions().makeBoundingBox(candidate);
+                AABB mobBox = mob.getBoundingBox().move(
+                        candidate.x - mob.getX(),
+                        candidate.y - mob.getY(),
+                        candidate.z - mob.getZ()
+                );
+                CollisionGetter openedDoorway = new PathingCollisionView(mob.level(), approach, mob);
+                if (mob.level().getWorldBorder().isWithinBounds(typeBox)
+                        && hasLoadedCollisionChunks(mob.level(), typeBox)
+                        && openedDoorway.noBlockCollision(null, typeBox)
+                        && openedDoorway.noCollision(mob, mobBox)) {
+                    return candidate;
+                }
+            }
+        }
         if (standPosition == null) {
             return null;
         }
@@ -179,18 +209,23 @@ public final class BedApproachTarget implements MultiTargetPositionTracker {
         return mob.level().noCollision(mob, box) ? standPosition : null;
     }
 
+    private static boolean hasLoadedCollisionChunks(CollisionGetter level, AABB box) {
+        int minChunkX = SectionPos.blockToSectionCoord(Mth.floor(box.minX - 1.0E-7D) - 1);
+        int maxChunkX = SectionPos.blockToSectionCoord(Mth.floor(box.maxX + 1.0E-7D) + 1);
+        int minChunkZ = SectionPos.blockToSectionCoord(Mth.floor(box.minZ - 1.0E-7D) - 1);
+        int maxChunkZ = SectionPos.blockToSectionCoord(Mth.floor(box.maxZ + 1.0E-7D) + 1);
+        for (int chunkX = minChunkX; chunkX <= maxChunkX; chunkX++) {
+            for (int chunkZ = minChunkZ; chunkZ <= maxChunkZ; chunkZ++) {
+                if (level.getChunkForCollisions(chunkX, chunkZ) == null) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     private static BlockPos navigationPosition(Mob mob) {
         return BlockPos.containing(mob.getX(), mob.getY() + 0.5D, mob.getZ());
-    }
-
-    private static boolean isBedState(BlockState state) {
-        return state.is(BlockTags.BEDS)
-                && state.hasProperty(BedBlock.FACING)
-                && state.hasProperty(BedBlock.PART);
-    }
-
-    private static boolean isBedHead(BlockState state) {
-        return isBedState(state) && state.getValue(BedBlock.PART) == BedPart.HEAD;
     }
 
     private static boolean isAtApproach(Mob mob, BlockPos navigationPos, BlockPos approach, int closeEnoughDistance) {

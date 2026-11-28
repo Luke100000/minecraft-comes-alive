@@ -1,5 +1,6 @@
 package net.conczin.mca;
 
+import net.conczin.mca.client.gui.BlueprintScreen;
 import net.conczin.mca.client.gui.SkinLibraryScreen;
 import net.conczin.mca.client.resources.ClientSkinCatalog;
 import net.conczin.mca.client.tts.SpeechManager;
@@ -9,24 +10,28 @@ import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.c2s.ConfigRequest;
 import net.conczin.mca.network.c2s.PlayerDataRequest;
+import net.conczin.mca.registry.EntitiesMCA;
 import net.minecraft.client.Minecraft;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 
 import java.util.*;
 
 public class MCAClient {
-    public static final Map<UUID, VillagerLike<?>> playerData = new HashMap<>();
-    public static final Set<UUID> playerDataRequests = new HashSet<>();
+    private static final Map<UUID, VillagerLike<?>> playerData = new HashMap<>();
+    private static final Set<UUID> playerDataRequests = new HashSet<>();
     private static final DestinyManager destinyManager = new DestinyManager();
-    public static VillagerEntityMCA fallbackVillager;
+    private static VillagerEntityMCA fallbackVillager;
 
     public static DestinyManager getDestinyManager() {
         return destinyManager;
     }
 
     public static void onLogin() {
+        Config.setServerConfig(null);
         playerData.clear();
         playerDataRequests.clear();
+        fallbackVillager = null;
         ClientSkinCatalog.clear();
         Network.sendToServer(new ConfigRequest());
         ClientSkinCatalog.sync();
@@ -37,11 +42,28 @@ public class MCAClient {
             return Optional.empty();
         }
 
+        return getOrRequestPlayerData(uuid);
+    }
+
+    private static Optional<VillagerLike<?>> getOrRequestPlayerData(UUID uuid) {
         if (!playerDataRequests.contains(uuid) && Minecraft.getInstance().getConnection() != null) {
             playerDataRequests.add(uuid);
             Network.sendToServer(new PlayerDataRequest(uuid));
         }
         return Optional.ofNullable(playerData.get(uuid));
+    }
+
+    public static VillagerLike<?> resolveVillager(Entity entity) {
+        if (entity instanceof VillagerLike<?> villager) {
+            return villager;
+        }
+        if (fallbackVillager == null) {
+            fallbackVillager = Objects.requireNonNull(
+                    EntitiesMCA.MALE_VILLAGER.create(entity.level()),
+                    "Failed to create fallback MCA villager"
+            );
+        }
+        return playerData.getOrDefault(entity.getUUID(), fallbackVillager);
     }
 
     public static boolean useExpandedPersonalityTranslations() {
@@ -57,23 +79,28 @@ public class MCAClient {
     }
 
     public static boolean useGeneticsRenderer(UUID uuid) {
-        return isPlayerRendererAllowed() && getGeneticsPlayerData(uuid).isPresent();
+        return getRenderedGeneticsPlayerData(uuid).isPresent();
+    }
+
+    static Optional<VillagerLike<?>> getRenderedGeneticsPlayerData(UUID uuid) {
+        if (!isPlayerRendererAllowed()) {
+            return Optional.empty();
+        }
+        return getOrRequestPlayerData(uuid).filter(data -> data.getPlayerModel() != VillagerLike.PlayerModel.VANILLA);
     }
 
     public static boolean useVillagerRenderer(UUID uuid) {
-        return isPlayerRendererAllowed() && getGeneticsPlayerData(uuid)
+        return isPlayerRendererAllowed() && getOrRequestPlayerData(uuid)
                 .filter(data -> data.getPlayerModel() == VillagerLike.PlayerModel.VILLAGER)
                 .isPresent();
     }
 
     public static boolean renderArms(UUID uuid, String key) {
-        return useVillagerRenderer(uuid) &&
-               Config.getInstance().playerRendererBlacklist.entrySet().stream()
-                       .filter(entry -> entry.getValue().equals("arms") || entry.getValue().equals(key))
-                       .noneMatch(entry -> MCA.platformHelper.isModLoaded(entry.getKey()));
+        return useVillagerRenderer(uuid) && !isRendererBlocked("arms", key);
     }
 
     public static void tickClient(Minecraft client) {
+        BlueprintScreen.maintainSessionState(client);
         destinyManager.tick(client);
 
         if (KeyBindings.SKIN_LIBRARY.consumeClick()) {
@@ -121,24 +148,25 @@ public class MCAClient {
     }
 
     public static boolean isPlayerRendererAllowed() {
-        return Config.getInstance().enableVillagerPlayerModel &&
-               Config.getInstance().playerRendererBlacklist.entrySet().stream()
-                       .filter(entry -> entry.getValue().equals("all") || entry.getValue().equals("block_player"))
-                       .noneMatch(entry -> MCA.platformHelper.isModLoaded(entry.getKey()));
+        return Config.getInstance().enableVillagerPlayerModel && !isRendererBlocked("all", "block_player");
     }
 
     public static boolean isVillagerRendererAllowed() {
-        return !Config.getInstance().forceVillagerPlayerModel &&
-               Config.getInstance().playerRendererBlacklist.entrySet().stream()
-                       .filter(entry -> entry.getValue().equals("all") || entry.getValue().equals("block_villager"))
-                       .noneMatch(entry -> MCA.platformHelper.isModLoaded(entry.getKey()));
+        return !Config.getInstance().forceVillagerPlayerModel && !isRendererBlocked("all", "block_villager");
     }
 
     public static boolean areShadersAllowed(String key) {
-        return Config.getInstance().enablePlayerShaders &&
-               Config.getInstance().playerRendererBlacklist.entrySet().stream()
-                       .filter(entry -> entry.getValue().equals("shaders") || entry.getValue().equals(key))
-                       .noneMatch(entry -> MCA.platformHelper.isModLoaded(entry.getKey()));
+        return Config.getInstance().enablePlayerShaders && !isRendererBlocked("shaders", key);
+    }
+
+    private static boolean isRendererBlocked(String category, String key) {
+        for (var entry : Config.getInstance().playerRendererBlacklist.entrySet()) {
+            String value = entry.getValue();
+            if ((value.equals(category) || value.equals(key)) && MCA.platformHelper.isModLoaded(entry.getKey())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static boolean areShadersAllowed() {

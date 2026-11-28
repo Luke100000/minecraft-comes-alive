@@ -2,7 +2,8 @@ package net.conczin.mca.network.c2s;
 
 import net.conczin.mca.MCA;
 import net.conczin.mca.network.HandleablePayload;
-import net.conczin.mca.server.world.data.VillageManager;
+import net.conczin.mca.resources.Rank;
+import net.conczin.mca.server.world.data.Village;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
@@ -11,15 +12,30 @@ import net.minecraft.server.level.ServerPlayer;
 
 public record RenameVillageMessage(int id, String name) implements HandleablePayload {
     public static final CustomPacketPayload.Type<RenameVillageMessage> TYPE = new CustomPacketPayload.Type<>(MCA.locate("rename_village"));
+    static final int MAX_NAME_LENGTH = 32;
     public static final StreamCodec<FriendlyByteBuf, RenameVillageMessage> STREAM_CODEC = StreamCodec.composite(
             ByteBufCodecs.INT, RenameVillageMessage::id,
-            ByteBufCodecs.STRING_UTF8, RenameVillageMessage::name,
+            ByteBufCodecs.stringUtf8(MAX_NAME_LENGTH), RenameVillageMessage::name,
             RenameVillageMessage::new
     );
 
     @Override
     public void handleServer(ServerPlayer player) {
-        VillageManager.get(player.serverLevel()).getOrEmpty(id).ifPresent(v -> v.setName(name));
+        if (!ReportBuildingMessage.canUseBlueprint(player)) {
+            return;
+        }
+        Village.findNearest(player).ifPresent(village -> {
+            if (ReportBuildingMessage.hasVillagePermission(player, village, Rank.PEASANT)) {
+                applyTo(village);
+            }
+        });
+    }
+
+    public void applyTo(Village village) {
+        if (village == null || village.getId() != id || name == null || name.isBlank() || name.length() > MAX_NAME_LENGTH) {
+            return;
+        }
+        village.setName(name);
     }
 
     @Override

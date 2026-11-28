@@ -1,12 +1,12 @@
 package net.conczin.mca.entity.ai;
 
-import net.conczin.mca.MCAClient;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.entity.ai.relationship.Personality;
 import net.minecraft.locale.Language;
 import net.minecraft.util.RandomSource;
 
 import java.util.*;
+import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -69,7 +69,7 @@ public enum DialogueType {
         return Optional.empty();
     }
 
-    public static String applyFallback(String key) {
+    public static String applyFallback(String key, BooleanSupplier useExpandedPersonalityTranslations) {
         if (!key.contains("#")) {
             return key;
         }
@@ -102,11 +102,13 @@ public enum DialogueType {
         }
 
         //then try personality
-        if (flags.containsKey("E") && MCAClient.useExpandedPersonalityTranslations()) {
+        if (flags.containsKey("E") && useExpandedPersonalityTranslations.getAsBoolean()) {
             String personality = Personality.getDialoguePrefix(flags.get("E"));
-            Optional<String> p = getPrefixedPhrase(type, personality, key);
-            if (p.isPresent()) {
-                return p.get();
+            if (!(type.isPlayerChild() && personality.equals(Personality.FLIRTY.getDialoguePrefix()))) {
+                Optional<String> p = getPrefixedPhrase(type, personality, key);
+                if (p.isPresent()) {
+                    return p.get();
+                }
             }
         }
 
@@ -142,5 +144,9 @@ public enum DialogueType {
             case ADULT -> ADULTP;
             default -> UNASSIGNED;
         };
+    }
+
+    private boolean isPlayerChild() {
+        return this == TODDLERP || this == CHILDP || this == TEENP || this == ADULTP;
     }
 }

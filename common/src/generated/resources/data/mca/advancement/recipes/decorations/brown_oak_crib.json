@@ -28,6 +28,5 @@
     "recipes": [
       "mca:brown_oak_crib"
     ]
-  },
-  "sends_telemetry_event": false
+  }
 }

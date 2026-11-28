@@ -18,24 +18,26 @@ import net.conczin.mca.resources.data.skin.HairStyle;
 import net.conczin.mca.resources.data.skin.LayeredHair;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
 import net.conczin.mca.server.world.data.PlayerSaveData;
+import net.conczin.mca.util.InventoryUtils;
 import net.conczin.mca.util.network.datasync.*;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.syncher.EntityDataAccessor;
+import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.FastColor;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.EquipmentSlot;
-import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.entity.npc.VillagerDataHolder;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.DyeColor;
@@ -49,9 +51,17 @@ import java.util.function.ToDoubleFunction;
 import static net.minecraft.world.entity.LivingEntity.getSlotForHand;
 
 public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrackedEntity<E>, VillagerDataHolder, Infectable, Messenger {
+    float MAX_PHYSICAL_SCALE = 0.999F;
+    /** PlayerRenderer's model scale; vanilla player dimensions are measured against the model at this scale. */
+    float PLAYER_RENDER_SCALE = 0.9375F;
+    /** PlayerModel height (32 px) before renderer scaling. MCA renders the model without PLAYER_RENDER_SCALE. */
+    float PLAYER_MODEL_HEIGHT = 2.0F;
+    float PLAYER_MODEL_EYE_HEIGHT = Player.DEFAULT_EYE_HEIGHT / PLAYER_RENDER_SCALE;
+    float PLAYER_MODEL_NAME_TAG_HEIGHT = Player.STANDING_DIMENSIONS.height() / PLAYER_RENDER_SCALE;
     CDataParameter<String> CLOTHES = CParameter.create("Clothes", "");
     CDataParameter<Boolean> CLOTHING_LOCKED = CParameter.create("ClothingLocked", false);
     CDataParameter<String> SKIN = CParameter.create("Skin", "");
+    CDataParameter<Boolean> SLIM = CParameter.create("Slim", false);
     CDataParameter<String> HAIR = CParameter.create("Hair", "");
     CDataParameter<String> HAIR_STYLE = CParameter.create("HairStyle", "");
     CDataParameter<String> HAIR_BASE = CParameter.create("HairBase", "");
@@ -71,7 +81,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     static <E extends Entity> CDataManager.Builder<E> createTrackedData(Class<E> type) {
         return new CDataManager.Builder<>(type)
                 .addAll(CLOTHES, CLOTHING_LOCKED, SKIN, HAIR, HAIR_STYLE, HAIR_BASE, HAIR_BANGS, HAIR_BACK, HAIR_FRONT, HAIR_EXTRA,
-                        SKIN_COLOR, HAIR_COLOR, EYE_COLOR, EYE_COLOR_LEFT, AGE_STATE)
+                        SKIN_COLOR, HAIR_COLOR, EYE_COLOR, EYE_COLOR_LEFT, AGE_STATE, SLIM)
                 .add(Genetics::createTrackedData)
                 .add(Traits::createTrackedData)
                 .add(VillagerBrain::createTrackedData);
@@ -235,6 +245,14 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         return getTrackedValue(SKIN);
     }
 
+    default boolean isSlim() {
+        return getTrackedValue(SLIM);
+    }
+
+    default void setSlim(boolean slim) {
+        setTrackedValue(SLIM, slim);
+    }
+
     default void setSkin(String skin) {
         setTrackedValue(SKIN, skin);
     }
@@ -384,6 +402,20 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         return getAgeState();
     }
 
+    default boolean affectsDimensions(EntityDataAccessor<?> accessor) {
+        CDataManager<?> data = getTypeDataManager();
+        return data.isParam(AGE_STATE, accessor)
+                || Genetics.affectsDimensions(data, accessor)
+                || Traits.affectsDimensions(data, accessor);
+    }
+
+    default boolean affectsDimensions(SynchedEntityData.DataValue<?> value) {
+        CDataManager<?> data = getTypeDataManager();
+        return data.isParam(AGE_STATE, value)
+                || Genetics.affectsDimensions(data, value)
+                || Traits.affectsDimensions(data, value);
+    }
+
     default void updateAttributes() {
         float speed = 1.0f;
         if (getTraits().hasTrait(Traits.ATHLETIC)) {
@@ -429,26 +461,29 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         return old != AgeState.UNASSIGNED;
     }
 
-    default float getHorizontalScaleFactor() {
-        if (getGenetics() == null || Config.getInstance().useSquidwardModels) {
-            return asEntity().isBaby() ? 0.5f : 1.0f;
-        } else {
-            return Math.min(0.999f, getRawHorizontalScaleFactor());
-        }
+    /** Scale used by collision/physical dimensions. */
+    default float getPhysicalHorizontalScaleFactor() {
+        return Math.min(MAX_PHYSICAL_SCALE, getVisualHorizontalScaleFactor());
     }
 
-    default float getRawHorizontalScaleFactor() {
+    /** Uncapped scale used by the rendered model. */
+    default float getVisualHorizontalScaleFactor() {
+        if (getGenetics() == null || Config.getInstance().useSquidwardModels) {
+            return asEntity().isBaby() ? 0.5f : 1.0f;
+        }
         return getGenetics().getHorizontalScaleFactor()
                * getTraits().getHorizontalScaleFactor()
                * getVillagerDimensions().getWidth()
                * getGenetics().getGender().getHorizontalScaleFactor();
     }
 
-    default float getVerticalScaleFactor() {
-        return Math.min(0.999f, getRawVerticalScaleFactor());
+    /** Scale used by collision/physical dimensions. */
+    default float getPhysicalVerticalScaleFactor() {
+        return Math.min(MAX_PHYSICAL_SCALE, getVisualVerticalScaleFactor());
     }
 
-    default float getRawVerticalScaleFactor() {
+    /** Uncapped scale used by the rendered model. */
+    default float getVisualVerticalScaleFactor() {
         if (getGenetics() == null || Config.getInstance().useSquidwardModels) {
             return asEntity().isBaby() ? 0.5f : 1.0f;
         } else {
@@ -457,6 +492,21 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
                    * getVillagerDimensions().getHeight()
                    * getGenetics().getGender().getScaleFactor();
         }
+    }
+
+    /** Name tag anchor: vanilla's player name tag height, converted to the rendered PlayerModel scale. */
+    default float getVisualNameTagHeight() {
+        return PLAYER_MODEL_NAME_TAG_HEIGHT * getVisualVerticalScaleFactor();
+    }
+
+    /** Collision height; capped so villagers fit through two-block gaps. */
+    default float getPhysicalStandingHeight() {
+        return PLAYER_MODEL_HEIGHT * getPhysicalVerticalScaleFactor();
+    }
+
+    /** Eye height at the PlayerModel's eye line for the capped physical size. */
+    default float getPhysicalStandingEyeHeight() {
+        return PLAYER_MODEL_EYE_HEIGHT * getPhysicalVerticalScaleFactor();
     }
 
     @Override
@@ -543,6 +593,33 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         setHairStyleId("");
     }
 
+    default void restoreGenderAfterLoad() {
+        if (getGenetics().getGender() == Gender.UNASSIGNED) {
+            EntityType<?> type = asEntity().getType();
+            getGenetics().setGender(type == EntitiesMCA.FEMALE_VILLAGER || type == EntitiesMCA.FEMALE_ZOMBIE_VILLAGER
+                    ? Gender.FEMALE : Gender.MALE);
+        }
+    }
+
+    default void restoreMissingAppearance(CompoundTag data) {
+        if (asEntity().level().isClientSide) {
+            return;
+        }
+
+        if (!data.contains("Skin", Tag.TAG_STRING)) {
+            randomizeSkin();
+        }
+        if (!data.contains("Hair", Tag.TAG_STRING)
+                && !data.contains("HairStyle", Tag.TAG_STRING)
+                && !data.contains("HairBase", Tag.TAG_STRING)
+                && !data.contains("HairBangs", Tag.TAG_STRING)
+                && !data.contains("HairBack", Tag.TAG_STRING)
+                && !data.contains("HairFront", Tag.TAG_STRING)
+                && !data.contains("HairExtra", Tag.TAG_STRING)) {
+            randomizeHair();
+        }
+    }
+
     default void validateClothes() {
         if (!asEntity().level().isClientSide) {
             migrateLegacyHairStyle();
@@ -617,6 +694,14 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
             return null;
         }
 
+        // Discard does not wake a sleeper or release its HOME. Finish that lifecycle
+        // before copying position so the replacement also starts at the safe wake-up spot.
+        if (source.isSleeping()) {
+            source.stopSleeping();
+        }
+        if (source instanceof Villager villager) {
+            villager.releasePoi(MemoryModuleType.HOME);
+        }
         Entity vehicle = source.getVehicle();
         converted.copyPosition(source);
         converted.setBaby(source.isBaby());
@@ -633,7 +718,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
             converted.setCanPickUpLoot(source.canPickUpLoot());
             for (EquipmentSlot slot : EquipmentSlot.values()) {
                 ItemStack stack = source.getItemBySlot(slot);
-                if (!stack.isEmpty()) {
+                if (!stack.isEmpty() && !InventoryUtils.isTemporary(stack)) {
                     converted.setItemSlot(slot, stack.copyAndClear());
                     converted.setDropChance(slot, (float) dropChanceGetter.applyAsDouble(slot));
                 }
@@ -662,6 +747,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     default void readNbtForConversion(CompoundTag input) {
         this.getTypeDataManager().load((E) asEntity(), input);
         readAdditionalConversionData(input);
+        asEntity().refreshDimensions();
     }
 
     default void writeAdditionalConversionData(CompoundTag output) {

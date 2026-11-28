@@ -1,7 +1,9 @@
 package net.conczin.mca.mixin;
 
+import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.registry.ProfessionsMCA;
 import net.minecraft.world.damagesource.DamageSource;
@@ -14,6 +16,13 @@ import org.spongepowered.asm.mixin.injection.At;
 
 @Mixin(AbstractArrow.class)
 abstract class MixinAbstractArrow {
+    @ModifyReturnValue(method = "canHitEntity", at = @At("RETURN"))
+    private boolean mca$ignoreVillagersForArcherArrows(boolean original, Entity target) {
+        return original && !(Config.getServerConfig().archerArrowsIgnoreVillagers
+                && VillagerEntityMCA.isVillageFriendly(target)
+                && mca$getMcaArcherOwner() != null);
+    }
+
     @WrapOperation(
             method = "onHitEntity",
             at = @At(
@@ -28,12 +37,8 @@ abstract class MixinAbstractArrow {
             Operation<Boolean> original
     ) {
         VillagerEntityMCA archer = mca$getMcaArcherOwner();
-        if (!(target instanceof LivingEntity livingTarget) || archer == null) {
+        if (target.level().isClientSide() || !(target instanceof LivingEntity livingTarget) || archer == null) {
             return original.call(target, source, damage);
-        }
-
-        if (target.level().isClientSide()) {
-            return true;
         }
 
         livingTarget.invulnerableTime = 0;
