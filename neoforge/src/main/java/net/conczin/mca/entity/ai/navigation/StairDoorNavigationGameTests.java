@@ -40,6 +40,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DoorBlock;
+import net.minecraft.world.level.block.SlabBlock;
 import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
@@ -53,6 +54,7 @@ import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.level.pathfinder.PathComputationType;
 import net.minecraft.world.level.block.state.properties.DoorHingeSide;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
+import net.minecraft.world.level.block.state.properties.SlabType;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
 import net.minecraft.world.phys.Vec3;
@@ -861,6 +863,33 @@ public final class StairDoorNavigationGameTests {
                         && actor.getY() >= driftTop.getY() + 0.35D,
                 "Villager must climb the 1-block side step and stand on 4-layer snow: pos="
                         + actor.position() + ", path=" + describe(actor.getNavigation().getPath())));
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 160)
+    public static void diagonalLedgeJumpAvoidsRaisedSnowUnderLowEave(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos start = helper.absolutePos(new BlockPos(40, 3, 40));
+        prepareArea(helper, start, 6, 6);
+        BlockPos snow = start.south();
+        BlockPos ledge = snow.west();
+        level.setBlock(snow, Blocks.SNOW.defaultBlockState().setValue(BlockStateProperties.LAYERS, 4), 3);
+        level.setBlock(ledge, Blocks.SNOW_BLOCK.defaultBlockState(), 3);
+        level.setBlock(snow.above(3), Blocks.SPRUCE_SLAB.defaultBlockState().setValue(SlabBlock.TYPE, SlabType.TOP), 3);
+        level.setBlock(ledge.above(3), Blocks.SPRUCE_PLANKS.defaultBlockState(), 3);
+        // The wall biases the diagonal toward the snow in the same way as the house facade.
+        level.setBlock(snow.south(), Blocks.STRIPPED_SPRUCE_WOOD.defaultBlockState(), 3);
+        level.setBlock(snow.south().above(), Blocks.STRIPPED_SPRUCE_WOOD.defaultBlockState(), 3);
+
+        VillagerEntityMCA actor = spawnProbe(helper, Vec3.atBottomCenterOf(start));
+        actor.getGenetics().setGene(Genetics.SIZE, 0.65F);
+        actor.refreshDimensions();
+        BlockPos target = ledge.above();
+        Path path = actor.getNavigation().createPath(target, 0);
+        helper.assertTrue(path != null && path.canReach() && path.getNodeCount() > 2,
+                "The eave needs a route using a cardinal approach around the raised snow: " + describe(path));
+        startWalking(helper, actor, target, true);
+        helper.succeedWhen(() -> helper.assertTrue(actor.onGround() && actor.blockPosition().equals(target),
+                "The villager must physically climb onto the ledge: " + actor.position()));
     }
 
     private static void enter(GameTestHelper helper, boolean mca) {

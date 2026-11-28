@@ -389,7 +389,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
                 if (destinationBox.minY - originBox.minY > this.mob.maxUpStep()
                         && this.currentContext.getBlockState(originPos)
                                 .getCollisionShape(this.currentContext.level(), originPos).isEmpty()
-                        && !canApproachDiagonalJump(origin, candidate, originBox)) {
+                        && !canApproachDiagonalJump(origin, candidate, originBox, destinationBox)) {
                     continue;
                 }
             }
@@ -442,7 +442,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         return getMobBoxAt(candidate).minY - departureFloor > this.mob.maxUpStep();
     }
 
-    private boolean canApproachDiagonalJump(Node origin, Node candidate, AABB originBox) {
+    private boolean canApproachDiagonalJump(Node origin, Node candidate, AABB originBox, AABB destinationBox) {
         double dx = candidate.x + 0.5D - (originBox.minX + originBox.maxX) * 0.5D;
         double dz = candidate.z + 0.5D - (originBox.minZ + originBox.maxZ) * 0.5D;
         double jumpRangeSqr = Math.max(1.0F, this.mob.getBbWidth());
@@ -460,8 +460,30 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
                 return false;
             }
         }
-        return !blocksJumpApproach(candidate.x, origin.y, origin.z, approachBox)
-                || !blocksJumpApproach(origin.x, origin.y, candidate.z, approachBox);
+        if (blocksJumpApproach(candidate.x, origin.y, origin.z, approachBox)
+                && blocksJumpApproach(origin.x, origin.y, candidate.z, approachBox)) {
+            return false;
+        }
+        return canJumpFromRaisedFlank(origin, candidate, originBox, destinationBox,
+                new BlockPos(candidate.x, origin.y, origin.z))
+                && canJumpFromRaisedFlank(origin, candidate, originBox, destinationBox,
+                        new BlockPos(origin.x, origin.y, candidate.z));
+    }
+
+    private boolean canJumpFromRaisedFlank(Node origin, Node candidate, AABB originBox, AABB destinationBox, BlockPos flank) {
+        BlockState state = this.currentContext.getBlockState(flank);
+        if (state.isAir() || !state.isPathfindable(PathComputationType.LAND)) {
+            return true;
+        }
+        Vec3 standing = PathNodeGeometry.walkingPosition(this.currentContext.level(), flank, this.mob, this.getFloorLevel(flank));
+        double rise = standing.y - originBox.minY + FLOOR_EPSILON;
+        if (rise <= RAISED_START_EPSILON || rise > this.mob.maxUpStep() + FLOOR_EPSILON) {
+            return true;
+        }
+        // The approach can step onto this flank before MoveControl requests the jump.
+        AABB departureBox = PathNodeGeometry.bodyAt(this.mob, standing).move(0.0D, FLOOR_EPSILON, 0.0D);
+        return canSweepTo(departureBox, destinationBox,
+                new PathingCollisionView(this.currentContext.level(), origin, candidate, this.mob));
     }
 
     private boolean blocksJumpApproach(int x, int y, int z, AABB approachBox) {
