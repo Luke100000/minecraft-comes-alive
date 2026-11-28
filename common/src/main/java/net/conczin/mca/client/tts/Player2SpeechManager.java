@@ -37,7 +37,11 @@ public class Player2SpeechManager extends RealtimeSpeechManager {
                 "{\"play_in_app\": true, \"speed\": %s, \"text\": \"%s\", \"voice_ids\": [\"%s\"]}",
                 pitch, text, voiceId
         );
-        download(null, url, payload, "");
+        try {
+            download(null, url, payload, "");
+        } catch (IOException | IllegalArgumentException e) {
+            MCA.LOGGER.warn("Failed to download audio: {}", e.getMessage());
+        }
     }
 
     public List<String> getVoices(String languageCode, String gender) {

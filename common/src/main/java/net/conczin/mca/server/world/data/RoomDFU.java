@@ -183,8 +183,22 @@ final class RoomDFU {
     private record FloorRef(int structureId, int floorId) {
     }
 
+    private record ReleasedRoom(CompoundTag tag, FloorRef floor, Set<BlockPos> cells) {
+    }
+
     private static Result migrateReleasedFloors(CompoundTag villageTag) {
         boolean quarantinedData = false;
+        List<ReleasedRoom> savedRooms = new ArrayList<>();
+        Map<FloorRef, Set<BlockPos>> roomCellsByFloor = new HashMap<>();
+        for (Tag value : villageTag.getList("buildings", Tag.TAG_COMPOUND)) {
+            CompoundTag room = (CompoundTag) value;
+            FloorRef floor = new FloorRef(room.getInt("structureId"), room.getInt("floorId"));
+            ListTag regions = room.getList("floorRegions", Tag.TAG_COMPOUND);
+            Set<BlockPos> cells = regions.isEmpty() ? Set.of() : loadLegacyFloorRegion(regions.getCompound(0)).cells();
+            savedRooms.add(new ReleasedRoom(room, floor, cells));
+            roomCellsByFloor.computeIfAbsent(floor, ignored -> new HashSet<>()).addAll(cells);
+        }
+
         Map<Integer, Structure> structures = new HashMap<>();
         Map<Integer, CompoundTag> oldStructureTags = new HashMap<>();
         for (Tag value : villageTag.getList("structures", Tag.TAG_COMPOUND)) {
@@ -192,7 +206,9 @@ final class RoomDFU {
             int id = oldStructure.getInt("id");
             int logicalBuildingId = oldStructure.contains("buildingId", Tag.TAG_INT) ? oldStructure.getInt("buildingId") : id;
             List<StructureFloor> floors = oldStructure.getList("floors", Tag.TAG_COMPOUND).stream()
-                    .map(tag -> migrateReleasedFloor((CompoundTag) tag))
+                    .map(CompoundTag.class::cast)
+                    .map(floor -> migrateReleasedFloor(floor,
+                            roomCellsByFloor.getOrDefault(new FloorRef(id, floor.getInt("id")), Set.of())))
                     .toList();
             if (floors.isEmpty()) {
                 MCA.LOGGER.warn("Quarantining legacy structure {} with no floors", id);
@@ -211,20 +227,20 @@ final class RoomDFU {
 
         Map<Integer, Building> rooms = new HashMap<>();
         Map<Integer, Boolean> inheritanceByRoom = new HashMap<>();
-        for (Tag value : villageTag.getList("buildings", Tag.TAG_COMPOUND)) {
-            CompoundTag oldRoom = (CompoundTag) value;
-            int structureId = oldRoom.getInt("structureId");
-            int floorId = oldRoom.getInt("floorId");
+        for (ReleasedRoom savedRoom : savedRooms) {
+            CompoundTag oldRoom = savedRoom.tag();
+            int structureId = savedRoom.floor().structureId();
+            int floorId = savedRoom.floor().floorId();
             boolean inheritanceEnabled = !oldRoom.contains("inheritanceEnabled", Tag.TAG_BYTE)
                     || oldRoom.getBoolean("inheritanceEnabled");
             inheritanceByRoom.put(oldRoom.getInt("id"), inheritanceEnabled);
 
             Structure structure = structures.get(structureId);
             StructureFloor floor = structure == null ? null : structure.getFloor(floorId).orElse(null);
-            Set<BlockPos> exactCells = floor == null ? Set.of() : releasedRoomCells(oldRoom, floor);
-            if (exactCells.isEmpty()) {
+            if (floor == null || savedRoom.cells().isEmpty()) {
                 throw new IllegalArgumentException("Legacy room " + oldRoom.getInt("id") + " has no matching floor cells");
             }
+            Set<BlockPos> exactCells = atFloorHeight(savedRoom.cells(), floor.anchorY());
             Building room = new Building(canonicalBuildingTag(
                     oldRoom, exactCells, structureId, floorId, inheritanceEnabled));
             putUnique(rooms, room.getId(), room, "legacy room");
@@ -264,10 +280,13 @@ final class RoomDFU {
         return new Result(rooms, external, structures, logicalBuildings, quarantinedData);
     }
 
-    private static StructureFloor migrateReleasedFloor(CompoundTag oldFloor) {
+    private static StructureFloor migrateReleasedFloor(CompoundTag oldFloor, Set<BlockPos> roomCells) {
         LegacyFloorRegion region = loadLegacyFloorRegion(oldFloor.getCompound("region"));
         int ceilingY = oldFloor.getInt("ceilingY");
-        List<FloorGeometry.Cell> cells = region.cells().stream()
+        // The released room scanner could own connector or gap columns outside the floor's footprint.
+        Set<BlockPos> footprint = new HashSet<>(region.cells());
+        footprint.addAll(atFloorHeight(roomCells, region.anchorY()));
+        List<FloorGeometry.Cell> cells = footprint.stream()
                 .map(pos -> new FloorGeometry.Cell(
                         pos, Math.max(pos.getY() + 1, ceilingY)))
                 .toList();
@@ -276,15 +295,8 @@ final class RoomDFU {
                 new FloorGeometry(cells, Map.of()));
     }
 
-    private static Set<BlockPos> releasedRoomCells(CompoundTag oldRoom, StructureFloor floor) {
-        ListTag regions = oldRoom.getList("floorRegions", Tag.TAG_COMPOUND);
-        if (regions.isEmpty()) return Set.of();
-        LegacyFloorRegion oldRegion = loadLegacyFloorRegion(regions.getCompound(0));
-        return floor.geometry().cells().stream()
-                .map(FloorGeometry.Cell::feet)
-                .filter(pos -> oldRegion.containsHorizontally(pos.getX(), pos.getZ()))
-                .map(BlockPos::immutable)
-                .collect(Collectors.toUnmodifiableSet());
+    private static Set<BlockPos> atFloorHeight(Set<BlockPos> cells, int floorY) {
+        return cells.stream().map(pos -> pos.atY(floorY)).collect(Collectors.toUnmodifiableSet());
     }
 
     private static LegacyFloorRegion loadLegacyFloorRegion(CompoundTag tag) {
@@ -304,24 +316,23 @@ final class RoomDFU {
     }
 
     private static void validateCurrentShape(CompoundTag villageTag) {
-        for (Tag value : villageTag.getList("buildings", Tag.TAG_COMPOUND)) {
+        for (Tag value : requireCompoundList(villageTag, "buildings", "Village")) {
             CompoundTag room = (CompoundTag) value;
             require(room, "id", Tag.TAG_INT, "Room");
             require(room, "contributesToMain", Tag.TAG_BYTE, "Room");
             require(room, "structureId", Tag.TAG_INT, "Room");
             require(room, "floorId", Tag.TAG_INT, "Room");
         }
-        for (Tag value : villageTag.getList("externalBuildings", Tag.TAG_COMPOUND)) {
+        for (Tag value : requireCompoundList(villageTag, "externalBuildings", "Village")) {
             CompoundTag external = (CompoundTag) value;
             require(external, "id", Tag.TAG_INT, "External building");
         }
-        for (Tag value : villageTag.getList("structures", Tag.TAG_COMPOUND)) {
+        for (Tag value : requireCompoundList(villageTag, "structures", "Village")) {
             CompoundTag structure = (CompoundTag) value;
             require(structure, "id", Tag.TAG_INT, "Structure");
             require(structure, "buildingId", Tag.TAG_INT, "Structure");
             require(structure, "source", "Structure");
-            require(structure, "floors", Tag.TAG_LIST, "Structure");
-            ListTag floors = structure.getList("floors", Tag.TAG_COMPOUND);
+            ListTag floors = requireCompoundList(structure, "floors", "Structure");
             if (floors.isEmpty()) {
                 throw new IllegalArgumentException("Structure requires at least one canonical floor");
             }
@@ -329,12 +340,19 @@ final class RoomDFU {
                 require((CompoundTag) floorValue, "id", Tag.TAG_INT, "StructureFloor");
             }
         }
-        for (Tag value : villageTag.getList("logicalBuildings", Tag.TAG_COMPOUND)) {
+        for (Tag value : requireCompoundList(villageTag, "logicalBuildings", "Village")) {
             CompoundTag logical = (CompoundTag) value;
             require(logical, "id", Tag.TAG_INT, "Logical building");
             require(logical, "mainRoomId", Tag.TAG_INT, "Logical building");
             require(logical, "inheritanceEnabled", Tag.TAG_BYTE, "Logical building");
         }
+    }
+
+    private static ListTag requireCompoundList(CompoundTag tag, String key, String kind) {
+        if (tag.get(key) instanceof ListTag list && (list.isEmpty() || list.getElementType() == Tag.TAG_COMPOUND)) {
+            return list;
+        }
+        throw new IllegalArgumentException(kind + " requires a canonical compound list for " + key);
     }
 
     private static void require(CompoundTag tag, String key, int type, String kind) {
@@ -454,8 +472,5 @@ final class RoomDFU {
             boolean quarantinedData) {
     }
     private record LegacyFloorRegion(int anchorY, Set<BlockPos> cells) {
-        boolean containsHorizontally(int x, int z) {
-            return cells.stream().anyMatch(pos -> pos.getX() == x && pos.getZ() == z);
-        }
     }
 }

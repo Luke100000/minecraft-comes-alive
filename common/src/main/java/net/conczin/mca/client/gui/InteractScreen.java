@@ -32,6 +32,7 @@ public class InteractScreen extends AbstractDynamicScreen {
     private final VillagerLike<?> villager;
     private final Player player = Objects.requireNonNull(Minecraft.getInstance().player);
     private boolean inGiftMode;
+    private int heldGiftKeys;
     private int timeSinceLastClick;
     private String father;
     private String mother;
@@ -137,16 +138,33 @@ public class InteractScreen extends AbstractDynamicScreen {
             }
             return true;
         }
-        // Keyboard path so gifts can be given without a mouse/right mouse button. The
-        // cooldown keeps key auto-repeat from handing over a whole stack.
-        if (inGiftMode && (keyChar == GLFW.GLFW_KEY_ENTER || keyChar == GLFW.GLFW_KEY_KP_ENTER)) {
-            if (timeSinceLastClick > 2) {
+        // Vanilla delivers both the initial press and key repeats through this callback.
+        int giftKey = giftKeyMask(keyChar);
+        if (giftKey != 0) {
+            boolean newPress = (heldGiftKeys & giftKey) == 0;
+            heldGiftKeys |= giftKey;
+            if (inGiftMode && newPress) {
                 timeSinceLastClick = 0;
                 Network.sendToServer(new InteractionVillagerMessage("gift", villager.asEntity().getUUID()));
             }
-            return true;
+            return inGiftMode;
         }
         return false;
+    }
+
+    @Override
+    public boolean keyReleased(int keyChar, int keyCode, int modifiers) {
+        int giftKey = giftKeyMask(keyChar);
+        heldGiftKeys &= ~giftKey;
+        return (inGiftMode && giftKey != 0) || super.keyReleased(keyChar, keyCode, modifiers);
+    }
+
+    private static int giftKeyMask(int key) {
+        return switch (key) {
+            case GLFW.GLFW_KEY_ENTER -> 1;
+            case GLFW.GLFW_KEY_KP_ENTER -> 2;
+            default -> 0;
+        };
     }
 
     private void drawIcons(GuiGraphics context) {

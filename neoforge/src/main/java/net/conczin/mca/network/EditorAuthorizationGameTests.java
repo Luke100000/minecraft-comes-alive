@@ -16,10 +16,12 @@ import net.conczin.mca.network.c2s.VillagerEditorSyncRequest;
 import net.conczin.mca.registry.ItemsMCA;
 import net.conczin.mca.resources.BodySkinList;
 import net.conczin.mca.resources.ClothingList;
+import net.conczin.mca.resources.HairStyleList;
 import net.conczin.mca.resources.LayeredHairList;
 import net.conczin.mca.resources.SkinVisualIds;
 import net.conczin.mca.resources.data.skin.BodySkin;
 import net.conczin.mca.resources.data.skin.Clothing;
+import net.conczin.mca.resources.data.skin.HairStyle;
 import net.conczin.mca.resources.data.skin.LayeredHair;
 import net.conczin.mca.server.ServerInteractionManager;
 import net.conczin.mca.server.world.data.FamilyTree;
@@ -95,6 +97,66 @@ public final class EditorAuthorizationGameTests {
         } finally {
             helper.getLevel().removePlayerImmediately(sender, Entity.RemovalReason.DISCARDED);
             helper.getLevel().removePlayerImmediately(target, Entity.RemovalReason.DISCARDED);
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_editor_authorization", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void manualAppearanceIgnoresGenderButRejectsUnknownIds(GameTestHelper helper) {
+        ServerPlayer sender = createPlayer(helper, "appearance-editor", new BlockPos(2, 2, 2), 2);
+        helper.getLevel().addNewPlayer(sender);
+        String skin = "mca:skins/skin/female/0.png";
+        String clothes = "mca:skins/clothing/normal/female/none/0.png";
+        String styleId = "mca:gametest/female_style";
+        String base = "mca:skins/layered_hair/base/1.png";
+        HairStyleList styles = HairStyleList.getInstance();
+        HairStyle previousStyle = styles.styles.put(styleId, new HairStyle(styleId, Gender.FEMALE, 1.0F, base, "", "", "", ""));
+        try {
+            helper.assertTrue(SkinVisualIds.isBodySkin(skin, Gender.FEMALE) && !SkinVisualIds.isBodySkin(skin, Gender.MALE),
+                    "Fixture must use a female-only body skin");
+            helper.assertTrue(SkinVisualIds.isClothing(clothes, Gender.FEMALE) && !SkinVisualIds.isClothing(clothes, Gender.MALE),
+                    "Fixture must use female-only clothing");
+            helper.assertTrue(SkinVisualIds.isHairStyle(styleId, Gender.FEMALE) && !SkinVisualIds.isHairStyle(styleId, Gender.MALE),
+                    "Fixture must use a female-only hairstyle");
+            PlayerSaveData save = PlayerSaveData.get(sender);
+            CompoundTag initial = save.getEntityData();
+            initial.putInt("Gender", Gender.MALE.getId());
+            initial.putString("Skin", "mca:skins/skin/male/0.png");
+            initial.putString("Clothes", "mca:skins/clothing/normal/male/none/0.png");
+            save.setEntityData(initial);
+
+            CompoundTag patch = new CompoundTag();
+            patch.putString("Skin", skin);
+            patch.putString("Clothes", clothes);
+            patch.putString("HairStyle", styleId);
+            patch.putString("HairBase", base);
+            new VillagerEditorSyncRequest("sync", sender.getUUID(), patch).handleServer(sender);
+
+            CompoundTag edited = save.getEntityData();
+            helper.assertTrue(edited.getInt("Gender") == Gender.MALE.getId(), "Manual appearance must not change gender");
+            helper.assertTrue(skin.equals(edited.getString("Skin")), "Manual female skin should persist on a male target");
+            helper.assertTrue(clothes.equals(edited.getString("Clothes")), "Manual female clothing should persist on a male target");
+            helper.assertTrue(styleId.equals(edited.getString("HairStyle")), "Manual female hairstyle should persist on a male target");
+            helper.assertTrue(base.equals(edited.getString("HairBase")), "Manual hair base should persist");
+
+            CompoundTag invalid = new CompoundTag();
+            invalid.putString("Skin", "mca:gametest/unknown_skin");
+            invalid.putString("Clothes", "mca:gametest/unknown_clothes");
+            invalid.putString("HairStyle", "mca:gametest/unknown_style");
+            invalid.putString("HairBase", "mca:skins/layered_hair/bangs/1.png");
+            new VillagerEditorSyncRequest("sync", sender.getUUID(), invalid).handleServer(sender);
+            CompoundTag afterInvalid = save.getEntityData();
+            helper.assertTrue(skin.equals(afterInvalid.getString("Skin")), "Unknown skin must not replace valid selection");
+            helper.assertTrue(clothes.equals(afterInvalid.getString("Clothes")), "Unknown clothing must not replace valid selection");
+            helper.assertTrue(styleId.equals(afterInvalid.getString("HairStyle")), "Unknown hairstyle must not replace valid selection");
+            helper.assertTrue(base.equals(afterInvalid.getString("HairBase")), "Hair bangs must not replace a valid base");
+        } finally {
+            if (previousStyle == null) {
+                styles.styles.remove(styleId);
+            } else {
+                styles.styles.put(styleId, previousStyle);
+            }
+            helper.getLevel().removePlayerImmediately(sender, Entity.RemovalReason.DISCARDED);
         }
         helper.succeed();
     }

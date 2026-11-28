@@ -3,17 +3,30 @@ package net.conczin.mca.network;
 import io.netty.buffer.Unpooled;
 import net.conczin.mca.destiny.DestinyDestination;
 import net.conczin.mca.network.c2s.DestinyMessage;
+import net.conczin.mca.network.s2c.OpenDestinyGuiRequest;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.world.level.Level;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DestinyNetworkCodecTest {
+    @Test
+    void openDestinyWithoutDestinationsUsesNonTeleportingOnboarding() {
+        OpenDestinyGuiRequest empty = new OpenDestinyGuiRequest(true, List.of());
+        assertFalse(roundTrip(OpenDestinyGuiRequest.STREAM_CODEC, empty).allowTeleportation());
+
+        var destinations = List.of(new DestinyDestination("somewhere", Optional.empty()));
+        assertTrue(new OpenDestinyGuiRequest(true, destinations).allowTeleportation());
+        assertFalse(new OpenDestinyGuiRequest(false, destinations).allowTeleportation());
+    }
+
     @Test
     void destinationCodecRoundTripsDimensionBoundDestination() {
         DestinyDestination destination = new DestinyDestination(

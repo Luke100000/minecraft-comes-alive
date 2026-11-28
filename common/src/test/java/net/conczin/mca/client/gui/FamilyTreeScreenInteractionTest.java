@@ -252,7 +252,7 @@ class FamilyTreeScreenInteractionTest {
     }
 
     @Test
-    void clientPacesRapidTreeAndSearchRequestsAndRecoversFromDroppedServerReplies() throws Exception {
+    void clientPacesRapidTreeRequestsAndRecoversFromDroppedServerReplies() throws Exception {
         UUID siblingA = uuid(501);
         UUID siblingB = uuid(502);
         UUID nieceA = uuid(503);
@@ -340,34 +340,66 @@ class FamilyTreeScreenInteractionTest {
             assertFalse(model.loading(), "Unanswered tree request must time out after 5000ms");
             assertTrue(screen.branchControlBounds(siblingB, DESCENDANTS).isPresent(),
                     "Timed-out branch expansion must keep its continuation frontier retryable");
+        } finally {
+            Network.registerClientSender(previousSender);
+        }
+    }
 
-            // Search lookup outbound pacing + timeout recovery.
-            requests.clear();
-            fakeClock.set(10_000L);
+    @Test
+    void searchDebouncesRapidEditsAndTimesOutTheLatestUnansweredLookup() throws Exception {
+        AtomicLong fakeClock = new AtomicLong(10_000L);
+        FamilyTreeScreen screen = initializedScreen(loadedModel());
+        screen.setClockForTest(fakeClock::get);
+
+        java.lang.reflect.Field senderField = Network.class.getDeclaredField("clientSender");
+        senderField.setAccessible(true);
+        Network.ClientSender previousSender = (Network.ClientSender) senderField.get(null);
+        List<HandleablePayload> requests = new ArrayList<>();
+        try {
+            Network.registerClientSender(requests::add);
             EditBox search = (EditBox) field(screen, "searchField");
             search.setValue("Al");
-            // Simulate a prior lookup sent at 10_060ms so polling at 10_150ms is only 90ms after wire send.
-            setField(FamilyTreeScreen.class, screen, "hasSentSearchLookup", true);
-            setField(FamilyTreeScreen.class, screen, "lastSearchLookupSentAtMs", 10_060L);
+            fakeClock.set(10_050L);
+            search.setValue("Alex");
 
-            fakeClock.set(10_150L);
+            fakeClock.set(10_199L);
             screen.tick();
-            assertEquals(0, requests.size(), "Lookup must hold until 150ms after previous wire send");
+            assertTrue(requests.isEmpty(), "Each edit restarts the full 150ms debounce interval");
 
-            fakeClock.set(10_210L);
+            fakeClock.set(10_200L);
             screen.tick();
-            assertEquals(1, requests.size(), "Queued lookup flushes once 150ms since previous wire send elapses");
-            assertInstanceOf(FamilyTreeUUIDLookup.class, requests.getFirst());
+            assertEquals(1, requests.size());
+            FamilyTreeUUIDLookup first = assertInstanceOf(FamilyTreeUUIDLookup.class, requests.getFirst());
+            assertEquals("Alex", first.search());
+
+            search.setValue("Alexa");
+            fakeClock.set(10_349L);
+            screen.tick();
+            assertEquals(1, requests.size());
+
+            fakeClock.set(10_350L);
+            screen.tick();
+            assertEquals(2, requests.size());
+            FamilyTreeUUIDLookup latest = assertInstanceOf(FamilyTreeUUIDLookup.class, requests.get(1));
+            assertEquals("Alexa", latest.search());
+            assertNotEquals(first.requestId(), latest.requestId());
+
+            FamilyTreeSearchEntry match = new FamilyTreeSearchEntry(OTHER, "Alexandra", false, "", false, "");
+            screen.setSearchResults(first.requestId(), first.search(), List.of(match));
+            assertEquals(List.of(), field(screen, "searchResults"));
             assertTrue((Boolean) field(screen, "searchPending"));
 
-            fakeClock.set(15_209L);
+            fakeClock.set(15_349L);
             screen.tick();
             assertTrue((Boolean) field(screen, "searchPending"));
 
-            fakeClock.set(15_210L);
+            fakeClock.set(15_350L);
             screen.tick();
             assertFalse((Boolean) field(screen, "searchPending"),
-                    "Unanswered search lookup must clear searchPending after 5000ms");
+                    "Unanswered search lookup times out 5000ms after the latest send");
+
+            screen.setSearchResults(latest.requestId(), latest.search(), List.of(match));
+            assertEquals(List.of(), field(screen, "searchResults"), "A reply after timeout is ignored");
         } finally {
             Network.registerClientSender(previousSender);
         }
@@ -895,6 +927,58 @@ class FamilyTreeScreenInteractionTest {
                 "Retired model frontiers must stop exposing the arrow on the very next screen query");
         assertSame(before, field(screen, "layout"),
                 "No new family records should preserve card geometry without a layout rebuild");
+    }
+
+    @Test
+    void generationResponseRefreshesCardNameDuringAnExistingLayoutTransition() throws Exception {
+        FamilyTreeNode root = node(ROOT, "Root");
+        FamilyTreeViewModel model = new FamilyTreeViewModel(ROOT);
+        long initial = model.beginFocus(ROOT, new FamilyTreeViewModel.ViewportState(0, 0, 1));
+        model.accept(new GetFamilyTreeResponse(initial, ROOT, true, new FamilyTreeView(
+                Map.of(ROOT, root), Set.of(new FamilyTreeView.Continuation(ROOT, DESCENDANTS)),
+                Set.of(), Set.of(), Map.of())));
+        FamilyTreeScreen screen = initializedScreen(model);
+        AtomicLong clock = new AtomicLong(1_000L);
+        screen.setClockForTest(clock::get);
+
+        FamilyTreeViewModel.GenerationRequest expandRoot = model.beginGeneration(
+                DESCENDANTS, Set.of(ROOT)).orElseThrow();
+        FamilyTreeNode child = node(OTHER, "Child");
+        root.addChild(OTHER);
+        child.setFather(root);
+        screen.acceptFamilyData(new GetFamilyTreeResponse(expandRoot.requestId(), ROOT, true, new FamilyTreeView(
+                Map.of(ROOT, root, OTHER, child), Set.of(new FamilyTreeView.Continuation(OTHER, DESCENDANTS)),
+                Set.of(), Set.of(), Map.of())));
+
+        clock.addAndGet(120L);
+        Object layout = field(screen, "layout");
+        Object transition = field(screen, "transition");
+        assertNotNull(transition);
+        java.lang.reflect.Method displayedLayout = FamilyTreeScreen.class.getDeclaredMethod("displayedLayout");
+        displayedLayout.setAccessible(true);
+        Object displayed = displayedLayout.invoke(screen);
+        java.lang.reflect.Method render = FamilyTreeScreen.class.getDeclaredMethod(
+                "renderCards", GuiGraphics.class, Map.class, FamilyTreeLayout.Result.class);
+        render.setAccessible(true);
+        RecordingGraphics graphics = new RecordingGraphics((Minecraft) unsafe().allocateInstance(Minecraft.class));
+        render.invoke(screen, graphics, model.nodes(), displayed);
+        assertTrue(graphics.text.stream().map(TextDraw::text).anyMatch("Child"::equals));
+
+        FamilyTreeViewModel.GenerationRequest expandChild = model.beginGeneration(
+                DESCENDANTS, Set.of(OTHER)).orElseThrow();
+        child.setName("Beatrice");
+        screen.acceptFamilyData(new GetFamilyTreeResponse(expandChild.requestId(), OTHER, true, new FamilyTreeView(
+                Map.of(OTHER, child), Set.of(), Set.of(), Set.of(), Map.of())));
+
+        assertEquals("Beatrice", model.nodes().get(OTHER).getName());
+        graphics.text.clear();
+        render.invoke(screen, graphics, model.nodes(), displayedLayout.invoke(screen));
+        List<String> labels = graphics.text.stream().map(TextDraw::text).toList();
+        assertTrue(labels.contains("Beatrice"), () -> "Expected updated name in rendered labels: " + labels);
+        assertFalse(labels.contains("Child"));
+        assertSame(layout, field(screen, "layout"));
+        assertSame(transition, field(screen, "transition"));
+        assertEquals(displayed, displayedLayout.invoke(screen));
     }
 
     @Test

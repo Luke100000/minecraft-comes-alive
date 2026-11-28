@@ -162,7 +162,29 @@ public class Residency {
      * Records the current HOME after its POI ticket has been successfully acquired.
      */
     public void onHomeClaimed() {
-        reconcileVillageMembership(true);
+        if (entity.requiresHome()) {
+            reconcileVillageMembership(true);
+        } else if (entity.level() instanceof ServerLevel level) {
+            VillageManager manager = VillageManager.get(level);
+            if (manager.hasUnreadableSavedData()) return;
+            clearGuestHomeClaims(manager);
+            getHome().filter(home -> home.dimension().equals(level.dimension())).ifPresent(home ->
+                    manager.findNearestVillage(home.pos(), Village.BORDER_MARGIN)
+                            .ifPresent(village -> village.recordHomeClaim(entity.getUUID(), home)));
+        }
+    }
+
+    public void clearGuestHomeClaims() {
+        if (entity.level() instanceof ServerLevel level) {
+            clearGuestHomeClaims(VillageManager.get(level));
+        }
+    }
+
+    private void clearGuestHomeClaims(VillageManager manager) {
+        if (manager.hasUnreadableSavedData()) return;
+        for (Village village : manager) {
+            village.clearGuestHomeClaim(entity.getUUID());
+        }
     }
 
     private void reconcileVillageMembership(boolean authoritativeHomeClaim) {

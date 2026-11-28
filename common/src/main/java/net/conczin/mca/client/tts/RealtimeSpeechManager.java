@@ -27,7 +27,6 @@ public class RealtimeSpeechManager {
     public static final int CONNECT_TIMEOUT_MS = 5_000;
     public static final int READ_TIMEOUT_MS = 10_000;
     public static final long VOICE_FETCH_RETRY_COOLDOWN_MS = 30_000L;
-    private static final int CHUNK_SIZE = 1024;
 
     public final String url;
     public volatile Map<String, VoiceInfo> voiceInfoMap;
@@ -39,7 +38,7 @@ public class RealtimeSpeechManager {
         this.url = url;
     }
 
-    public static void download(OutputStream output, String url, String payload, String key) {
+    public static void download(OutputStream output, String url, String payload, String key) throws IOException {
         HttpURLConnection connection = null;
         try {
             connection = (HttpURLConnection) URI.create(url).toURL().openConnection();
@@ -56,23 +55,26 @@ public class RealtimeSpeechManager {
                 os.write(payload.getBytes(StandardCharsets.UTF_8));
             }
 
-            if (connection.getResponseCode() == HttpURLConnection.HTTP_OK) {
-                if (output == null) return;
-                try (InputStream inputStream = connection.getInputStream()) {
-                    byte[] buffer = new byte[CHUNK_SIZE];
-                    int bytesRead;
-                    while ((bytesRead = inputStream.read(buffer)) != -1) {
-                        output.write(buffer, 0, bytesRead);
-                    }
-                }
-            } else {
-                MCA.LOGGER.warn("Failed to get audio: {} - {}", connection.getResponseCode(), connection.getResponseMessage());
+            int responseCode = connection.getResponseCode();
+            if (responseCode != HttpURLConnection.HTTP_OK) {
+                throw new IOException("HTTP " + responseCode + " " + connection.getResponseMessage());
             }
-        } catch (IOException | IllegalArgumentException e) {
-            MCA.LOGGER.warn("Failed to download audio: {}", e.getMessage());
+            if (output != null) {
+                copyAudioResponse(connection, output);
+            }
         } finally {
             if (connection != null) {
                 connection.disconnect();
+            }
+        }
+    }
+
+    static void copyAudioResponse(HttpURLConnection connection, OutputStream output) throws IOException {
+        try (InputStream input = connection.getInputStream()) {
+            long expectedBytes = connection.getContentLengthLong();
+            long copiedBytes = input.transferTo(output);
+            if (expectedBytes >= 0 && copiedBytes != expectedBytes) {
+                throw new IOException("Incomplete TTS response: received " + copiedBytes + " of " + expectedBytes + " bytes");
             }
         }
     }
@@ -272,7 +274,7 @@ public class RealtimeSpeechManager {
         return payload.toString();
     }
 
-    public void downloadAudio(OutputStream output, String voiceId, String text) {
+    public void downloadAudio(OutputStream output, String voiceId, String text) throws IOException {
         String url = this.url + "v1/tts/piper/speak";
         download(output, url, buildSpeakPayload(voiceId, text), "");
     }
