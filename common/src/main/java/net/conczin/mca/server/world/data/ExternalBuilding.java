@@ -2,7 +2,9 @@ package net.conczin.mca.server.world.data;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Vec3i;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 
@@ -39,8 +41,13 @@ public final class ExternalBuilding extends Building {
         var iterator = blocks.entrySet().iterator();
         while (iterator.hasNext()) {
             var positions = iterator.next();
-            changed |= positions.getValue().removeIf(pos -> !net.minecraft.core.registries.BuiltInRegistries.BLOCK
-                    .getKey(world.getBlockState(pos).getBlock()).equals(positions.getKey()));
+            changed |= positions.getValue().removeIf(pos -> {
+                if (world instanceof ServerLevel serverLevel
+                        && !serverLevel.hasChunk(pos.getX() >> 4, pos.getZ() >> 4)) {
+                    return false;
+                }
+                return !BuiltInRegistries.BLOCK.getKey(world.getBlockState(pos).getBlock()).equals(positions.getKey());
+            });
             if (positions.getValue().isEmpty()) {
                 iterator.remove();
                 changed = true;
@@ -50,6 +57,9 @@ public final class ExternalBuilding extends Building {
     }
 
     public void addPOI(Level world, BlockPos pos) {
+        if (world instanceof ServerLevel serverLevel && !serverLevel.hasChunk(pos.getX() >> 4, pos.getZ() >> 4)) {
+            return;
+        }
         Block block = world.getBlockState(pos).getBlock();
         removeBlock(block, pos);
         addBlock(block, pos);
@@ -59,10 +69,17 @@ public final class ExternalBuilding extends Building {
         if (positions.isEmpty()) {
             return;
         }
-        BlockPos center = positions.stream().reduce(BlockPos.ZERO, BlockPos::offset);
+        long sumX = 0L;
+        long sumY = 0L;
+        long sumZ = 0L;
+        for (BlockPos p : positions) {
+            sumX += p.getX();
+            sumY += p.getY();
+            sumZ += p.getZ();
+        }
         int n = positions.size();
         // External sites use their grouped POIs as display geometry; a one-cell footprint is enough.
-        setGeometry(new BlockPos(center.getX() / n, center.getY() / n, center.getZ() / n),
-                new BlockPos(center.getX() / n, center.getY() / n, center.getZ() / n), List.of());
+        BlockPos centroid = new BlockPos((int) (sumX / n), (int) (sumY / n), (int) (sumZ / n));
+        setGeometry(centroid, centroid, List.of());
     }
 }

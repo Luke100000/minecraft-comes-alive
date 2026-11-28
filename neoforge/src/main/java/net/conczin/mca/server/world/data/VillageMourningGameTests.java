@@ -20,13 +20,16 @@ import net.minecraft.Util;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.ai.behavior.Behavior;
@@ -37,7 +40,10 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.schedule.Activity;
 import net.minecraft.world.entity.schedule.Schedule;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.state.properties.BedPart;
@@ -46,7 +52,10 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Set;
 
 import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatArea;
 @PrefixGameTestTemplate(false)
@@ -397,8 +406,21 @@ public final class VillageMourningGameTests {
                 reloaded.load(saved.copy());
                 reloaded.getBrain().setSchedule(SchedulesMCA.DEFAULT);
                 reloaded.getBrain().setActiveActivityIfPossible(Activity.IDLE);
+                ItemStack savedFlower = reloaded.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_FLOWER)
+                        .orElseThrow();
+                helper.assertTrue(ItemStack.matches(savedFlower, reloaded.getMainHandItem())
+                                && InventoryUtils.isTemporary(reloaded.getMainHandItem()),
+                        "fixture did not reconstruct the saved temporary flower");
+                ItemStack inventorySword = InventoryUtils.stream(reloaded.getInventory())
+                        .filter(stack -> stack.is(Items.IRON_SWORD)).findFirst().orElseThrow();
+                ItemStack replacement = new ItemStack(Items.BOW);
+                replacement.set(DataComponents.CUSTOM_NAME, Component.literal("Replacement bow"));
+                replacement.setDamageValue(7);
+                ItemStack expectedReplacement = replacement.copy();
                 if (replacedHand) {
-                    reloaded.setItemInHand(InteractionHand.MAIN_HAND, Items.BOW.getDefaultInstance());
+                    reloaded.setItemInHand(InteractionHand.MAIN_HAND, replacement);
+                    helper.assertTrue(reloaded.getMainHandItem() == replacement,
+                            "fixture did not install the replacement hand reference");
                 }
                 helper.assertTrue(!new GrieveTask().tryStart(helper.getLevel(), reloaded, helper.getLevel().getGameTime()),
                         "invalid grave restarted mourning after reload");
@@ -406,6 +428,17 @@ public final class VillageMourningGameTests {
                         "invalid grave assignment was not cleared");
                 helper.assertTrue(reloaded.getMainHandItem().is(replacedHand ? Items.BOW : Items.IRON_SWORD),
                         "reload cleanup failed to restore the displaced item or overwrote its replacement");
+                helper.assertTrue(replacedHand
+                                ? reloaded.getMainHandItem() == replacement
+                                && ItemStack.matches(expectedReplacement, replacement)
+                                : reloaded.getMainHandItem() == inventorySword
+                                && InventoryUtils.containsReference(reloaded.getInventory(), inventorySword),
+                        "reload cleanup replaced the newer hand reference or failed to borrow the saved inventory sword");
+                helper.assertTrue(countOwnedItems(reloaded, Items.IRON_SWORD) == 1,
+                        "reload cleanup duplicated or lost the displaced sword");
+                helper.assertTrue(InventoryUtils.stream(reloaded.getInventory())
+                                .noneMatch(stack -> stack.is(savedFlower.getItem())),
+                        "reload cleanup inserted the generated flower into inventory");
                 helper.assertTrue(reloaded.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_FLOWER).isEmpty()
                                 && reloaded.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_PREVIOUS_MAIN_HAND).isEmpty(),
                         "reload cleanup retained temporary hand ownership");
@@ -414,6 +447,109 @@ public final class VillageMourningGameTests {
             helper.getLevel().setDayTime(previousDayTime);
         }
         helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void mourningDoesNotRecreateTransferredPreviousHand(GameTestHelper helper) {
+        BlockPos grave = helper.absolutePos(new BlockPos(3, 1, 3));
+        prepareFlatArea(helper, grave, 3, 3);
+        occupyGrave(helper, grave);
+        VillagerEntityMCA mourner = spawnVillager(helper, new BlockPos(4, 1, 3), "Transferred Sword Mourner");
+        try {
+            makeAwake(mourner);
+            ItemStack sword = new ItemStack(Items.IRON_SWORD);
+            sword.setDamageValue(11);
+            ItemStack expectedSword = sword.copy();
+            mourner.setItemInHand(InteractionHand.MAIN_HAND, sword);
+            beginFlowerOwnership(helper, mourner, grave);
+            int slot = InventoryUtils.getFirstSlotContainingItem(mourner.getInventory(),
+                    stack -> ItemStack.matches(expectedSword, stack));
+            helper.assertTrue(slot >= 0 && countOwnedItems(mourner, Items.IRON_SWORD) == 1,
+                    "fixture did not displace the single previous sword into inventory");
+            ItemStack inventorySword = mourner.getInventory().getItem(slot);
+            ItemStack transferred = mourner.getInventory().removeItemNoUpdate(slot);
+            mourner.getInventory().setChanged();
+            helper.assertTrue(transferred == inventorySword && ItemStack.matches(expectedSword, transferred)
+                            && countOwnedItems(mourner, Items.IRON_SWORD) == 0,
+                    "fixture did not transfer the sole inventory-owned sword reference");
+
+            Mourning.pause(mourner);
+
+            helper.assertTrue(mourner.getMainHandItem().isEmpty(), "mourning recreated a transferred sword");
+            helper.assertTrue(countOwnedItems(mourner, Items.IRON_SWORD) == 0
+                            && ItemStack.matches(expectedSword, transferred),
+                    "mourning duplicated or mutated the transferred sword");
+            assertFlowerOwnershipCleared(helper, mourner);
+        } finally {
+            mourner.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void mourningRestoresEarlierTemporaryProp(GameTestHelper helper) {
+        BlockPos grave = helper.absolutePos(new BlockPos(3, 1, 3));
+        prepareFlatArea(helper, grave, 3, 3);
+        occupyGrave(helper, grave);
+        VillagerEntityMCA mourner = spawnVillager(helper, new BlockPos(4, 1, 3), "Previous Prop Mourner");
+        try {
+            makeAwake(mourner);
+            ItemStack prop = InventoryUtils.temporary(new ItemStack(Items.STICK, 2));
+            prop.set(DataComponents.CUSTOM_NAME, Component.literal("Earlier temporary prop"));
+            ItemStack expectedProp = prop.copy();
+            mourner.setItemInHand(InteractionHand.MAIN_HAND, prop);
+            beginFlowerOwnership(helper, mourner, grave);
+            ItemStack previousMemory = mourner.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_PREVIOUS_MAIN_HAND)
+                    .orElseThrow();
+            helper.assertTrue(ItemStack.matches(expectedProp, previousMemory),
+                    "fixture did not remember the earlier temporary prop");
+            helper.assertTrue(InventoryUtils.stream(mourner.getInventory())
+                            .noneMatch(stack -> stack.is(Items.STICK)),
+                    "fixture inserted the temporary prop into inventory");
+
+            Mourning.pause(mourner);
+
+            ItemStack restored = mourner.getMainHandItem();
+            helper.assertTrue(ItemStack.matches(expectedProp, restored) && InventoryUtils.isTemporary(restored)
+                            && restored != prop && restored != previousMemory,
+                    "mourning failed to restore an independent copy of the earlier temporary prop");
+            helper.assertTrue(InventoryUtils.stream(mourner.getInventory())
+                            .noneMatch(stack -> stack.is(Items.STICK)),
+                    "mourning inserted the temporary prop into real inventory");
+            assertFlowerOwnershipCleared(helper, mourner);
+        } finally {
+            mourner.discard();
+        }
+        helper.succeed();
+    }
+
+    private static void beginFlowerOwnership(GameTestHelper helper, VillagerEntityMCA mourner, BlockPos grave) {
+        long now = helper.getLevel().getGameTime();
+        Mourning.start(mourner, grave);
+        helper.assertTrue(new EnterGraveyardTask().tryStart(helper.getLevel(), mourner, now),
+                "fixture could not assign a graveside standing position");
+        helper.assertTrue(new MournAtGraveTask().tryStart(helper.getLevel(), mourner, now),
+                "fixture could not begin flower ownership");
+        helper.assertTrue(InventoryUtils.isTemporary(mourner.getMainHandItem())
+                        && mourner.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_FLOWER)
+                        .filter(stack -> ItemStack.matches(stack, mourner.getMainHandItem())).isPresent(),
+                "fixture did not equip the generated flower");
+    }
+
+    private static int countOwnedItems(VillagerEntityMCA villager, Item item) {
+        Set<ItemStack> unique = Collections.newSetFromMap(new IdentityHashMap<>());
+        InventoryUtils.stream(villager.getInventory()).filter(stack -> stack.is(item)).forEach(unique::add);
+        for (EquipmentSlot slot : EquipmentSlot.values()) {
+            ItemStack stack = villager.getItemBySlot(slot);
+            if (stack.is(item)) unique.add(stack);
+        }
+        return unique.stream().mapToInt(ItemStack::getCount).sum();
+    }
+
+    private static void assertFlowerOwnershipCleared(GameTestHelper helper, VillagerEntityMCA mourner) {
+        helper.assertTrue(mourner.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_FLOWER).isEmpty()
+                        && mourner.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_PREVIOUS_MAIN_HAND).isEmpty(),
+                "mourning retained stale temporary hand ownership");
     }
 
     @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air")
@@ -520,27 +656,48 @@ public final class VillageMourningGameTests {
         BlockPos start = mourner.blockPosition();
         int pathfindingDistance = Config.getInstance().getVillagerPathfindingDistance();
         BlockPos grave = start.east(pathfindingDistance + 32);
-        prepareFlatArea(helper, start, 16, 3);
-        prepareFlatArea(helper, grave, 2, 3);
-        helper.getLevel().setBlock(grave, BlocksMCA.CROSS_HEADSTONE.defaultBlockState(), 3);
-        TombstoneBlock.Data.of(helper.getLevel().getBlockEntity(grave)).orElseThrow().setEntity(deceased);
+        List<ChunkPos> forcedChunks = new ArrayList<>();
+        for (BlockPos center : List.of(start, grave)) {
+            int radius = center.equals(start) ? 16 : 2;
+            ChunkPos min = new ChunkPos(center.offset(-radius, 0, -radius));
+            ChunkPos max = new ChunkPos(center.offset(radius, 0, radius));
+            for (int x = min.x; x <= max.x; x++) {
+                for (int z = min.z; z <= max.z; z++) {
+                    if (helper.getLevel().setChunkForced(x, z, true)) {
+                        forcedChunks.add(new ChunkPos(x, z));
+                    }
+                }
+            }
+        }
 
-        Mourning.start(mourner, grave);
-        mourner.getBrain().tick(helper.getLevel(), mourner);
+        // The chunk holder's entity-ticking status is confirmed on normal server ticks.
+        helper.runAfterDelay(5, () -> {
+            try {
+                prepareFlatArea(helper, start, 16, 3);
+                prepareFlatArea(helper, grave, 2, 3);
+                helper.getLevel().setBlock(grave, BlocksMCA.CROSS_HEADSTONE.defaultBlockState(), 3);
+                TombstoneBlock.Data.of(helper.getLevel().getBlockEntity(grave)).orElseThrow().setEntity(deceased);
 
-        BlockPos mourningPosition = mourner.getBrain()
-                .getMemoryInternal(MemoryModuleTypeMCA.MOURNING_POSITION)
-                .orElseThrow(() -> new AssertionError("distant mourning did not choose a standing position"))
-                .pos();
-        var walkTarget = mourner.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
-        helper.assertTrue(walkTarget != null,
-                "distant mourning did not publish a walk target on its first brain tick");
-        helper.assertTrue(walkTarget.getTarget() instanceof PersistentPathTarget,
-                "distant mourning did not use long-distance path intent");
-        PersistentPathTarget target = (PersistentPathTarget)walkTarget.getTarget();
-        helper.assertTrue(target.currentBlockPosition().equals(mourningPosition),
-                "distant mourning replaced the real graveside destination with an intermediate point");
-        helper.succeed();
+                Mourning.start(mourner, grave);
+                mourner.getBrain().tick(helper.getLevel(), mourner);
+
+                BlockPos mourningPosition = mourner.getBrain()
+                        .getMemoryInternal(MemoryModuleTypeMCA.MOURNING_POSITION)
+                        .orElseThrow(() -> new AssertionError("distant mourning did not choose a standing position"))
+                        .pos();
+                var walkTarget = mourner.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
+                helper.assertTrue(walkTarget != null,
+                        "distant mourning did not publish a walk target on its first brain tick");
+                helper.assertTrue(walkTarget.getTarget() instanceof PersistentPathTarget,
+                        "distant mourning did not use long-distance path intent");
+                PersistentPathTarget target = (PersistentPathTarget)walkTarget.getTarget();
+                helper.assertTrue(target.currentBlockPosition().equals(mourningPosition),
+                        "distant mourning replaced the real graveside destination with an intermediate point");
+                helper.succeed();
+            } finally {
+                forcedChunks.forEach(chunk -> helper.getLevel().setChunkForced(chunk.x, chunk.z, false));
+            }
+        });
     }
 
     @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air")
@@ -1081,19 +1238,30 @@ public final class VillageMourningGameTests {
         VillagerEntityMCA meet = spawnVillager(helper, new BlockPos(3, 1, 1), "Burst Meet Probe");
         VillagerEntityMCA work = spawnVillager(helper, new BlockPos(4, 1, 1), "Burst Work Probe");
         VillagerEntityMCA rest = spawnVillager(helper, new BlockPos(5, 1, 1), "Burst Rest Probe");
+        List<VillagerEntityMCA> residents = List.of(idle, meet, work, rest);
+        // The preceding tests can leave the clock at any time of day. Establish the
+        // requested active activities without depending on the generated schedules.
+        residents.forEach(VillageMourningGameTests::makeAwake);
         GlobalPos poi = GlobalPos.of(helper.getLevel().dimension(), helper.absolutePos(new BlockPos(2, 1, 2)));
         meet.getBrain().setMemory(MemoryModuleType.MEETING_POINT, poi);
         meet.getBrain().setActiveActivityIfPossible(Activity.MEET);
         work.getBrain().setMemory(MemoryModuleType.JOB_SITE, poi);
         work.getBrain().setActiveActivityIfPossible(Activity.WORK);
         rest.getBrain().setActiveActivityIfPossible(Activity.REST);
-        List<VillagerEntityMCA> residents = List.of(idle, meet, work, rest);
+        helper.assertTrue(idle.getBrain().isActive(Activity.IDLE), "fixture did not establish IDLE");
+        helper.assertTrue(meet.getBrain().isActive(Activity.MEET), "fixture did not establish MEET");
+        helper.assertTrue(work.getBrain().isActive(Activity.WORK), "fixture did not establish WORK");
+        helper.assertTrue(rest.getBrain().isActive(Activity.REST), "fixture did not establish REST");
         long now = helper.getLevel().getGameTime();
-        helper.getLevel().setDayTime(6_000L);
-        Village due = withNextMourningTime(villageWithGraveyard(helper, grave), now, helper.getLevel());
-        residents.forEach(due::updateResident);
-
-        due.tick(helper.getLevel(), now);
+        long previousDayTime = helper.getLevel().getDayTime();
+        try {
+            helper.getLevel().setDayTime(6_000L);
+            Village due = withNextMourningTime(villageWithGraveyard(helper, grave), now, helper.getLevel());
+            residents.forEach(due::updateResident);
+            due.tick(helper.getLevel(), now);
+        } finally {
+            helper.getLevel().setDayTime(previousDayTime);
+        }
 
         helper.assertTrue(idle.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_SITE).isPresent(),
                 "IDLE resident should be available to an ambient burst");

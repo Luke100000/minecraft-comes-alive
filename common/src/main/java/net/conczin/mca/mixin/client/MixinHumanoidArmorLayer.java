@@ -18,15 +18,23 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(HumanoidArmorLayer.class)
 public abstract class MixinHumanoidArmorLayer<T extends LivingEntity, A extends HumanoidModel<T>> {
     @Unique
-    protected final A mca$leggingsModel = mca$createModel(0.5F);
+    protected A mca$leggingsModel;
     @Unique
-    protected final A mca$bodyModel = mca$createModel(1.0F);
+    protected A mca$bodyModel;
     @Shadow
     protected abstract boolean usesInnerModel(EquipmentSlot slot);
+
+    @Inject(method = "<init>", at = @At("RETURN"))
+    private void mca$initArmorModels(CallbackInfo ci) {
+        mca$leggingsModel = mca$createModel(0.5F);
+        mca$bodyModel = mca$createModel(1.0F);
+    }
 
     @Unique
     @SuppressWarnings("unchecked")

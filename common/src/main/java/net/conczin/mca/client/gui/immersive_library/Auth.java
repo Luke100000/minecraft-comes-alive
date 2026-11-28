@@ -13,11 +13,12 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.Objects;
 
 public class Auth {
     private static final SecureRandom RANDOM = new SecureRandom();
 
-    private static String currentToken;
+    private static volatile String currentToken;
 
     private static String newToken() {
         byte[] bytes = new byte[32];
@@ -42,6 +43,10 @@ public class Auth {
 
     public static boolean hasToken() {
         return getToken() != null;
+    }
+
+    public static boolean isCurrentToken(String token) {
+        return Objects.equals(currentToken, token);
     }
 
     public static void saveToken() {

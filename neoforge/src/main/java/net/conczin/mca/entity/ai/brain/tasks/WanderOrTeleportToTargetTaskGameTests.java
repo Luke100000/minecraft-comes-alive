@@ -14,6 +14,7 @@ import net.conczin.mca.entity.ai.navigation.BedApproachTarget;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.AfterBatch;
+import net.minecraft.gametest.framework.BeforeBatch;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
@@ -46,8 +47,14 @@ import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatArea;
 import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatPath;
 @PrefixGameTestTemplate(false)
 public final class WanderOrTeleportToTargetTaskGameTests {
+    private static final String NORMAL_NIGHT_SLEEP_BATCH = "mca_normal_night_sleep";
+    private static final List<VillagerEntityMCA> NIGHT_SLEEP_VILLAGERS = new ArrayList<>();
+    private static final List<BlockPos> NIGHT_SLEEP_BED_FEET = new ArrayList<>();
+    private static final List<ChunkPos> NIGHT_SLEEP_CHUNKS = new ArrayList<>();
     private static final List<ChunkPos> REST_WALK_OWNED_CHUNKS = new ArrayList<>();
     private static VillagerEntityMCA restWalkVillager;
+    private static long previousNormalNightDayTime;
+    private static boolean previousNormalNightMourning;
 
     private WanderOrTeleportToTargetTaskGameTests() {
     }
@@ -398,10 +405,28 @@ public final class WanderOrTeleportToTargetTaskGameTests {
                 sink = new WanderOrTeleportToTargetTask();
                 helper.assertTrue(sink.tryStart(helper.getLevel(), villager, startedAt),
                         "persistent movement did not start before intent change");
-                brain.setMemory(MemoryModuleType.WALK_TARGET,
-                        new WalkTarget(target.east(offset), 0.5F, 0));
-                sink.tickOrStop(helper.getLevel(), villager, startedAt + 251L);
+                WalkTarget ordinaryReplacement = new WalkTarget(target.east(offset), 0.5F, 0);
+                brain.setMemory(MemoryModuleType.WALK_TARGET, ordinaryReplacement);
+                long replacementStartedAt = startedAt + 251L;
+                sink.tickOrStop(helper.getLevel(), villager, replacementStartedAt);
+                helper.assertTrue(villager.getNavigation().isDone()
+                                && !brain.hasMemoryValue(MemoryModuleType.PATH)
+                                && brain.getMemory(MemoryModuleType.WALK_TARGET)
+                                .filter(command -> command == ordinaryReplacement).isPresent(),
+                        "retired persistent sink did not release its route while preserving the ordinary replacement after a target shift of " + offset);
+
+                sink = new WanderOrTeleportToTargetTask();
+                helper.assertTrue(sink.tryStart(helper.getLevel(), villager, replacementStartedAt),
+                        "ordinary replacement was not admitted after a target shift of " + offset);
+                Path replacementPath = villager.getNavigation().getPath();
+                helper.assertTrue(replacementPath != null && !villager.getNavigation().isDone()
+                                && brain.getMemory(MemoryModuleType.PATH).filter(path -> path == replacementPath).isPresent()
+                                && brain.getMemory(MemoryModuleType.WALK_TARGET)
+                                .filter(command -> command == ordinaryReplacement).isPresent(),
+                        "ordinary replacement did not establish its own route after a target shift of " + offset);
+                sink.tickOrStop(helper.getLevel(), villager, replacementStartedAt + 251L);
                 helper.assertTrue(!brain.hasMemoryValue(MemoryModuleType.WALK_TARGET)
+                                && !brain.hasMemoryValue(MemoryModuleType.PATH)
                                 && villager.getNavigation().isDone(),
                         "ordinary intent retained persistent lifetime after a target shift of " + offset);
             }
@@ -860,13 +885,36 @@ public final class WanderOrTeleportToTargetTaskGameTests {
         REST_WALK_OWNED_CHUNKS.clear();
     }
 
-    @GameTest(batch = "mca_normal_night_sleep", templateNamespace = "mca",
+    @BeforeBatch(batch = NORMAL_NIGHT_SLEEP_BATCH)
+    public static void prepareNormalNightSleepBatch(ServerLevel level) {
+        previousNormalNightDayTime = level.getDayTime();
+        previousNormalNightMourning = Config.getInstance().enableMourning;
+    }
+
+    @AfterBatch(batch = NORMAL_NIGHT_SLEEP_BATCH)
+    public static void cleanupNormalNightSleepBatch(ServerLevel level) {
+        for (VillagerEntityMCA villager : NIGHT_SLEEP_VILLAGERS) {
+            if (villager.isSleeping()) villager.stopSleeping();
+            villager.discard();
+        }
+        NIGHT_SLEEP_VILLAGERS.clear();
+        for (BlockPos foot : NIGHT_SLEEP_BED_FEET) {
+            level.removeBlock(foot, false);
+            level.removeBlock(foot.east(), false);
+        }
+        NIGHT_SLEEP_BED_FEET.clear();
+        NIGHT_SLEEP_CHUNKS.forEach(chunk -> level.setChunkForced(chunk.x, chunk.z, false));
+        NIGHT_SLEEP_CHUNKS.clear();
+        level.setDayTime(previousNormalNightDayTime);
+        Config.getInstance().enableMourning = previousNormalNightMourning;
+    }
+
+    @GameTest(batch = NORMAL_NIGHT_SLEEP_BATCH, templateNamespace = "mca",
             template = "gametest/isolated_ai_arena", timeoutTicks = 700)
     public static void normalNightVillagersAcquireHomesAndSleep(GameTestHelper helper) {
-        boolean mourningEnabled = Config.getInstance().enableMourning;
         Config.getInstance().enableMourning = false;
         BlockPos center = helper.absolutePos(new BlockPos(56, 1, 56));
-        prepareFlatArea(helper, center, 24, 3);
+        prepareFlatArea(helper, center, 24, 3, NIGHT_SLEEP_CHUNKS);
         helper.getLevel().setDayTime(13_000L);
 
         VillagerEntityMCA[] villagers = new VillagerEntityMCA[4];
@@ -874,6 +922,7 @@ public final class WanderOrTeleportToTargetTaskGameTests {
         boolean[] sawWalkTarget = new boolean[villagers.length];
         for (int index = 0; index < villagers.length; index++) {
             BlockPos foot = center.offset(8, 0, -9 + index * 6);
+            NIGHT_SLEEP_BED_FEET.add(foot);
             placeBed(helper, foot, Direction.EAST);
 
             BlockPos start = center.offset(-8, 0, -9 + index * 6);
@@ -882,6 +931,7 @@ public final class WanderOrTeleportToTargetTaskGameTests {
                     .withPosition(Vec3.atBottomCenterOf(start))
                     .withName("Normal Night Sleeper " + index)
                     .spawn(MobSpawnType.STRUCTURE);
+            NIGHT_SLEEP_VILLAGERS.add(villager);
             villager.refreshBrain(helper.getLevel());
             villager.setOnGround(true);
             villager.getBrain().setSchedule(SchedulesMCA.DEFAULT);
@@ -920,10 +970,6 @@ public final class WanderOrTeleportToTargetTaskGameTests {
                 }
             }
             if (sleeping == villagers.length) {
-                Config.getInstance().enableMourning = mourningEnabled;
-                for (VillagerEntityMCA villager : villagers) {
-                    villager.discard();
-                }
                 helper.succeed();
                 return;
             }
@@ -932,7 +978,6 @@ public final class WanderOrTeleportToTargetTaskGameTests {
                 return;
             }
 
-            Config.getInstance().enableMourning = mourningEnabled;
             StringBuilder state = new StringBuilder();
             PoiManager poiManager = helper.getLevel().getPoiManager();
             for (int index = 0; index < villagers.length; index++) {

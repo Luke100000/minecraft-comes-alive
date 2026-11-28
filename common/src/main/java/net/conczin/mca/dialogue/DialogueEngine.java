@@ -771,6 +771,9 @@ public final class DialogueEngine {
                 }
                 return session;
             }
+            if (session.status() != DialogueSession.Status.ACTIVE) {
+                return session;
+            }
             DialogueSession paused = suspendSession(session, gameTime);
             if (player != null) {
                 notifyPaused(player, paused);

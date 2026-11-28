@@ -2,6 +2,7 @@ package net.conczin.mca.entity.ai.brain.tasks;
 
 import com.google.common.collect.ImmutableMap;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.ai.Brain;
@@ -22,6 +23,7 @@ import net.minecraft.world.phys.Vec3;
 import java.util.UUID;
 
 public class InteractTask extends Behavior<VillagerEntityMCA> {
+    private static final long FAILED_PATH_RETRY_TICKS = 20L;
     private final float speedModifier;
     private Player trackedPlayer;
     private UUID trackedInteractionId;
@@ -31,6 +33,7 @@ public class InteractTask extends Behavior<VillagerEntityMCA> {
     private Vec3 selectedPlayerPosition;
     private Vec3 selectedLookDirection;
     private long nextReplanTime;
+    private long nextWalkAttemptTime;
 
     public InteractTask(float speedModifier) {
         super(ImmutableMap.of(
@@ -101,6 +104,7 @@ public class InteractTask extends Behavior<VillagerEntityMCA> {
             trackedInteractionId = interactionId;
             lookTarget = new EntityTracker(player, true);
             nextReplanTime = time;
+            nextWalkAttemptTime = time;
         }
         if (brain.getMemoryInternal(MemoryModuleType.LOOK_TARGET).orElse(null) != lookTarget) {
             brain.setMemory(MemoryModuleType.LOOK_TARGET, lookTarget);
@@ -130,12 +134,17 @@ public class InteractTask extends Behavior<VillagerEntityMCA> {
             if (destination != null && !reached(villager, destination)) {
                 walkTarget = new WalkTarget(new BlockPosTracker(destination), speedModifier, 0);
                 brain.setMemory(MemoryModuleType.WALK_TARGET, walkTarget);
+                nextWalkAttemptTime = time + FAILED_PATH_RETRY_TICKS;
             }
         }
         if (destination != null && reached(villager, destination)) {
             clearWalkTarget(villager);
         } else if (walkTarget != null && !brain.hasMemoryValue(MemoryModuleType.WALK_TARGET)) {
-            brain.setMemory(MemoryModuleType.WALK_TARGET, walkTarget);
+            if (!WalkTargetFailureMemory.hasFailureForCommand(villager, walkTarget)
+                    || time >= nextWalkAttemptTime) {
+                brain.setMemory(MemoryModuleType.WALK_TARGET, walkTarget);
+                nextWalkAttemptTime = time + FAILED_PATH_RETRY_TICKS;
+            }
         }
     }
 

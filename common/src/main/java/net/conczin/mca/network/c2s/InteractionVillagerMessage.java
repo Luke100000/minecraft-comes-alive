@@ -15,6 +15,8 @@ import net.minecraft.world.entity.Entity;
 import java.util.UUID;
 
 public record InteractionVillagerMessage(String command, UUID villagerUUID, UUID interactionId) implements HandleablePayload {
+    static final double MAX_INTERACTION_DISTANCE_SQR = 25.0D * 25.0D;
+
     public static final CustomPacketPayload.Type<InteractionVillagerMessage> TYPE = new CustomPacketPayload.Type<>(MCA.locate("interaction_villager"));
     public static final StreamCodec<FriendlyByteBuf, InteractionVillagerMessage> STREAM_CODEC = StreamCodec.composite(
             ByteBufCodecs.STRING_UTF8, InteractionVillagerMessage::command,
@@ -26,7 +28,8 @@ public record InteractionVillagerMessage(String command, UUID villagerUUID, UUID
     @Override
     public void handleServer(ServerPlayer player) {
         Entity v = player.serverLevel().getEntity(villagerUUID);
-        if (!(v instanceof VillagerLike<?> villager)) {
+        if (!(v instanceof VillagerLike<?> villager) || !v.isAlive()
+                || player.distanceToSqr(v) > MAX_INTERACTION_DISTANCE_SQR) {
             return;
         }
         var result = InteractionCommands.execute(new InteractionCommands.Context(

@@ -16,14 +16,13 @@ import java.util.List;
 import java.util.function.Predicate;
 
 public final class TeleportBlockBlacklist {
-    private static MatcherSnapshot snapshot;
+    private static volatile MatcherSnapshot snapshot;
 
     private TeleportBlockBlacklist() {
     }
 
     public static boolean isBlocked(BlockState state) {
-        refreshCacheIfNeeded();
-        return matches(state, snapshot.matchers());
+        return matches(state, refreshCacheIfNeeded().matchers());
     }
 
     private static boolean matches(BlockState state, List<Predicate<BlockState>> matchers) {
@@ -36,16 +35,19 @@ public final class TeleportBlockBlacklist {
         return false;
     }
 
-    private static void refreshCacheIfNeeded() {
+    private static MatcherSnapshot refreshCacheIfNeeded() {
         List<String> configured = Config.getInstance().unSafeBlocksToTeleportOn;
-        if (snapshot != null && snapshot.configured().equals(configured)) {
-            return;
+        MatcherSnapshot current = snapshot;
+        if (current != null && current.configured().equals(configured)) {
+            return current;
         }
 
         // Equality avoids stale matchers for different lists with the same hash.
         // Preserve null entries, which the matcher parser deliberately ignores.
-        snapshot = new MatcherSnapshot(Collections.unmodifiableList(new ArrayList<>(configured)),
+        MatcherSnapshot updated = new MatcherSnapshot(Collections.unmodifiableList(new ArrayList<>(configured)),
                 buildMatchers(configured, "unSafeBlocksToTeleportOn"));
+        snapshot = updated;
+        return updated;
     }
 
     private record MatcherSnapshot(List<String> configured, List<Predicate<BlockState>> matchers) {

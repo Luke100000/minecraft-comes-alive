@@ -25,8 +25,13 @@ public final class BuildingDiagnostics {
         long traceId = NEXT_TRACE_ID.incrementAndGet();
         VillageManager manager = VillageManager.get(world);
         RoomWorkflow roomWorkflow = new RoomWorkflow(manager, world);
-        Village village = manager.findNearestVillage(pos, Village.MERGE_MARGIN).orElse(null);
-        PlanAttempt planAttempt = planAttempt(() -> RoomScanPlanner.analyze(village, world, pos));
+        Village village = RoomWorkflow.findTargetVillage(manager, pos);
+        Village.ClientPositionTarget blueprint = village == null
+                ? Village.ClientPositionTarget.NONE : village.resolveClientTarget(pos);
+        log(traceId, "blueprintSnapshot position={} structure={} floor={} room={} roomOwnsExactCell={}",
+                pos, blueprint.structureId(), blueprint.floorId(), blueprint.room().map(Building::getId).orElse(-1),
+                blueprint.room().filter(room -> room.ownsFloorCell(pos)).isPresent());
+        PlanAttempt planAttempt = planAttempt(() -> RoomWorkflow.analyze(village, world, pos));
         if (planAttempt.failure() != null) {
             RuntimeException failure = planAttempt.failure();
             log(traceId, "roomPlanFailure position={} dimension={} village={} type={} message={}",
@@ -38,7 +43,7 @@ public final class BuildingDiagnostics {
             log(traceId, "verdict={}", verdict);
             return new Result(traceId, StructuralPosition.OUTSIDE, "SCAN_FAILED", verdict);
         }
-        RoomScanPlan plan = planAttempt.analysis().plan();
+        RoomWorkflow.Plan plan = planAttempt.analysis().plan();
         StructuralPosition position = structuralPosition(plan);
         String uiAction = uiAction(plan.mode());
 
@@ -187,7 +192,7 @@ public final class BuildingDiagnostics {
                 .orElse(null);
     }
 
-    static PlanAttempt planAttempt(Supplier<RoomScanPlanner.Analysis> supplier) {
+    static PlanAttempt planAttempt(Supplier<RoomWorkflow.Analysis> supplier) {
         try {
             return new PlanAttempt(supplier.get(), null);
         } catch (RuntimeException failure) {
@@ -214,7 +219,7 @@ public final class BuildingDiagnostics {
                         floors(structure.getFloors())));
     }
 
-    private static StructuralPosition structuralPosition(RoomScanPlan plan) {
+    private static StructuralPosition structuralPosition(RoomWorkflow.Plan plan) {
         return switch (plan.mode()) {
             case UPDATE_ROOM -> StructuralPosition.REGISTERED_ROOM;
             case ADD_ROOM -> StructuralPosition.ATTACHABLE_ROOM;
@@ -366,7 +371,7 @@ public final class BuildingDiagnostics {
                          String verdict) {
     }
 
-    record PlanAttempt(RoomScanPlanner.Analysis analysis, RuntimeException failure) {
+    record PlanAttempt(RoomWorkflow.Analysis analysis, RuntimeException failure) {
     }
 
     public enum StructuralPosition {

@@ -497,6 +497,9 @@ public final class ArcherLiveRegressionGameTests {
 
     private static void swoopingPhantom(GameTestHelper helper, long seed) {
         Arena a = new Arena(helper, 0);
+        for (Traits.Trait trait : a.archer.getTraits().getTraits()) a.archer.getTraits().removeTrait(trait);
+        a.archer.updateAttributes();
+        a.archer.refreshDimensions();
         a.archer.getAttribute(Attributes.MAX_HEALTH).setBaseValue(20);
         a.archer.setHealth(20);
         Phantom phantom = spawnPhantom(a, seed, 34);
@@ -764,6 +767,10 @@ public final class ArcherLiveRegressionGameTests {
     public static void closeSkeletonRetreatSettlesInsideShootingRange(GameTestHelper helper) {
         Arena a = new Arena(helper, 0);
         a.target(7);
+        // Exercise retreat from an engaged close attack, not sensor-acquisition timing.
+        a.archer.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, a.target);
+        helper.assertTrue(a.archer.getBrain().getMemory(MemoryModuleType.ATTACK_TARGET).orElse(null) == a.target,
+                "retreat fixture must begin with the close ranged attacker selected" + a.describe());
         boolean[] retreated = {false};
         a.observe(() -> {
             retreated[0] |= RangedCombatState.current(a.archer).orElse(null) == RangedCombatState.KITE

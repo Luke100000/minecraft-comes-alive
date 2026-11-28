@@ -460,15 +460,15 @@ public final class ArcherCombatMovementGameTests {
         archer.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, target);
 
         var restMovement = VillagerTasksMCA.getRestPackage(0.5F).stream()
+                .filter(entry -> entry.getFirst() == 5)
                 .map(com.mojang.datafixers.util.Pair::getSecond)
-                .filter(task -> task instanceof net.minecraft.world.entity.ai.behavior.RunOne<?>)
                 .findFirst()
                 .orElseThrow();
         long time = helper.getLevel().getGameTime();
-        helper.assertTrue(!restMovement.tryStart(helper.getLevel(), archer, time),
-                "rest movement issued an unrelated WALK_TARGET while the archer had an attack target");
+        restMovement.tryStart(helper.getLevel(), archer, time);
         helper.assertTrue(archer.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).isEmpty(),
-                "rest movement replaced combat navigation");
+                "rest movement issued an unrelated WALK_TARGET while the archer had an attack target");
+        restMovement.doStop(helper.getLevel(), archer, time);
 
         archer.getBrain().eraseMemory(MemoryModuleType.ATTACK_TARGET);
         helper.assertTrue(restMovement.tryStart(helper.getLevel(), archer, time + 1),

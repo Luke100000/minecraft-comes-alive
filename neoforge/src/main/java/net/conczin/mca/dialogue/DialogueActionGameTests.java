@@ -1254,10 +1254,16 @@ public final class DialogueActionGameTests {
         player.setPos(position.getCenter());
         VillagerEntityMCA villager = Objects.requireNonNull(EntitiesMCA.MALE_VILLAGER.create(helper.getLevel()));
         villager.setAgeState(AgeState.ADULT);
-        villager.setPos(player.getX() + 1.0D, player.getY(), player.getZ());
-        helper.getLevel().addFreshEntity(villager);
+        // Keep both actors in the template's entity-ticking chunk, even at its east edge.
+        int offsetX = Math.floorMod(position.getX(), 16) == 15 ? -1 : 1;
+        villager.setPos(player.getX() + offsetX, player.getY(), player.getZ());
+        helper.assertTrue(helper.getLevel().addFreshEntity(villager), "dialogue villager could not be spawned");
+        helper.assertTrue(helper.getLevel().getEntity(villager.getUUID()) == villager,
+                "dialogue villager must be tracked before selection: " + villager.blockPosition());
         // Dialogue selection requires the same live interaction owner as the real Interact screen.
         villager.getInteractions().interactAt(player, Vec3.ZERO, InteractionHand.MAIN_HAND);
+        helper.assertTrue(villager.getInteractions().matchesInteraction(player, villager.getInteractions().interactionId()),
+                "dialogue fixture must own a concrete interaction");
         return new Fixture(player, villager);
     }
 

@@ -122,9 +122,11 @@ public class BlueprintScreen extends ExtendedScreen {
     private static double mapCenterX;
     private static double mapCenterZ;
     private BuildingType selectedBuilding;
-    private UUID selectedVillager;
     private BlockPos lastRoomScanPosition;
-    private RoomScanPlan cachedRoomScanPlan;
+    private Village.ClientPositionTarget cachedClientTarget;
+    private BlockPos openingScanPosition;
+    private boolean openingScanDone;
+    private RoomWorkflow.ScanPreview openingScanPreview;
 
     private int mouseX;
     private int mouseY;
@@ -190,6 +192,9 @@ public class BlueprintScreen extends ExtendedScreen {
 
     @Override
     public void init() {
+        if (openingScanPosition == null && minecraft != null && minecraft.player != null) {
+            openingScanPosition = minecraft.player.blockPosition().immutable();
+        }
         if (needsVillageRequestOnInit()) {
             Network.sendToServer(new GetVillageRequest());
             setPage("waiting");
@@ -256,9 +261,6 @@ public class BlueprintScreen extends ExtendedScreen {
                 bx = width / 2 + mapHalfSize() + MAP_SIDE_CONTROL_GUTTER;
                 int floorControlY = layoutY + 8 + mapHalfSize() + 4;
 
-                // Map and Advanced are two control modes over the same map view. Keep all
-                // display/navigation controls shared so Advanced cannot lose floor controls,
-                // building icons, scale selection, or player centering.
                 int floorControlX = width / 2 - MAP_HALF_SIZE;
                 floorPreviousButton = addRenderableWidget(new ButtonWidget(floorControlX, floorControlY, 24, 20,
                         Component.literal("<"), b -> changeSelectedFloor(-1)));
@@ -292,8 +294,6 @@ public class BlueprintScreen extends ExtendedScreen {
                         Component.translatable("gui.blueprint.playerCentered.tooltip")) {
                     @Override
                     public boolean isHoveredOrFocused() {
-                        // Retained keyboard focus must not force the vanilla highlighted
-                        // sprite. Keep actual focus state for navigation/narration.
                         return isHovered();
                     }
                 });
@@ -305,15 +305,11 @@ public class BlueprintScreen extends ExtendedScreen {
                         Component.translatable("gui.blueprint.playerHead.tooltip")) {
                     @Override
                     public boolean isHoveredOrFocused() {
-                        // Keep keyboard focus/narration state intact, but do not let retained
-                        // focus force the vanilla highlighted button sprite indefinitely.
                         return isHovered();
                     }
                 });
 
                 if ("advanced".equals(page)) {
-                    // Advanced is a map sub-view: expose settlement-level settings while
-                    // preserving the shared map display controls above.
                     SideControlColumn column = new SideControlColumn(bx, layoutY - 56);
                     MutableComponent text = Component.translatable("gui.blueprint.autoScan");
                     if (village.isAutoScan()) {
@@ -332,12 +328,12 @@ public class BlueprintScreen extends ExtendedScreen {
                     column.addTooltip("gui.blueprint.restrictAccess", b ->
                             targetedEditMessage(
                                     ReportBuildingMessage.Action.FORCE_TYPE,
-                                    village, getPlayerRoomScanPlan())
+                                    village, getPlayerClientTarget())
                                     .ifPresent(Network::sendToServer));
                     mainRoomButton = column.addTooltip("gui.blueprint.setMainRoom", b -> {
                         targetedEditMessage(
                                 ReportBuildingMessage.Action.SET_MAIN_ROOM,
-                                village, getPlayerRoomScanPlan())
+                                village, getPlayerClientTarget())
                                 .ifPresent(message -> {
                                     selectPlayerFloorOnNextVillageResponse = true;
                                     Network.sendToServer(message);
@@ -351,16 +347,14 @@ public class BlueprintScreen extends ExtendedScreen {
                             bx, floorControlY + 22, MAP_SIDE_CONTROL_WIDTH, 20,
                             Component.translatable("gui.back"), b -> setPage("map")));
                 } else {
-                    // A grouped POI such as the town bell keeps the settlement alive, but
-                    // rooms still need a complete physical Structure to attach to.
                     SideControlColumn column = new SideControlColumn(bx, layoutY - 56 + 22 * 3);
                     structureScanButton = column.addTooltip(
                             "gui.blueprint.addStructure", b -> requestPrimaryStructureScan());
                     removeRoomButton = column.addTooltip("gui.blueprint.removeRoom", b -> {
-                        RoomScanPlan plan = getPlayerRoomScanPlan();
-                        RemovalControlState state = removalControlState(village, plan);
+                        Village.ClientPositionTarget target = getPlayerClientTarget();
+                        RemovalControlState state = removalControlState(village, target);
                         if (state.visible() && state.active() && state.action() != null) {
-                            targetedEditMessage(state.action(), village, plan)
+                            targetedEditMessage(state.action(), village, target)
                                     .ifPresent(Network::sendToServer);
                         }
                     });
@@ -368,20 +362,19 @@ public class BlueprintScreen extends ExtendedScreen {
                             Component.translatable("gui.blueprint.removeBuilding"), b ->
                                     targetedEditMessage(
                                             ReportBuildingMessage.Action.REMOVE,
-                                            village, getPlayerRoomScanPlan())
+                                            village, getPlayerClientTarget())
                                             .ifPresent(Network::sendToServer));
 
                     addRenderableWidget(new ButtonWidget(
                             bx, floorControlY + 22, MAP_SIDE_CONTROL_WIDTH, 20,
                             Component.translatable("gui.blueprint.advanced"), b -> setPage("advanced")));
                 }
-                updateMapControls(getPlayerRoomScanPlan());
+                updateMapControls(getPlayerClientTarget());
                 break;
             }
             case "rank":
                 break;
             case "catalog":
-                //list catalog button
                 int row = 0;
                 int col = 0;
                 int size = 21;
@@ -395,15 +388,18 @@ public class BlueprintScreen extends ExtendedScreen {
                             widget = new LegacyImageButton(
                                     row * size + x + 10, col * size + y - 10, 20, 20, bt.iconU(), bt.iconV() + 20, 20, ICON_TEXTURES, 256, 256, button -> {
                                 selectBuilding(bt);
-                                button.active = false;
                                 catalogButtons.forEach(b -> b.active = true);
+                                button.active = false;
                             }, Component.translatable("buildingType." + bt.name()));
                         } else {
                             widget = new ButtonWidget(row * size + x + 10, col * size + y - 10, 20, 20, Component.empty(), button -> {
                                 selectBuilding(bt);
-                                button.active = false;
                                 catalogButtons.forEach(b -> b.active = true);
+                                button.active = false;
                             }, Component.translatable("buildingType." + bt.name()));
+                        }
+                        if (selectedBuilding != null && selectedBuilding.name().equals(bt.name())) {
+                            widget.active = false;
                         }
                         catalogButtons.add(addRenderableWidget(widget));
 
@@ -426,7 +422,7 @@ public class BlueprintScreen extends ExtendedScreen {
                         pageNumber++;
                     }
                 }));
-                buttonPage = addRenderableWidget(new ButtonWidget(width / 2 - 24, layoutY + 54, 48, 20, Component.literal("0/0)"), b -> {
+                buttonPage = addRenderableWidget(new ButtonWidget(width / 2 - 24, layoutY + 54, 48, 20, Component.literal("0/0"), b -> {
                 }));
                 break;
             case "rules":
@@ -475,8 +471,8 @@ public class BlueprintScreen extends ExtendedScreen {
                 || minecraft == null || minecraft.player == null) {
             return;
         }
-        if (cachedRoomScanPlan == null || !minecraft.player.blockPosition().equals(lastRoomScanPosition)) {
-            updateMapControls(getPlayerRoomScanPlan());
+        if (cachedClientTarget == null || !minecraft.player.blockPosition().equals(lastRoomScanPosition)) {
+            updateMapControls(getPlayerClientTarget());
         }
     }
 
@@ -515,45 +511,44 @@ public class BlueprintScreen extends ExtendedScreen {
         minecraft.gui.renderOverlayMessage(context, minecraft.getTimer());
     }
 
-    private static ReportBuildingMessage.Action getStructureScanAction(Village.RoomScanMode mode) {
-        return switch (mode) {
-            case ADD_BUILDING -> ReportBuildingMessage.Action.ADD_BUILDING;
-            case ADD_ROOM, UPDATE_ROOM -> ReportBuildingMessage.Action.SCAN_ROOM;
-            case ADD_ATTACHMENT -> ReportBuildingMessage.Action.ADD_ATTACHMENT;
-        };
-    }
-
     private void requestPrimaryStructureScan() {
-        RoomScanPlan plan = getPlayerRoomScanPlan();
-        sendStructureScan(plan);
-    }
-
-    private void sendStructureScan(RoomScanPlan plan) {
         selectPlayerFloorOnNextVillageResponse = true;
-        Network.sendToServer(structureScanMessage(plan));
+        RoomWorkflow.ScanPreview preview = getOpeningScanPreview();
+        if (preview == null) {
+            Network.sendToServer(structureScanMessage(getPlayerClientTarget()));
+        } else {
+            ReportBuildingMessage.Action action = preview.mode() == Village.RoomScanMode.ADD_ATTACHMENT
+                    ? ReportBuildingMessage.Action.ADD_ATTACHMENT : ReportBuildingMessage.Action.SCAN_ROOM;
+            Network.sendToServer(new ReportBuildingMessage(action, null, preview.expectedTargetId()));
+        }
     }
 
-    static ReportBuildingMessage structureScanMessage(RoomScanPlan plan) {
-        int expectedTargetId = switch (plan.mode()) {
-            case UPDATE_ROOM -> plan.currentRoom().map(Building::getId).orElse(-1);
-            case ADD_ATTACHMENT -> plan.targetBuildingId();
-            default -> -1;
-        };
-        return new ReportBuildingMessage(getStructureScanAction(plan.mode()), null, expectedTargetId);
+    static ReportBuildingMessage structureScanMessage(Village.ClientPositionTarget target) {
+        if (target == null) {
+            return new ReportBuildingMessage(ReportBuildingMessage.Action.ADD_BUILDING, null, -1);
+        }
+        if (target.room().isPresent()) {
+            return new ReportBuildingMessage(
+                    ReportBuildingMessage.Action.SCAN_ROOM, null, target.room().get().getId());
+        }
+        if (target.structureId() >= 0) {
+            return new ReportBuildingMessage(ReportBuildingMessage.Action.SCAN_ROOM, null, -1);
+        }
+        return new ReportBuildingMessage(ReportBuildingMessage.Action.ADD_BUILDING, null, -1);
     }
 
     static Optional<ReportBuildingMessage> targetedEditMessage(ReportBuildingMessage.Action action,
-                                                                Village village,
-                                                                RoomScanPlan plan) {
-        if (village == null || plan == null) return Optional.empty();
-        Building room = plan.currentRoom().orElse(null);
+                                                               Village village,
+                                                               Village.ClientPositionTarget target) {
+        if (village == null || target == null) return Optional.empty();
+        Building room = target.room().orElse(null);
         int expectedTargetId = switch (action) {
             case FORCE_TYPE, SET_MAIN_ROOM, REMOVE_ROOM -> room == null ? -1 : room.getId();
-            case REMOVE_FLOOR, REMOVE -> village.getLogicalBuildingId(plan.targetStructureId());
+            case REMOVE_FLOOR, REMOVE -> village.getLogicalBuildingId(target.structureId());
             default -> -1;
         };
         Integer floorNumber = action == ReportBuildingMessage.Action.REMOVE_FLOOR
-                ? interactionFloorNumber(village, plan) : null;
+                ? interactionFloorNumber(village, target) : null;
         if (expectedTargetId < 0 || action == ReportBuildingMessage.Action.REMOVE_FLOOR
                 && (floorNumber == null || !village.canRemoveFloor(expectedTargetId, floorNumber))) {
             return Optional.empty();
@@ -567,9 +562,10 @@ public class BlueprintScreen extends ExtendedScreen {
         return Optional.of(new ReportBuildingMessage(action, data, expectedTargetId));
     }
 
-    private static Integer interactionFloorNumber(Village village, RoomScanPlan plan) {
-        return village.getStructure(plan.targetStructureId())
-                .flatMap(structure -> structure.getFloor(plan.targetFloorId()))
+    private static Integer interactionFloorNumber(Village village, Village.ClientPositionTarget target) {
+        if (village == null || target == null || target.structureId() < 0) return null;
+        return village.getStructure(target.structureId())
+                .flatMap(structure -> structure.getFloor(target.floorId()))
                 .map(StructureFloor::floorNumber)
                 .orElse(null);
     }
@@ -594,52 +590,62 @@ public class BlueprintScreen extends ExtendedScreen {
         selectPlayerFloorOnNextVillageResponse = false;
     }
 
-    private RoomScanPlan getPlayerRoomScanPlan() {
+    private Village.ClientPositionTarget getPlayerClientTarget() {
         if (village == null || minecraft == null || minecraft.player == null) {
-            return RoomScanPlan.addBuilding(BlockPos.ZERO);
+            return Village.ClientPositionTarget.NONE;
         }
 
         BlockPos position = minecraft.player.blockPosition();
-        if (!position.equals(lastRoomScanPosition) || cachedRoomScanPlan == null) {
+        if (!position.equals(lastRoomScanPosition) || cachedClientTarget == null) {
             lastRoomScanPosition = position.immutable();
-            // UI preview only; the server recomputes the plan against ServerLevel before committing.
-            cachedRoomScanPlan = village.getRoomScanPlan(minecraft.level, position);
+            cachedClientTarget = village.resolveClientTarget(position);
         }
-        return cachedRoomScanPlan;
+        return cachedClientTarget;
     }
 
-    private String getStructureScanTranslationKey(Village.RoomScanMode mode) {
-        return switch (mode) {
-            case ADD_BUILDING -> "gui.blueprint.addStructure";
-            case ADD_ROOM -> "gui.blueprint.addRoom";
-            case UPDATE_ROOM -> "gui.blueprint.updateRoom";
-            case ADD_ATTACHMENT -> "gui.blueprint.addFloor";
-        };
+    private RoomWorkflow.ScanPreview getOpeningScanPreview() {
+        return openingScanPreview != null && isAtOpeningScanPosition() ? openingScanPreview : null;
     }
 
-    private void updateMapControls(RoomScanPlan scanContext) {
+    private boolean isAtOpeningScanPosition() {
+        return minecraft != null && minecraft.player != null
+                && minecraft.player.blockPosition().equals(openingScanPosition);
+    }
+
+    private String getStructureScanTranslationKey(Village.ClientPositionTarget target) {
+        RoomWorkflow.ScanPreview preview = getOpeningScanPreview();
+        if (preview != null) {
+            return switch (preview.mode()) {
+                case UPDATE_ROOM -> "gui.blueprint.updateRoom";
+                case ADD_ROOM -> "gui.blueprint.addRoom";
+                case ADD_ATTACHMENT -> preview.floorNumber() < 0
+                        ? "gui.blueprint.addBasement" : "gui.blueprint.addFloor";
+                case ADD_BUILDING -> "gui.blueprint.addStructure";
+            };
+        }
+        if (target != null && target.room().isPresent()) return "gui.blueprint.updateRoom";
+        if (target != null && target.structureId() >= 0) return "gui.blueprint.addRoom";
+        return "gui.blueprint.addStructure";
+    }
+
+    private void updateMapControls(Village.ClientPositionTarget target) {
         updateFloorControls();
         updateToggleControl(buildingIconsButton, "gui.blueprint.buildingIcons.short", showBuildingIcons);
         updateToggleControl(terrainButton, "gui.blueprint.terrain", showTerrain);
         updateMapScaleControl();
-        updateStructureScanControl(scanContext);
-        updateInheritanceControl(scanContext);
-        updateMainRoomControl(scanContext);
+        updateStructureScanControl(target);
+        updateInheritanceControl(target);
+        updateMainRoomControl(target);
     }
 
-    private void updateStructureScanControl(RoomScanPlan scanContext) {
+    private void updateStructureScanControl(Village.ClientPositionTarget target) {
         if (structureScanButton == null) return;
 
-        Village.RoomScanMode primaryMode = scanContext.mode();
-        boolean roomRegistered = scanContext.mode() == Village.RoomScanMode.UPDATE_ROOM;
-        boolean insideBuilding = roomRegistered || scanContext.mode() == Village.RoomScanMode.ADD_ROOM;
-        RemovalControlState removalState = removalControlState(village, scanContext);
+        boolean insideBuilding = target != null && target.structureId() >= 0;
+        RemovalControlState removalState = removalControlState(village, target);
         int y = layoutBaseY() - 56 + 22 * 3;
 
-        String scanKey = primaryMode == Village.RoomScanMode.ADD_ATTACHMENT
-                && scanContext.hasProspectiveFloor() && scanContext.prospectiveFloorNumber() < 0
-                ? "gui.blueprint.addBasement" : getStructureScanTranslationKey(primaryMode);
-        structureScanButton.setMessage(scanKey);
+        structureScanButton.setMessage(getStructureScanTranslationKey(target));
         structureScanButton.active = true;
         structureScanButton.setY(y);
         y += 22;
@@ -661,17 +667,17 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     static RemovalControlState removalControlState(Village village,
-                                                   RoomScanPlan scanContext) {
-        if (village == null || scanContext == null) return RemovalControlState.hidden();
+                                                   Village.ClientPositionTarget target) {
+        if (village == null || target == null) return RemovalControlState.hidden();
 
-        Integer playerFloor = interactionFloorNumber(village, scanContext);
+        Integer playerFloor = interactionFloorNumber(village, target);
         if (playerFloor != null
-                && village.canRemoveFloor(village.getLogicalBuildingId(scanContext.targetStructureId()), playerFloor)) {
+                && village.canRemoveFloor(village.getLogicalBuildingId(target.structureId()), playerFloor)) {
             return new RemovalControlState(true, true, ReportBuildingMessage.Action.REMOVE_FLOOR,
                     "gui.blueprint.removeFloor", "gui.blueprint.removeFloor.tooltip");
         }
 
-        Building room = scanContext.currentRoom().orElse(null);
+        Building room = target.room().orElse(null);
         if (room == null) return RemovalControlState.hidden();
 
         boolean mainRoom = village.isMainRoom(room);
@@ -893,7 +899,6 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     private int layoutBaseY() {
-        // Share one anchor across sections; only the map grows with the available GUI area.
         return layoutTitleY() + MAP_TITLE_GAP + mapHalfSize() - 8;
     }
 
@@ -1005,7 +1010,6 @@ public class BlueprintScreen extends ExtendedScreen {
         floorPreviousButton.active = canChangeFloors && selectedIndex > 0;
         floorNextButton.active = canChangeFloors && selectedIndex >= 0 && selectedIndex < floors.size() - 1;
         floorLabelButton.active = canChangeFloors && selectedFloor != null;
-        // Keep floor-navigation help on the central label only; the arrow buttons are self-explanatory.
         floorLabelButton.setTooltip(Tooltip.create(tooltip));
 
         floorLabelButton.setMessage(getFloorLabel(selectedFloor));
@@ -1069,17 +1073,17 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     private void addInheritanceControl(SideControlColumn column) {
-        RoomScanPlan scanContext = getPlayerRoomScanPlan();
-        Building room = scanContext.currentRoom().orElse(null);
+        Village.ClientPositionTarget target = getPlayerClientTarget();
+        Building room = target.room().orElse(null);
         InheritanceControlState state = inheritanceControlState(village, room);
         inheritanceButton = column.addTooltip(
                 Component.translatable(state.labelKey()),
                 Component.translatable(state.tooltipKey()), button -> {
-            Building currentRoom = getPlayerRoomScanPlan().currentRoom().orElse(null);
+            Building currentRoom = getPlayerClientTarget().room().orElse(null);
             if (currentRoom == null) return;
             Network.sendToServer(inheritanceMessage(village, currentRoom));
         });
-        updateInheritanceControl(scanContext);
+        updateInheritanceControl(target);
     }
 
     static ReportBuildingMessage inheritanceMessage(Village village, Building room) {
@@ -1116,9 +1120,9 @@ public class BlueprintScreen extends ExtendedScreen {
     record InheritanceControlState(String labelKey, String tooltipKey, boolean nextEnabled) {
     }
 
-    private void updateInheritanceControl(RoomScanPlan scanContext) {
+    private void updateInheritanceControl(Village.ClientPositionTarget target) {
         if (inheritanceButton == null) return;
-        Building room = scanContext.currentRoom().orElse(null);
+        Building room = target == null ? null : target.room().orElse(null);
         boolean available = room != null;
         inheritanceButton.visible = available;
         inheritanceButton.active = available;
@@ -1159,11 +1163,11 @@ public class BlueprintScreen extends ExtendedScreen {
         }
     }
 
-    private void updateMainRoomControl(RoomScanPlan scanContext) {
+    private void updateMainRoomControl(Village.ClientPositionTarget target) {
         if (mainRoomButton == null) {
             return;
         }
-        Optional<Building> room = village == null ? Optional.empty() : scanContext.currentRoom();
+        Optional<Building> room = village == null || target == null ? Optional.empty() : target.room();
         Structure structure = room.flatMap(village::getStructureFor).orElse(null);
         mainRoomButton.active = room.isPresent() && structure != null
                 && !roomTypeResolver.resolve(room.orElse(null)).isMainRoom();
@@ -1179,7 +1183,6 @@ public class BlueprintScreen extends ExtendedScreen {
         int y = layoutBaseY() + 5;
         int x = width / 2 - 70;
 
-        //tasks
         for (Task task : tasks.get(rank.promote())) {
             boolean completed = completedTasks.contains(task.getId());
             Component t = task.getTranslatable().withStyle(completed ? ChatFormatting.STRIKETHROUGH : ChatFormatting.RESET);
@@ -1205,7 +1208,7 @@ public class BlueprintScreen extends ExtendedScreen {
         int y = layoutBaseY() - 50;
         if (selectedBuilding != null) {
             Building currentRoom = selectedBuilding.grouped()
-                    ? null : getPlayerRoomScanPlan().currentRoom().orElse(null);
+                    ? null : getPlayerClientTarget().room().orElse(null);
             Map<ResourceLocation, Integer> requirementCounts = currentRoom == null
                     ? Map.of() : catalogRequirementCounts(
                     selectedBuilding, roomTypeResolver.resolve(currentRoom).classificationPoi());
@@ -1264,25 +1267,34 @@ public class BlueprintScreen extends ExtendedScreen {
 
     private void renderVillagers(GuiGraphics context) {
         int maxPages = (int) Math.ceil(village.getPopulation() / 9.0);
-        buttonPage.setMessage(Component.literal((pageNumber + 1) + "/" + maxPages));
+        buttonPage.setMessage(Component.literal(maxPages == 0 ? "0/0" : (pageNumber + 1) + "/" + maxPages));
 
-        List<Map.Entry<UUID, String>> villager = village.getResidentNames().entrySet().stream()
-                .sorted(Map.Entry.comparingByValue()).toList();
+        List<Map.Entry<UUID, String>> residents = sortedResidents();
 
-        selectedVillager = null;
         for (int i = 0; i < 9; i++) {
             int index = i + pageNumber * 9;
-            if (index < villager.size()) {
-                int y = layoutBaseY() - 51 + i * 11;
-                boolean hover = isMouseWithin(width / 2 - 50, y - 1, 100, 11);
-                context.drawCenteredString(font, Component.literal(villager.get(index).getValue()), width / 2, y, hover ? 0xFFD7D784 : 0xFFFFFFFF);
-                if (hover) {
-                    selectedVillager = villager.get(index).getKey();
-                }
+            if (index < residents.size()) {
+                int y = residentRowY(i);
+                boolean hover = isOverResidentRow(mouseX, mouseY, i);
+                context.drawCenteredString(font, Component.literal(residents.get(index).getValue()), width / 2, y, hover ? 0xFFD7D784 : 0xFFFFFFFF);
             } else {
                 break;
             }
         }
+    }
+
+    private List<Map.Entry<UUID, String>> sortedResidents() {
+        return village.getResidentNames().entrySet().stream().sorted(Map.Entry.comparingByValue()).toList();
+    }
+
+    private int residentRowY(int row) {
+        return layoutBaseY() - 51 + row * 11;
+    }
+
+    private boolean isOverResidentRow(double x, double y, int row) {
+        int left = width / 2 - 50;
+        int top = residentRowY(row) - 1;
+        return x >= left && x < left + 100 && y >= top && y < top + 11;
     }
 
     private void renderRules(GuiGraphics context) {
@@ -1350,9 +1362,23 @@ public class BlueprintScreen extends ExtendedScreen {
             return true;
         }
 
-        if (page.equals("villagers") && selectedVillager != null) {
-            assert minecraft != null;
-            minecraft.setScreen(new FamilyTreeScreen(selectedVillager));
+        if (button == 0 && "villagers".equals(page) && village != null) {
+            if (super.mouseClicked(mouseX, mouseY, button)) {
+                return true;
+            }
+            List<Map.Entry<UUID, String>> residents = sortedResidents();
+            for (int row = 0; row < 9; row++) {
+                int index = row + pageNumber * 9;
+                if (index >= residents.size()) {
+                    break;
+                }
+                if (isOverResidentRow(mouseX, mouseY, row)) {
+                    assert minecraft != null;
+                    minecraft.setScreen(new FamilyTreeScreen(residents.get(index).getKey()));
+                    return true;
+                }
+            }
+            return false;
         }
 
         return super.mouseClicked(mouseX, mouseY, button);
@@ -1400,13 +1426,21 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     protected boolean isMouseWithin(int x, int y, int w, int h) {
-        return mouseX >= x && mouseX < x + w && mouseY >= y && mouseY < y + h;
+        return mouseX >= x && mouseX < x + w && mouseY >= y && mouseY < h + y;
     }
 
     public void setVillage(Village village) {
         this.village = village;
         lastRoomScanPosition = null;
-        cachedRoomScanPlan = null;
+        cachedClientTarget = null;
+        openingScanPreview = null;
+        if (village != null && !openingScanDone) {
+            openingScanDone = true;
+            if (isAtOpeningScanPosition() && minecraft.level != null
+                    && getPlayerClientTarget().equals(Village.ClientPositionTarget.NONE)) {
+                openingScanPreview = RoomWorkflow.preview(village, minecraft.level, openingScanPosition).orElse(null);
+            }
+        }
         if (village == null) {
             mapCenterVillageId = null;
         } else if (!Objects.equals(mapCenterVillageId, village.getId())) {
@@ -1429,30 +1463,26 @@ public class BlueprintScreen extends ExtendedScreen {
         this.tooltipFactory = BlueprintTooltipFactory.create(village, roomTypeResolver);
         this.mapGeometry = BlueprintMapGeometry.build(village, roomTypeResolver);
         boolean mapPage = "map".equals(page) || "advanced".equals(page)
-                || (village != null && ("waiting".equals(page) || "empty".equals(page)));
-        RoomScanPlan scanContext = (selectPlayerFloorOnNextVillageResponse || mapPage)
-                ? getPlayerRoomScanPlan() : null;
+                || (village != null && (page == null || "waiting".equals(page) || "empty".equals(page)));
+        Village.ClientPositionTarget target = (selectPlayerFloorOnNextVillageResponse || mapPage)
+                ? getPlayerClientTarget() : null;
         if (selectPlayerFloorOnNextVillageResponse && selectedFloorOrdinal != null
-                && scanContext != null && scanContext.mode() == Village.RoomScanMode.UPDATE_ROOM) {
-            selectPlayerFloor(scanContext);
+                && target != null && target.room().isPresent()) {
+            selectPlayerFloor(target);
         }
         selectPlayerFloorOnNextVillageResponse = false;
 
         if (village == null) {
             setPage("empty");
-        } else if (page.equals("waiting") || page.equals("empty")) {
+        } else if (page == null || page.equals("waiting") || page.equals("empty")) {
             setPage("map");
-        } else if (scanContext != null) {
-            updateMapControls(scanContext);
+        } else if (target != null) {
+            updateMapControls(target);
         }
     }
 
-    private void selectPlayerFloor(RoomScanPlan scanContext) {
-        scanContext.currentRoom()
-                .ifPresent(room -> {
-                    int ordinal = room.getFloorNumber(village);
-                    selectedFloorOrdinal = ordinal;
-                });
+    private void selectPlayerFloor(Village.ClientPositionTarget target) {
+        target.room().ifPresent(room -> selectedFloorOrdinal = room.getFloorNumber(village));
     }
 
     public void setVillageData(Rank rank, int reputation, boolean isVillage, Set<String> completedTasks, Map<Rank, List<Task>> tasks) {

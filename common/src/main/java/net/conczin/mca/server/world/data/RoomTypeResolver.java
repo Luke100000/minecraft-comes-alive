@@ -70,7 +70,7 @@ public final class RoomTypeResolver {
     }
 
     /** Type-only queries need a POI snapshot only when contributions can change the Main Room's type. */
-    BuildingType effectiveType(Building room) {
+    public BuildingType effectiveType(Building room) {
         if (room == null) return null;
         if (room.isTypeForced() || !room.isFunctionalRoom()) return room.getBuildingType();
 

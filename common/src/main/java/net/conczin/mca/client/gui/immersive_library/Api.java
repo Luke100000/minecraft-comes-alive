@@ -10,6 +10,8 @@ import net.minecraft.SharedConstants;
 import org.apache.commons.io.IOUtils;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URLEncoder;
@@ -31,6 +33,12 @@ public class Api {
     }
 
     public static Response request(HttpMethod httpMethod, Class<? extends Response> expectedAnswer, String url, Map<String, String> queryParams, Map<String, ?> body) {
+        return requestWithToken(httpMethod, expectedAnswer, url, queryParams, body, Auth.getToken());
+    }
+
+    public static Response requestWithToken(HttpMethod httpMethod, Class<? extends Response> expectedAnswer, String url,
+                                            Map<String, String> queryParams, Map<String, ?> body, String token) {
+        HttpURLConnection con = null;
         try {
             String fullUrl = Config.getInstance().immersiveLibraryUrl + "/" + url;
 
@@ -41,7 +49,7 @@ public class Api {
                         .collect(Collectors.joining("&", fullUrl + "?", ""));
             }
 
-            HttpURLConnection con = (HttpURLConnection) (URI.create(fullUrl)).toURL().openConnection();
+            con = (HttpURLConnection) (URI.create(fullUrl)).toURL().openConnection();
             con.setConnectTimeout(TIMEOUT_MS);
             con.setReadTimeout(TIMEOUT_MS);
 
@@ -55,21 +63,26 @@ public class Api {
             con.setRequestProperty("User-Agent", userAgent());
 
             // Authenticate
-            if (Auth.hasToken()) {
-                con.setRequestProperty("Authorization", "Bearer " + Auth.getToken());
+            if (token != null) {
+                con.setRequestProperty("Authorization", "Bearer " + token);
             }
 
             // Set request body
             if (body != null && !body.isEmpty()) {
                 con.setDoOutput(true);
                 String jsonBody = gson.toJson(body);
-                con.getOutputStream().write(jsonBody.getBytes(StandardCharsets.UTF_8));
+                try (OutputStream output = con.getOutputStream()) {
+                    output.write(jsonBody.getBytes(StandardCharsets.UTF_8));
+                }
             }
 
             // Send the request and read response
             int responseCode = con.getResponseCode();
             if (responseCode >= 400) {
-                String error = con.getErrorStream() == null ? "" : IOUtils.toString(con.getErrorStream(), StandardCharsets.UTF_8);
+                String error;
+                try (InputStream errorStream = con.getErrorStream()) {
+                    error = errorStream == null ? "" : IOUtils.toString(errorStream, StandardCharsets.UTF_8);
+                }
                 JsonObject object = gson.fromJson(error, JsonObject.class);
                 boolean hasMessage = object != null && object.has("message");
                 return new ErrorResponse(responseCode, hasMessage ? object.get("message").getAsString() : error);
@@ -77,10 +90,9 @@ public class Api {
 
             // Parse answer
             String response;
-            if ("gzip".equals(con.getContentEncoding())) {
-                response = IOUtils.toString(new GZIPInputStream(con.getInputStream()), StandardCharsets.UTF_8);
-            } else {
-                response = IOUtils.toString(con.getInputStream(), StandardCharsets.UTF_8);
+            try (InputStream stream = "gzip".equals(con.getContentEncoding())
+                    ? new GZIPInputStream(con.getInputStream()) : con.getInputStream()) {
+                response = IOUtils.toString(stream, StandardCharsets.UTF_8);
             }
 
             return gson.fromJson(response, expectedAnswer);
@@ -90,6 +102,10 @@ public class Api {
         } catch (Exception e) {
             MCA.LOGGER.error(e);
             return new ErrorResponse(-1, e.toString());
+        } finally {
+            if (con != null) {
+                con.disconnect();
+            }
         }
     }
 

@@ -153,6 +153,14 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         setPage(page);
     }
 
+    @Override
+    public void removed() {
+        if (villager != null) {
+            SpeechManager.INSTANCE.stopPreview(villager);
+        }
+        super.removed();
+    }
+
     private int doubleGeneSliders(int y, Genetics.GeneType... genes) {
         boolean right = false;
         for (Genetics.GeneType g : genes) {

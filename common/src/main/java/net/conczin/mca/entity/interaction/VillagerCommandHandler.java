@@ -24,6 +24,7 @@ import net.minecraft.network.protocol.game.ClientboundSetPassengersPacket;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Saddleable;
@@ -38,11 +39,30 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.Comparator;
+import java.util.List;
 import java.util.Optional;
 
 public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityMCA> {
     public VillagerCommandHandler(VillagerEntityMCA entity) {
         super(entity);
+    }
+
+    static String[] splitCommand(String command) {
+        return command.startsWith("profession.") || command.startsWith("location.")
+                ? command.split("\\.", 2) : new String[]{command};
+    }
+
+    static Optional<ResourceLocation> resolveAllowedRumorStructure(String arg, List<String> allowedPool, RandomSource random) {
+        if (allowedPool.isEmpty()) {
+            return Optional.empty();
+        }
+        String selected = arg;
+        if (selected.isEmpty()) {
+            selected = allowedPool.get(random.nextInt(allowedPool.size()));
+        } else if (!allowedPool.contains(selected)) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(ResourceLocation.tryParse(selected));
     }
 
     /**
@@ -80,8 +100,8 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
 
         // Only these legacy commands have dot-separated arguments; namespaced addon IDs do not.
         String arg = "";
-        if (command.startsWith("profession.") || command.startsWith("location.")) {
-            String[] split = command.split("\\.", 2);
+        String[] split = splitCommand(command);
+        if (split.length > 1) {
             command = split[0];
             arg = split[1];
         }
@@ -256,38 +276,40 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
                 return DialogueCommandResult.accepted(false);
             }
             case "location" -> {
-                if (!Config.getInstance().structuresInRumors.isEmpty()) {
-                    //choose a random arg from the default pool
-                    if (arg.isEmpty()) {
-                        arg = Config.getInstance().structuresInRumors.get(entity.getRandom().nextInt(Config.getInstance().structuresInRumors.size()));
-                    }
-
-                    // Capture entity/registry state here; the locator returns on this server thread.
-                    ServerLevel world = (ServerLevel) entity.level();
-                    ResourceLocation identifier = ResourceLocation.tryParse(arg);
-                    BlockPos pos = RandomPos.generateRandomDirection(entity.getRandom(), 1024, 0).offset(entity.blockPosition());
-                    if (identifier == null) {
-                        entity.sendChatMessage(player, "dialogue.location.forgot");
-                        break;
-                    }
-                    var structure = world.registryAccess().registryOrThrow(Registries.STRUCTURE).getHolder(identifier);
-                    if (structure.isEmpty()) {
-                        entity.sendChatMessage(player, "dialogue.location.forgot");
-                        break;
-                    }
-                    MCA.getStructureLocator().locate(entity.getUUID(), world, pos,
-                            HolderSet.direct(structure.orElseThrow()), 64).thenAccept(position -> {
-                        if (!entity.isAlive() || player.isRemoved() || entity.level() != world || player.level() != world) {
-                            return;
-                        }
-                        position.ifPresentOrElse(found -> {
-                            String posString = found.getX() + "," + found.getY() + "," + found.getZ();
-                            entity.sendChatMessage(player, "dialogue.location." + identifier.getPath(), posString);
-                        }, () -> entity.sendChatMessage(player, "dialogue.location.forgot"));
-                    });
-                } else {
+                // A generic rumor request with an empty configured pool still completes the dialogue.
+                // Explicit requests remain subject to the source allowlist below.
+                if (arg.isEmpty() && Config.getInstance().structuresInRumors.isEmpty()) {
                     entity.sendChatMessage(player, "dialogue.location.forgot");
+                    return DialogueCommandResult.accepted(false);
                 }
+                Optional<ResourceLocation> resolvedIdentifier = resolveAllowedRumorStructure(
+                        arg,
+                        Config.getInstance().structuresInRumors,
+                        entity.getRandom()
+                );
+                if (resolvedIdentifier.isEmpty()) {
+                    entity.sendChatMessage(player, "dialogue.location.forgot");
+                    break;
+                }
+                ResourceLocation identifier = resolvedIdentifier.get();
+                // Capture entity/registry state here; the locator returns on this server thread.
+                ServerLevel world = (ServerLevel) entity.level();
+                var structure = world.registryAccess().registryOrThrow(Registries.STRUCTURE).getHolder(identifier);
+                if (structure.isEmpty()) {
+                    entity.sendChatMessage(player, "dialogue.location.forgot");
+                    break;
+                }
+                BlockPos pos = RandomPos.generateRandomDirection(entity.getRandom(), 1024, 0).offset(entity.blockPosition());
+                MCA.getStructureLocator().locateRumor(entity.getUUID(), player.getUUID(), world, pos,
+                        HolderSet.direct(structure.orElseThrow()), 64).thenAccept(position -> {
+                    if (!entity.isAlive() || player.isRemoved() || entity.level() != world || player.level() != world) {
+                        return;
+                    }
+                    position.ifPresentOrElse(found -> {
+                        String posString = found.getX() + "," + found.getY() + "," + found.getZ();
+                        entity.sendChatMessage(player, "dialogue.location." + identifier.getPath(), posString);
+                    }, () -> entity.sendChatMessage(player, "dialogue.location.forgot"));
+                });
                 return DialogueCommandResult.accepted(false);
             }
         }

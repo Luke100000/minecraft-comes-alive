@@ -20,11 +20,13 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.properties.BedPart;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.common.util.FakePlayer;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
@@ -429,6 +431,8 @@ public final class DialogueReferenceGameTests {
         player.setPos(position.getCenter());
         VillagerEntityMCA villager = spawnVillager(helper, position.offset(1, 0, 0));
         villager.setNoAi(true);
+        // Exercise the same concrete interaction ownership required by the real dialogue screen.
+        villager.getInteractions().interactAt(player, Vec3.ZERO, InteractionHand.MAIN_HAND);
         return new Fixture(player, villager);
     }
 

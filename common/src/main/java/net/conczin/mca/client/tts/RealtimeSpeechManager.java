@@ -19,23 +19,31 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.zip.GZIPInputStream;
 
-
 public class RealtimeSpeechManager {
-    private static final int CHUNK_SIZE = 1024;
+    public static final int CONNECT_TIMEOUT_MS = 5_000;
+    public static final int READ_TIMEOUT_MS = 10_000;
+    public static final long VOICE_FETCH_RETRY_COOLDOWN_MS = 30_000L;
 
     public final String url;
-    public Map<String, VoiceInfo> voiceInfoMap;
+    public volatile Map<String, VoiceInfo> voiceInfoMap;
+    private final Object voiceFetchLock = new Object();
+    private CompletableFuture<Map<String, VoiceInfo>> inFlightVoiceFetch;
+    private volatile long nextVoiceFetchAllowedAt;
 
     public RealtimeSpeechManager(String url) {
         this.url = url;
     }
 
-    public static void download(OutputStream output, String url, String payload, String key) {
+    public static void download(OutputStream output, String url, String payload, String key) throws IOException {
+        HttpURLConnection connection = null;
         try {
-            HttpURLConnection connection = (HttpURLConnection) URI.create(url).toURL().openConnection();
+            connection = (HttpURLConnection) URI.create(url).toURL().openConnection();
+            connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
+            connection.setReadTimeout(READ_TIMEOUT_MS);
             connection.setRequestMethod("POST");
             connection.setDoOutput(true);
             connection.setRequestProperty("Accept", "application/json");
@@ -47,81 +55,197 @@ public class RealtimeSpeechManager {
                 os.write(payload.getBytes(StandardCharsets.UTF_8));
             }
 
-            if (connection.getResponseCode() == HttpURLConnection.HTTP_OK) {
-                if (output == null) return;
-                try (InputStream inputStream = connection.getInputStream()) {
-                    byte[] buffer = new byte[CHUNK_SIZE];
-                    int bytesRead;
-                    while ((bytesRead = inputStream.read(buffer)) != -1) {
-                        output.write(buffer, 0, bytesRead);
-                    }
-                }
-            } else {
-                MCA.LOGGER.warn("Failed to get audio: {} - {}", connection.getResponseCode(), connection.getResponseMessage());
+            int responseCode = connection.getResponseCode();
+            if (responseCode != HttpURLConnection.HTTP_OK) {
+                throw new IOException("HTTP " + responseCode + " " + connection.getResponseMessage());
             }
-        } catch (IOException | IllegalArgumentException e) {
-            MCA.LOGGER.warn("Failed to download audio: {}", e.getMessage());
+            if (output != null) {
+                copyAudioResponse(connection, output);
+            }
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
+        }
+    }
+
+    static void copyAudioResponse(HttpURLConnection connection, OutputStream output) throws IOException {
+        try (InputStream input = connection.getInputStream()) {
+            long expectedBytes = connection.getContentLengthLong();
+            long copiedBytes = input.transferTo(output);
+            if (expectedBytes >= 0 && copiedBytes != expectedBytes) {
+                throw new IOException("Incomplete TTS response: received " + copiedBytes + " of " + expectedBytes + " bytes");
+            }
         }
     }
 
     public void play(String text, String gender, String language, float pitch, float gene, Entity entity, boolean cacheable) {
-        List<String> voices = getVoices(language, gender);
-        if (voices == null) {
-            return;
-        }
-        if (voices.isEmpty()) {
-            OnlineSpeechManager.languageNotSupported();
-            return;
-        }
+        UUID entityId = entity.getUUID();
+        long request = SpeechManager.INSTANCE.beginVoiceRequest(entityId);
+        getVoicesAsync(language, gender).whenCompleteAsync((voices, throwable) -> {
+            boolean playbackQueued = false;
+            try {
+                if (throwable != null || voices == null) {
+                    return;
+                }
+                if (voices.isEmpty()) {
+                    OnlineSpeechManager.languageNotSupported();
+                    return;
+                }
 
-        int tone = Math.min(voices.size() - 1, (int) Math.floor(gene * voices.size()));
-        play(text, pitch, entity, cacheable, voices.get(tone));
-    }
-
-    public void play(String phrase, float pitch, Entity entity, boolean cacheable, String voice) {
-        long request = SpeechManager.INSTANCE.beginVoiceRequest(entity.getUUID());
-        CompletableFuture.runAsync(() -> {
-            String text = cacheable ? OnlineSpeechManager.cleanPhrase(phrase) : phrase;
-            String hash = cacheable ? AudioCache.getHash(voice) + "/" + AudioCache.getHash(text) : "realtime";
-            if (AudioCache.get(hash, output -> {
-                downloadAudio(output, voice, text);
-            }, cacheable)) {
-                ResourceLocation soundLocation = MCA.locate("tts_cache/" + hash);
-                SpeechManager.INSTANCE.playSound(pitch, entity, soundLocation, request);
+                int tone = Math.min(voices.size() - 1, (int) Math.floor(gene * voices.size()));
+                playbackQueued = prepareAndQueuePlayback(text, pitch, entity, cacheable, voices.get(tone), request);
+            } catch (RuntimeException e) {
+                MCA.LOGGER.warn("Failed to prepare realtime villager voice", e);
+            } finally {
+                if (!playbackQueued) {
+                    SpeechManager.INSTANCE.finishVoiceRequest(entityId, request);
+                }
             }
         });
     }
 
-    public List<String> getVoices(String language, String gender) {
-        if (voiceInfoMap == null) {
-            voiceInfoMap = fetchVoices(this.url + "v1/tts/piper/voices");
+    public void play(String phrase, float pitch, Entity entity, boolean cacheable, String voice) {
+        UUID entityId = entity.getUUID();
+        long request = SpeechManager.INSTANCE.beginVoiceRequest(entityId);
+        CompletableFuture.runAsync(() -> {
+            boolean playbackQueued = false;
+            try {
+                playbackQueued = prepareAndQueuePlayback(phrase, pitch, entity, cacheable, voice, request);
+            } catch (RuntimeException e) {
+                MCA.LOGGER.warn("Failed to prepare realtime villager voice", e);
+            } finally {
+                if (!playbackQueued) {
+                    SpeechManager.INSTANCE.finishVoiceRequest(entityId, request);
+                }
+            }
+        });
+    }
+
+    static String cacheKey(String voice, String text, boolean cacheable, long request) {
+        return cacheable ? AudioCache.getHash(voice) + "/" + AudioCache.getHash(text) : "realtime/" + request;
+    }
+
+    private boolean prepareAndQueuePlayback(String phrase, float pitch, Entity entity, boolean cacheable, String voice, long request) {
+        String text = cacheable ? OnlineSpeechManager.cleanPhrase(phrase) : phrase;
+        String hash = cacheKey(voice, text, cacheable, request);
+        if (AudioCache.get(hash, output -> downloadAudio(output, voice, text), cacheable)) {
+            ResourceLocation soundLocation = MCA.locate("tts_cache/" + hash);
+            SpeechManager.INSTANCE.playSound(pitch, entity, soundLocation, request);
+            return true;
         }
-        if (voiceInfoMap == null) {
+        return false;
+    }
+
+    public CompletableFuture<List<String>> getVoicesAsync(String language, String gender) {
+        Map<String, VoiceInfo> loaded = this.voiceInfoMap;
+        if (loaded != null) {
+            return CompletableFuture.completedFuture(filterVoices(loaded, language, gender));
+        }
+        return ensureVoicesLoadedAsync().thenApply(voices -> filterVoices(voices, language, gender));
+    }
+
+    CompletableFuture<Map<String, VoiceInfo>> ensureVoicesLoadedAsync() {
+        Map<String, VoiceInfo> loaded = this.voiceInfoMap;
+        if (loaded != null) {
+            return CompletableFuture.completedFuture(loaded);
+        }
+        if (System.currentTimeMillis() < nextVoiceFetchAllowedAt) {
+            return CompletableFuture.completedFuture(null);
+        }
+        synchronized (voiceFetchLock) {
+            loaded = this.voiceInfoMap;
+            if (loaded != null) {
+                return CompletableFuture.completedFuture(loaded);
+            }
+            if (System.currentTimeMillis() < nextVoiceFetchAllowedAt) {
+                return CompletableFuture.completedFuture(null);
+            }
+            if (inFlightVoiceFetch != null) {
+                return inFlightVoiceFetch;
+            }
+            CompletableFuture<Map<String, VoiceInfo>> future = CompletableFuture.supplyAsync(() -> {
+                try {
+                    Map<String, VoiceInfo> fetched = fetchVoices(this.url + "v1/tts/piper/voices");
+                    if (fetched != null) {
+                        this.voiceInfoMap = fetched;
+                    }
+                    return fetched;
+                } finally {
+                    synchronized (voiceFetchLock) {
+                        inFlightVoiceFetch = null;
+                    }
+                }
+            });
+            inFlightVoiceFetch = future;
+            return future;
+        }
+    }
+
+    static List<String> filterVoices(Map<String, VoiceInfo> voices, String language, String gender) {
+        if (voices == null) {
             return null;
         }
-        return voiceInfoMap.values().stream()
-                .filter(info -> info.language.toLowerCase(Locale.ROOT).substring(0, 2).equals(language.substring(0, 2)) && info.gender.equals(gender))
+        if (language == null || language.length() < 2 || gender == null) {
+            return List.of();
+        }
+        String languagePrefix = language.substring(0, 2).toLowerCase(Locale.ROOT);
+        return voices.values().stream()
+                .filter(info -> info != null
+                        && info.id != null
+                        && info.language != null
+                        && info.language.length() >= 2
+                        && info.language.substring(0, 2).toLowerCase(Locale.ROOT).equals(languagePrefix)
+                        && gender.equals(info.gender))
                 .map(info -> info.id)
                 .toList();
     }
 
     public Map<String, VoiceInfo> fetchVoices(String url) {
+        if (System.currentTimeMillis() < nextVoiceFetchAllowedAt) {
+            return null;
+        }
+        HttpURLConnection connection = null;
         try {
-            HttpURLConnection connection = (HttpURLConnection) URI.create(url).toURL().openConnection();
+            connection = (HttpURLConnection) URI.create(url).toURL().openConnection();
+            connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
+            connection.setReadTimeout(READ_TIMEOUT_MS);
             connection.setRequestMethod("GET");
             connection.setRequestProperty("Content-Type", "application/json");
             connection.setRequestProperty("Accept-Encoding", "gzip");
             connection.setRequestProperty("Accept", "application/json");
 
+            int responseCode = connection.getResponseCode();
+            if (responseCode != HttpURLConnection.HTTP_OK) {
+                MCA.LOGGER.warn("Failed to fetch voices: {} - {}", responseCode, connection.getResponseMessage());
+                nextVoiceFetchAllowedAt = System.currentTimeMillis() + VOICE_FETCH_RETRY_COOLDOWN_MS;
+                return null;
+            }
+
             try (InputStream input = connection.getInputStream();
                  InputStreamReader reader = new InputStreamReader("gzip".equals(connection.getContentEncoding()) ? new GZIPInputStream(input) : input, StandardCharsets.UTF_8)) {
 
-                JsonObject root = JsonParser.parseReader(reader).getAsJsonObject();
+                JsonElement parsed = JsonParser.parseReader(reader);
+                if (parsed == null || !parsed.isJsonObject()) {
+                    nextVoiceFetchAllowedAt = System.currentTimeMillis() + VOICE_FETCH_RETRY_COOLDOWN_MS;
+                    return null;
+                }
+                JsonObject root = parsed.getAsJsonObject();
                 JsonArray voices = root.getAsJsonArray("voices");
+                if (voices == null) {
+                    nextVoiceFetchAllowedAt = System.currentTimeMillis() + VOICE_FETCH_RETRY_COOLDOWN_MS;
+                    return null;
+                }
 
                 Map<String, VoiceInfo> result = new HashMap<>();
                 for (JsonElement elem : voices) {
+                    if (elem == null || !elem.isJsonObject()) {
+                        continue;
+                    }
                     JsonObject obj = elem.getAsJsonObject();
+                    if (!obj.has("id") || !obj.has("language") || !obj.has("gender")) {
+                        continue;
+                    }
                     VoiceInfo info = new VoiceInfo(
                             obj.get("id").getAsString(),
                             obj.get("language").getAsString(),
@@ -129,21 +253,30 @@ public class RealtimeSpeechManager {
                     );
                     result.put(info.id, info);
                 }
-                return result;
+                nextVoiceFetchAllowedAt = 0L;
+                return Map.copyOf(result);
             }
-        } catch (IOException | IllegalArgumentException e) {
+        } catch (IOException | RuntimeException e) {
             MCA.LOGGER.warn("Failed to fetch voices: {}", e.getMessage());
+            nextVoiceFetchAllowedAt = System.currentTimeMillis() + VOICE_FETCH_RETRY_COOLDOWN_MS;
             return null;
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
         }
     }
 
-    public void downloadAudio(OutputStream output, String voiceId, String text) {
+    static String buildSpeakPayload(String voiceId, String text) {
+        JsonObject payload = new JsonObject();
+        payload.addProperty("text", text);
+        payload.addProperty("voice", voiceId);
+        return payload.toString();
+    }
+
+    public void downloadAudio(OutputStream output, String voiceId, String text) throws IOException {
         String url = this.url + "v1/tts/piper/speak";
-        String payload = String.format(
-                "{\"text\": \"%s\", \"voice\": \"%s\"}",
-                text, voiceId
-        );
-        download(output, url, payload, "");
+        download(output, url, buildSpeakPayload(voiceId, text), "");
     }
 
     public static class VoiceInfo {

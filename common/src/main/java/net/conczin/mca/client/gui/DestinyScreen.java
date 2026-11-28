@@ -10,6 +10,7 @@ import net.conczin.mca.network.Network;
 import net.conczin.mca.network.c2s.DestinyMessage;
 import net.conczin.mca.util.compat.ButtonWidget;
 import net.conczin.mca.util.localization.FlowingText;
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
@@ -19,17 +20,17 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.level.Level;
 
 import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class DestinyScreen extends VillagerEditorScreen {
     private static final ResourceLocation LOGO_TEXTURE = MCA.locate("textures/banner.png");
-    private static final int DESTINY_COLUMNS = 3;
-    private static final int DESTINY_ROWS = 3;
-    private static final int DESTINY_LOCATIONS_PER_PAGE = DESTINY_COLUMNS * DESTINY_ROWS;
-    private static final int DESTINY_BUTTON_GAP = 4;
-    private static final int DESTINY_BUTTON_HORIZONTAL_PADDING = 16;
+    static final int DESTINY_COLUMNS = 3;
+    static final int DESTINY_ROWS = 3;
+    static final int DESTINY_BUTTON_GAP = 4;
+    static final int DESTINY_BUTTON_HORIZONTAL_PADDING = 16;
     private static final int DESTINY_DIMENSION_SELECTOR_MAX_WIDTH = 400;
-    private static final int DESTINY_DIMENSION_SELECTOR_MARGIN = 14;
+    static final int DESTINY_DIMENSION_SELECTOR_MARGIN = 14;
     private final LinkedList<Component> story = new LinkedList<>();
     private final boolean allowTeleportation;
     private DestinyDestination destination;
@@ -174,16 +175,18 @@ public class DestinyScreen extends VillagerEditorScreen {
             }
 
             List<DestinyDestination> dimensionDestinations = byDimension.get(selectedDestinyDimension);
-            int pageCount = Math.max(
-                    1,
-                    (dimensionDestinations.size() + DESTINY_LOCATIONS_PER_PAGE - 1) / DESTINY_LOCATIONS_PER_PAGE
+            List<List<DestinationButtonSpec>> allRows = wrapDestinationRows(
+                    dimensionDestinations,
+                    DESTINY_COLUMNS,
+                    width,
+                    font,
+                    this::getLocationName
             );
+            int pageCount = destinationPageCount(allRows.size());
             destinyPage = Math.max(0, Math.min(destinyPage, pageCount - 1));
 
-            int start = destinyPage * DESTINY_LOCATIONS_PER_PAGE;
-            int end = Math.min(start + DESTINY_LOCATIONS_PER_PAGE, dimensionDestinations.size());
             drawDestinationGrid(
-                    dimensionDestinations.subList(start, end),
+                    destinationRowsForPage(allRows, destinyPage),
                     showDimensionSelector ? height / 2 + 2 : height / 2 - 10
             );
 
@@ -272,51 +275,104 @@ public class DestinyScreen extends VillagerEditorScreen {
         setPage("destiny");
     }
 
-    private void drawDestinationRow(List<DestinyDestination> destinations, int buttonY) {
-        int[] buttonWidths = new int[destinations.size()];
-        MutableComponent[] names = new MutableComponent[destinations.size()];
-        int rowWidth = DESTINY_BUTTON_GAP * Math.max(0, destinations.size() - 1);
+    record DestinationButtonSpec(DestinyDestination destination, MutableComponent label, int width) {
+    }
 
-        for (int i = 0; i < destinations.size(); i++) {
-            MutableComponent name = getLocationName(destinations.get(i).location());
-            names[i] = name;
-            buttonWidths[i] = font.width(name) + DESTINY_BUTTON_HORIZONTAL_PADDING;
-            rowWidth += buttonWidths[i];
+    static List<List<DestinationButtonSpec>> wrapDestinationRows(
+            List<DestinyDestination> destinations,
+            int maxColumns,
+            int screenWidth,
+            Font font,
+            Function<String, MutableComponent> locationNameResolver
+    ) {
+        int maxRowWidth = Math.max(
+                DESTINY_BUTTON_HORIZONTAL_PADDING + 12,
+                screenWidth - DESTINY_DIMENSION_SELECTOR_MARGIN * 2
+        );
+        List<List<DestinationButtonSpec>> rows = new ArrayList<>();
+        List<DestinationButtonSpec> currentRow = new ArrayList<>();
+        int currentRowWidth = 0;
+
+        for (DestinyDestination entry : destinations) {
+            MutableComponent name = locationNameResolver.apply(entry.location());
+            int buttonWidth = Math.min(maxRowWidth, font.width(name) + DESTINY_BUTTON_HORIZONTAL_PADDING);
+            int maxLabelWidth = Math.max(0, buttonWidth - DESTINY_BUTTON_HORIZONTAL_PADDING);
+            if (font.width(name) > maxLabelWidth) {
+                String ellipsis = "...";
+                String truncated = font.plainSubstrByWidth(
+                        name.getString(),
+                        Math.max(0, maxLabelWidth - font.width(ellipsis))
+                ) + ellipsis;
+                name = Component.literal(truncated);
+            }
+
+            int nextWidth = currentRow.isEmpty()
+                    ? buttonWidth
+                    : currentRowWidth + DESTINY_BUTTON_GAP + buttonWidth;
+            if (!currentRow.isEmpty() && (currentRow.size() >= maxColumns || nextWidth > maxRowWidth)) {
+                rows.add(List.copyOf(currentRow));
+                currentRow.clear();
+                currentRowWidth = 0;
+            }
+            currentRow.add(new DestinationButtonSpec(entry, name, buttonWidth));
+            currentRowWidth = currentRow.size() == 1
+                    ? buttonWidth
+                    : currentRowWidth + DESTINY_BUTTON_GAP + buttonWidth;
         }
+        if (!currentRow.isEmpty()) {
+            rows.add(List.copyOf(currentRow));
+        }
+        return List.copyOf(rows);
+    }
 
-        int buttonX = width / 2 - rowWidth / 2;
-        for (int i = 0; i < destinations.size(); i++) {
-            addDestinationButton(destinations.get(i), buttonX, buttonY, buttonWidths[i], names[i]);
-            buttonX += buttonWidths[i] + DESTINY_BUTTON_GAP;
+    static int destinationPageCount(int totalWrappedRows) {
+        return Math.max(1, (totalWrappedRows + DESTINY_ROWS - 1) / DESTINY_ROWS);
+    }
+
+    static List<List<DestinationButtonSpec>> destinationRowsForPage(
+            List<List<DestinationButtonSpec>> allRows,
+            int page
+    ) {
+        if (allRows.isEmpty()) {
+            return List.of();
+        }
+        int clampedPage = Math.max(0, Math.min(page, destinationPageCount(allRows.size()) - 1));
+        int startRow = clampedPage * DESTINY_ROWS;
+        int endRow = Math.min(startRow + DESTINY_ROWS, allRows.size());
+        return allRows.subList(startRow, endRow);
+    }
+
+    private void drawDestinationRow(List<DestinyDestination> destinations, int buttonY) {
+        List<List<DestinationButtonSpec>> rows = wrapDestinationRows(
+                destinations,
+                Integer.MAX_VALUE,
+                width,
+                font,
+                this::getLocationName
+        );
+        for (int rowIndex = 0; rowIndex < rows.size(); rowIndex++) {
+            placeDestinationRow(rows.get(rowIndex), buttonY + rowIndex * 24);
         }
     }
 
-    private void drawDestinationGrid(List<DestinyDestination> visibleDestinations, int firstRowY) {
-        int rows = (int) Math.ceil(visibleDestinations.size() / (float) DESTINY_COLUMNS);
-        float offsetY = Math.max(0, DESTINY_ROWS - rows) / 2.0f;
+    private void drawDestinationGrid(List<List<DestinationButtonSpec>> rows, int firstRowY) {
+        float offsetY = Math.max(0, DESTINY_ROWS - rows.size()) / 2.0f;
 
-        for (int row = 0; row < rows; row++) {
-            int rowStart = row * DESTINY_COLUMNS;
-            int rowEnd = Math.min(rowStart + DESTINY_COLUMNS, visibleDestinations.size());
-            int entriesInRow = rowEnd - rowStart;
-            int[] buttonWidths = new int[entriesInRow];
-            MutableComponent[] names = new MutableComponent[entriesInRow];
-            int rowWidth = DESTINY_BUTTON_GAP * Math.max(0, entriesInRow - 1);
+        for (int rowIndex = 0; rowIndex < rows.size(); rowIndex++) {
+            int buttonY = (int) (firstRowY + (rowIndex + offsetY) * 24);
+            placeDestinationRow(rows.get(rowIndex), buttonY);
+        }
+    }
 
-            for (int column = 0; column < entriesInRow; column++) {
-                MutableComponent name = getLocationName(visibleDestinations.get(rowStart + column).location());
-                names[column] = name;
-                buttonWidths[column] = font.width(name) + DESTINY_BUTTON_HORIZONTAL_PADDING;
-                rowWidth += buttonWidths[column];
-            }
-
-            int buttonX = width / 2 - rowWidth / 2;
-            int buttonY = (int) (firstRowY + (row + offsetY) * 24);
-            for (int column = 0; column < entriesInRow; column++) {
-                DestinyDestination destination = visibleDestinations.get(rowStart + column);
-                addDestinationButton(destination, buttonX, buttonY, buttonWidths[column], names[column]);
-                buttonX += buttonWidths[column] + DESTINY_BUTTON_GAP;
-            }
+    private void placeDestinationRow(List<DestinationButtonSpec> row, int buttonY) {
+        int rowWidth = DESTINY_BUTTON_GAP * Math.max(0, row.size() - 1);
+        for (DestinationButtonSpec spec : row) {
+            rowWidth += spec.width();
+        }
+        int buttonX = width / 2 - rowWidth / 2;
+        for (DestinationButtonSpec spec : row) {
+            addDestinationButton(spec.destination(), buttonX, buttonY, spec.width(), spec.label());
+            buttonX += spec.width() + DESTINY_BUTTON_GAP;
         }
     }
 

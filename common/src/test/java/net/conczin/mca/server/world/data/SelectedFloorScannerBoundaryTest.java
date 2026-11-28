@@ -80,6 +80,36 @@ class SelectedFloorScannerBoundaryTest {
     }
 
     @Test
+    void structuralFloorExtendsOnlyIntoLoadedColumns() {
+        BlockPos inside = new BlockPos(13, 64, 6);
+        BlockPos edge = new BlockPos(15, 64, 6);
+        BlockPos beyondEdge = edge.east();
+        for (int loadedWidth : new int[]{16, 32}) {
+            ChunkBlocks world = new ChunkBlocks(loadedWidth);
+            for (BlockPos pos : BlockPos.betweenClosed(10, 63, 4, 15, 67, 9)) {
+                if (pos.getY() == 63 || pos.getY() == 67 || pos.getX() == 10 || pos.getX() == 15
+                        || pos.getZ() == 4 || pos.getZ() == 9) {
+                    world.put(pos, Blocks.STONE.defaultBlockState());
+                }
+            }
+            // The overhead slab blocks traversal while leaving the supported edge cell in the Floor.
+            world.put(edge, Blocks.AIR.defaultBlockState());
+            world.put(edge.above(), Blocks.STONE_SLAB.defaultBlockState());
+            if (loadedWidth == 32) {
+                world.put(beyondEdge.below(), Blocks.STONE.defaultBlockState());
+                world.put(beyondEdge.above(), Blocks.STONE_SLAB.defaultBlockState());
+            }
+
+            var scan = SelectedFloorScanner.scan(world.loadedView(), inside, 512, 16);
+
+            assertEquals(Building.validationResult.SUCCESS, scan.result());
+            assertTrue(scan.floor().cellAt(edge).isPresent());
+            assertEquals(loadedWidth == 32, scan.floor().cellAt(beyondEdge).isPresent());
+            assertNull(world.firstMissingBlock, "structural materialization read an unloaded column");
+        }
+    }
+
+    @Test
     void unknownExteriorChunkIsNotAProvenFiniteEdge() {
         ChunkBlocks unknown = new ChunkBlocks(16);
         for (BlockPos pos : BlockPos.betweenClosed(10, 63, 4, 15, 67, 9)) {

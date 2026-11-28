@@ -22,6 +22,7 @@ import net.conczin.mca.network.c2s.InteractionVillagerMessage;
 import net.conczin.mca.network.c2s.GetInteractDataRequest;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.s2c.GetInteractDataResponse;
+import net.conczin.mca.network.s2c.InteractionDialogueNodeResponse;
 import net.conczin.mca.registry.EntitiesMCA;
 import net.conczin.mca.registry.ItemsMCA;
 import net.conczin.mca.registry.ProfessionsMCA;
@@ -338,6 +339,10 @@ public final class DialogueEngineGameTests {
                     "an active conversation must preempt the chore activity without deleting its assignment");
             helper.assertTrue(villager.getBrain().isActive(ActivitiesMCA.INTERACT),
                     "the dedicated conversation activity must remain active across normal AI ticks");
+            helper.assertTrue(villager.getBrain().getMemoryInternal(MemoryModuleType.LOOK_TARGET)
+                            .filter(target -> target.currentPosition().distanceToSqr(fixture.player().getEyePosition()) < 0.01D)
+                            .isPresent(),
+                    "an active dialogue must keep tracking its player even with an assigned chore");
             helper.assertTrue(!villager.isSleeping(), "an actively talking villager cannot start sleeping");
             helper.assertTrue(villager.getVillagerBrain().getCurrentJob() == Chore.PROSPECT,
                     "the assigned chore must survive an active conversation");
@@ -2684,6 +2689,50 @@ public final class DialogueEngineGameTests {
         engine.onVillagerLeave(killed);
         helper.assertTrue(sessions(engine).isEmpty(), "villager death must discard unfinished state");
         helper.assertTrue(offers(engine).isEmpty(), "villager death must invalidate menu offers");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_unload_notifications", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void repeatedVillagerUnloadNotifiesPlayerOnlyOnce(GameTestHelper helper) {
+        Fixture fixture = presentFixture(helper);
+        DialogueEvent event = passageEvent(ResourceLocation.parse("mca:test/repeated_unload"), false);
+        DialogueEngine engine = engine(event);
+        DialogueEngine.DialogueOptions menu = engine.begin(fixture.player(), fixture.villager());
+        engine.select(fixture.player(), menu.token(), DialogueEngine.DialogueSelection.EVENT, event.id()).orElseThrow();
+
+        Network.Sender previous;
+        try {
+            Field field = Network.class.getDeclaredField("sender");
+            field.setAccessible(true);
+            previous = (Network.Sender) field.get(null);
+        } catch (ReflectiveOperationException exception) {
+            throw new AssertionError("Could not capture the server packet sender", exception);
+        }
+        AtomicInteger pauseNotifications = new AtomicInteger();
+        Network.registerSender((player, payload) -> {
+            if (player == fixture.player() && payload instanceof InteractionDialogueNodeResponse response
+                    && response.state() == InteractionDialogueNodeResponse.State.PAUSED) {
+                pauseNotifications.incrementAndGet();
+            } else {
+                previous.sendToPlayer(player, payload);
+            }
+        });
+        try {
+            engine.onVillagerLeave(fixture.villager());
+            DialogueSession paused = sessions(engine).get(fixture.player().getUUID());
+            helper.assertTrue(paused.status() == DialogueSession.Status.PAUSED && pauseNotifications.get() == 1,
+                    "the first unload must pause and notify the player");
+            engine.onVillagerLeave(fixture.villager());
+            helper.assertTrue(pauseNotifications.get() == 1
+                            && sessions(engine).get(fixture.player().getUUID()).pauseDeadline() == paused.pauseDeadline(),
+                    "repeated unload callbacks must not notify again or extend the pause deadline");
+        } finally {
+            Network.registerSender(previous);
+            engine.end(fixture.player());
+            fixture.villager().getInteractions().stopInteracting();
+            fixture.villager().discard();
+            removePresentPlayer(fixture.player());
+        }
         helper.succeed();
     }
 

@@ -72,6 +72,7 @@ public final class AutonomousPathfindingGameTests {
     private static final String SLOW_HEAD_GATE_BATCH = "mca_autonomous_slow_head_gate";
     private static final String SEGMENT_BATCH = "mca_autonomous_progressive_segments";
     private static final String BOUNDED_DETOUR_BATCH = "mca_autonomous_bounded_detour";
+    private static final String FLANK_CROSSING_BATCH = "mca_autonomous_flank_crossing";
     private static final String LONG_CORRIDOR_BATCH = "mca_autonomous_long_corridor";
     private static final String BED_CORRIDOR_BATCH = "mca_autonomous_bedside_long_corridor";
     private static final String FLOWING_WATER_BATCH = "mca_autonomous_flowing_water";
@@ -205,31 +206,37 @@ public final class AutonomousPathfindingGameTests {
     private AutonomousPathfindingGameTests() {
     }
 
-    @GameTest(batch = SHELF_HOME_BATCH, templateNamespace = "minecraft",
-            template = "bastion/blocks/air", timeoutTicks = 1_500)
+    @GameTest(batch = SHELF_HOME_BATCH, templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 1_500)
     public static void goHomeLeavesShelfBuildingForDistantBed(GameTestHelper helper) {
         assertShelfHomeJourney(helper, false, false);
     }
 
-    @GameTest(batch = SHELF_FULL_BRAIN_BATCH, templateNamespace = "minecraft",
-            template = "bastion/blocks/air", timeoutTicks = 1_500)
+    @GameTest(batch = SHELF_FULL_BRAIN_BATCH, templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 1_500)
     public static void daytimeGoHomeDoesNotReturnInsideShelfBuilding(GameTestHelper helper) {
         assertShelfHomeJourney(helper, true, false);
     }
 
-    @GameTest(batch = SHELF_NIGHT_BATCH, templateNamespace = "minecraft",
-            template = "bastion/blocks/air", timeoutTicks = 1_500)
+    @GameTest(batch = SHELF_NIGHT_BATCH, templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 1_500)
     public static void nighttimeGoHomeDoesNotReturnInsideShelfBuilding(GameTestHelper helper) {
         assertShelfHomeJourney(helper, true, true);
     }
 
     private static void assertShelfHomeJourney(GameTestHelper helper, boolean fullBrain, boolean night) {
-        BlockPos start = helper.absolutePos(new BlockPos(8, 1, 8));
+        // The structure block is below the GameTest arena, so the fixture's
+        // stone floor must start at relative Y=1 rather than outside its bounds.
+        BlockPos start = helper.absolutePos(new BlockPos(21, 2, 56));
         BlockPos bed = start.east(70);
-        BlockPos center = start.east(34);
+        BlockPos center = start.east(35);
         ServerLevel level = helper.getLevel();
-        rememberArea(level, center, 64);
-        prepareFlatArea(helper, center, 64, 3);
+        var bounds = helper.getBounds();
+        helper.assertTrue(bounds.contains(Vec3.atCenterOf(center.offset(-54, -1, -54)))
+                        && bounds.contains(Vec3.atCenterOf(center.offset(54, 2, 54))),
+                "shelf HOME terrain extends outside its allocated GameTest arena");
+        rememberArea(level, center, 54);
+        prepareFlatArea(helper, center, 54, 3);
         for (int i = -6; i <= 6; i++) {
             for (int y = 0; y < 3; y++) {
                 level.setBlock(start.offset(i, y, -6), Blocks.QUARTZ_BLOCK.defaultBlockState(), 3);
@@ -241,10 +248,9 @@ public final class AutonomousPathfindingGameTests {
             }
         }
         if (fullBrain) {
-            rememberBlocks(level, start.offset(-6, 3, -6), start.offset(6, 3, 6));
             for (int x = -6; x <= 6; x++) {
                 for (int z = -6; z <= 6; z++) {
-                    level.setBlock(start.offset(x, 3, z), Blocks.QUARTZ_BLOCK.defaultBlockState(), 3);
+                    level.setBlock(start.offset(x, 2, z), Blocks.QUARTZ_BLOCK.defaultBlockState(), 3);
                 }
             }
         }
@@ -926,6 +932,7 @@ public final class AutonomousPathfindingGameTests {
         int[] headNodeTicks = {0};
         boolean[] passed = {false};
         boolean[] loggedPath = {false};
+        String[] prematureCloseState = {null};
         DynamicGameEventListener<GameEventListener> listener = new DynamicGameEventListener<>(new GameEventListener() {
             public PositionSource getListenerSource() { return new BlockPositionSource(gate); }
             public int getListenerRadius() { return 16; }
@@ -935,6 +942,23 @@ public final class AutonomousPathfindingGameTests {
                         opens[0]++;
                     } else if (event == GameEvent.BLOCK_CLOSE && villager.getX() < gate.getX()) {
                         closesBeforeCrossing[0]++;
+                        if (prematureCloseState[0] == null) {
+                            Path navigationPath = villager.getNavigation().getPath();
+                            Path memoryPath = villager.getBrain().getMemory(MemoryModuleType.PATH).orElse(null);
+                            prematureCloseState[0] = "time=" + world.getGameTime()
+                                    + ", closingEntity=" + context.sourceEntity()
+                                    + ", closingEntityId=" + (context.sourceEntity() == null ? null : context.sourceEntity().getUUID())
+                                    + ", body=" + villager.getBoundingBox()
+                                    + ", motion=" + villager.getDeltaMovement()
+                                    + ", navPath=" + navigationPath
+                                    + ", navPrevious=" + (navigationPath == null ? null : navigationPath.getPreviousNode())
+                                    + ", navNext=" + (navigationPath == null || navigationPath.isDone() ? null : navigationPath.getNextNode())
+                                    + ", memoryPath=" + memoryPath
+                                    + ", memoryPrevious=" + (memoryPath == null ? null : memoryPath.getPreviousNode())
+                                    + ", memoryNext=" + (memoryPath == null || memoryPath.isDone() ? null : memoryPath.getNextNode())
+                                    + ", walkTarget=" + villager.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null)
+                                    + ", doorsToClose=" + villager.getBrain().getMemory(MemoryModuleType.DOORS_TO_CLOSE).orElse(null);
+                        }
                     }
                     if (event == GameEvent.BLOCK_OPEN || event == GameEvent.BLOCK_CLOSE) {
                         Path path = villager.getNavigation().getPath();
@@ -963,7 +987,7 @@ public final class AutonomousPathfindingGameTests {
             helper.assertTrue(closesBeforeCrossing[0] == 0,
                     "head-height gate closed before the approaching villager reached it; opens=" + opens[0]
                             + ", closes=" + closesBeforeCrossing[0] + ", headNodeTicks=" + headNodeTicks[0]
-                            + ", pos=" + villager.position());
+                            + ", pos=" + villager.position() + ", firstClose=" + prematureCloseState[0]);
             if (villager.position().distanceToSqr(Vec3.atBottomCenterOf(destination)) < 2.25D) {
                 helper.assertTrue(passed[0] && opens[0] > 0 && headNodeTicks[0] > 0,
                         "fixture did not exercise an autonomous path beneath the gate; opens=" + opens[0]
@@ -1076,6 +1100,68 @@ public final class AutonomousPathfindingGameTests {
             if (elapsed >= 1_000L) {
                 helper.fail("bounded detour never reached HOME; position=" + villager.blockPosition()
                         + ", partial=" + sawPartial[0] + ", passedWallEnd=" + passedWallEnd[0]
+                        + ", path=" + path + ", searches=" + PathRequestDiagnostics.snapshot(villager));
+            }
+        });
+    }
+
+    @GameTest(batch = FLANK_CROSSING_BATCH, templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 1_600)
+    public static void brainCrossesLongWallAfterRejectingReturnToBlockedOrigin(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(65, 1, 65));
+        BlockPos target = start.east(2);
+        ServerLevel level = helper.getLevel();
+        rememberArea(level, start, 61);
+        prepareFlatArea(helper, start, 61, 3);
+        for (int z = -55; z <= 55; z++) {
+            for (int y = 0; y < 3; y++) {
+                level.setBlock(start.offset(1, y, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        originalPathDistance = Config.getInstance().villagerPathfindingDistance;
+        originalTeleportConfig = Config.getInstance().allowVillagerTeleporting;
+        Config.getInstance().villagerPathfindingDistance = 32;
+        Config.getInstance().allowVillagerTeleporting = false;
+        VillagerEntityMCA villager = spawnAutonomousVillager(helper, start, target, 0.8F, false);
+        var followRange = villager.getAttribute(Attributes.FOLLOW_RANGE);
+        followRange.removeModifier(ResourceLocation.withDefaultNamespace("random_spawn_bonus"));
+        followRange.setBaseValue(48.0D);
+        villager.getAttribute(Attributes.MOVEMENT_SPEED).setBaseValue(0.5D);
+        MCAGroundPathNavigation navigation = (MCAGroundPathNavigation) villager.getNavigation();
+        long began = level.getGameTime();
+        boolean[] sawReturnPartial = {false};
+        boolean[] sawCrossing = {false};
+        Vec3[] previous = {villager.position()};
+        helper.onEachTick(() -> {
+            Vec3 position = villager.position();
+            helper.assertTrue(position.distanceTo(previous[0]) < 3.0D, "long-wall journey teleported");
+            previous[0] = position;
+            double sideways = Math.abs(position.z - start.getZ() - 0.5D);
+            Path path = navigation.getPath();
+            if (!sawReturnPartial[0] && sideways >= 20.0D && position.x < start.getX() + 1.0D) {
+                Path destinationProbe = navigation.probePath(target, 0);
+                helper.assertTrue(MCAGroundPathNavigation.isUsefulPartialPath(destinationProbe, target)
+                                && !MCAGroundPathNavigation.isUsefulPartialBeyondDetourOrigin(
+                                        destinationProbe, start, target),
+                        "long-wall fixture did not produce a useful partial returning toward its blocked origin");
+                sawReturnPartial[0] = true;
+            }
+            if (path != null && !path.getTarget().equals(target)
+                    && path.getTarget().getX() > start.getX() + 1 && sideways >= 40.0D) {
+                sawCrossing[0] = true;
+            }
+            if (sawReturnPartial[0] && !sawCrossing[0]) {
+                helper.assertTrue(sideways >= 12.0D,
+                        "destination partial returned toward the blocked origin before crossing the wall");
+            }
+            if (villager.blockPosition().equals(target)) {
+                helper.assertTrue(sawReturnPartial[0] && sawCrossing[0],
+                        "journey did not exercise both the rejected partial and the bounded crossing");
+                helper.succeed();
+            }
+            if (level.getGameTime() - began >= 1_500L) {
+                helper.fail("long-wall crossing did not reach HOME; pos=" + position
+                        + ", rejectedReturn=" + sawReturnPartial[0] + ", crossing=" + sawCrossing[0]
                         + ", path=" + path + ", searches=" + PathRequestDiagnostics.snapshot(villager));
             }
         });
@@ -1208,6 +1294,11 @@ public final class AutonomousPathfindingGameTests {
 
     @AfterBatch(batch = BOUNDED_DETOUR_BATCH)
     public static void cleanupBoundedDetour(ServerLevel level) {
+        cleanup(level);
+    }
+
+    @AfterBatch(batch = FLANK_CROSSING_BATCH)
+    public static void cleanupFlankCrossing(ServerLevel level) {
         cleanup(level);
     }
 

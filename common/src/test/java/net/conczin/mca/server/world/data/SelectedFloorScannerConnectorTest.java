@@ -57,11 +57,11 @@ class SelectedFloorScannerConnectorTest {
                 assertTrue(baseline.floor().sameExactGeometry(scan.floor()), source.toString());
                 assertEquals(baseline.anchorY(), scan.anchorY());
                 assertEquals(roomCells, RoomPartitioner.select(scan.seed(), scan.floor(),
-                        BuildingRoomScanner.components(world, scan)).floorCells());
+                        StructureScanner.components(world, scan)).floorCells());
                 var fresh = new StructureScanner.FloorObservation(scan, Set.of(), Set.of());
                 assertEquals(Village.RoomScanMode.ADD_BUILDING,
-                        RoomScanPlanner.analyzeFresh(new Village(2, null), source, fresh).plan().mode());
-                var plan = RoomScanPlanner.analyzeFresh(registered, source, fresh).plan();
+                        RoomWorkflow.analyzeFresh(new Village(2, null), world, source, fresh).plan().mode());
+                var plan = RoomWorkflow.analyzeFresh(registered, world, source, fresh).plan();
                 assertEquals(Village.RoomScanMode.UPDATE_ROOM, plan.mode(), source.toString());
                 assertEquals(42, plan.currentRoom().orElseThrow().getId());
                 assertEquals(10, plan.targetStructureId());
@@ -85,7 +85,7 @@ class SelectedFloorScannerConnectorTest {
             assertEquals(Building.validationResult.SUCCESS, after.result());
             assertTrue(before.floor().sameExactGeometry(after.floor()),
                     "a bed created duplicate cells for the same walking surface");
-            var component = RoomPartitioner.select(after.seed(), after.floor(), BuildingRoomScanner.components(world, after));
+            var component = RoomPartitioner.select(after.seed(), after.floor(), StructureScanner.components(world, after));
             assertEquals(256, component.area());
         }
     }
@@ -222,6 +222,22 @@ class SelectedFloorScannerConnectorTest {
         // this layer. Ceiling discovery also reads the 256 interior columns.
         assertTrue(world.middleLayerReads <= 700,
                 "overlapping connector bands repeated upper-layer reads: " + world.middleLayerReads);
+    }
+
+    @Test
+    void overlappingConnectorColumnsAvoidRepeatedFloorSupportLookups() {
+        TallRoom world = new TallRoom();
+
+        var scan = SelectedFloorScanner.scan(world, new BlockPos(8, 64, 8), 2048, 64);
+
+        assertEquals(Building.validationResult.SUCCESS, scan.result());
+        assertEquals(256, scan.floor().cells().size());
+        assertTrue(scan.floor().connectorMarkers().isEmpty());
+        // Even with the discovery passes, these 64 interior supports should
+        // never incur four extra connector lookups just for having neighbors.
+        assertTrue(world.interiorSupportReads <= 512,
+                "overlapping connector bands repeated support-layer reads: " + world.interiorSupportReads);
+        System.out.println("Tall room interior support block reads: " + world.interiorSupportReads);
     }
 
     @Test
@@ -380,6 +396,7 @@ class SelectedFloorScannerConnectorTest {
         private final Map<BlockPos, BlockState> overrides = new HashMap<>();
         private int middleLayerReads;
         private int feetLayerReads;
+        private int interiorSupportReads;
         private int totalBlockReads;
 
         private void put(BlockPos pos, BlockState state) {
@@ -391,6 +408,8 @@ class SelectedFloorScannerConnectorTest {
             totalBlockReads++;
             if (pos.getY() == 80) middleLayerReads++;
             if (pos.getY() == 64) feetLayerReads++;
+            if (pos.getY() == 63 && pos.getX() >= 5 && pos.getX() <= 12
+                    && pos.getZ() >= 5 && pos.getZ() <= 12) interiorSupportReads++;
             BlockState override = overrides.get(pos);
             if (override != null) return override;
             boolean inBounds = pos.getX() >= 0 && pos.getX() <= 17

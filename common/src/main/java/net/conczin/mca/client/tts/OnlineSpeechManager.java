@@ -11,26 +11,35 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 public class OnlineSpeechManager {
     public static final int TOTAL_VOICES = 10;
 
-    private boolean warningIssued = false;
+    private final AtomicBoolean warningIssued = new AtomicBoolean(false);
 
     public static void languageNotSupported() {
-        Minecraft.getInstance().gui.getChat().addMessage(
-                Component.translatable("command.tts_unsupported_language").withStyle(s -> s
-                        .withColor(ChatFormatting.RED)
-                        .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, "https://github.com/Luke100000/minecraft-comes-alive/wiki/TTS"))));
+        Minecraft client = Minecraft.getInstance();
+        if (client == null) {
+            return;
+        }
+        client.execute(() -> {
+            if (client.gui != null) {
+                client.gui.getChat().addMessage(
+                        Component.translatable("command.tts_unsupported_language").withStyle(s -> s
+                                .withColor(ChatFormatting.RED)
+                                .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, "https://github.com/Luke100000/minecraft-comes-alive/wiki/TTS"))));
+            }
+        });
     }
 
     @SuppressWarnings("SpellCheckingInspection")
@@ -73,28 +82,40 @@ public class OnlineSpeechManager {
         } else {
             int tone = Math.min(TOTAL_VOICES - 1, (int) Math.floor(gene * TOTAL_VOICES));
             String voice = gender + "_" + tone;
-            long request = SpeechManager.INSTANCE.beginVoiceRequest(entity.getUUID());
+            UUID entityId = entity.getUUID();
+            long request = SpeechManager.INSTANCE.beginVoiceRequest(entityId);
 
             CompletableFuture.runAsync(() -> {
-                String hash = language + "-" + voice + "/" + AudioCache.getHash(text) + ".ogg";
-                if (AudioCache.cachedRetrieve(hash, output -> {
-                    downloadAudio(output, language, voice, text);
-                })) {
-                    ResourceLocation soundLocation = MCA.locate("tts_cache/" + hash);
-                    SpeechManager.INSTANCE.playSound(pitch, entity, soundLocation, request);
-                } else if (!warningIssued) {
-                    // Server queued the request but the audio is not ready yet
-                    warningIssued = true;
-                    Minecraft.getInstance().getChatListener().handleSystemMessage(
-                            Component.translatable("command.tts_busy").withStyle(ChatFormatting.ITALIC, ChatFormatting.GRAY),
-                            false
-                    );
+                boolean playbackQueued = false;
+                try {
+                    String hash = language + "-" + voice + "/" + AudioCache.getHash(text) + ".ogg";
+                    if (AudioCache.cachedRetrieve(hash, output -> downloadAudio(output, language, voice, text))) {
+                        ResourceLocation soundLocation = MCA.locate("tts_cache/" + hash);
+                        SpeechManager.INSTANCE.playSound(pitch, entity, soundLocation, request);
+                        playbackQueued = true;
+                    } else if (warningIssued.compareAndSet(false, true)) {
+                        // Server queued the request but the audio is not ready yet.
+                        Minecraft client = Minecraft.getInstance();
+                        if (client != null) {
+                            client.execute(() -> client.getChatListener().handleSystemMessage(
+                                    Component.translatable("command.tts_busy").withStyle(ChatFormatting.ITALIC, ChatFormatting.GRAY),
+                                    false
+                            ));
+                        }
+                    }
+                } catch (RuntimeException e) {
+                    MCA.LOGGER.warn("Failed to prepare online villager voice", e);
+                } finally {
+                    // Successful playback retires on the client executor after the freshness check.
+                    if (!playbackQueued) {
+                        SpeechManager.INSTANCE.finishVoiceRequest(entityId, request);
+                    }
                 }
             });
         }
     }
 
-    public void downloadAudio(OutputStream output, String language, String voice, String text) {
+    public void downloadAudio(OutputStream output, String language, String voice, String text) throws IOException {
         Map<String, String> params = Map.of(
                 "text", text,
                 "language", language,
@@ -107,22 +128,19 @@ public class OnlineSpeechManager {
         String url = params.keySet().stream()
                 .map(key -> key + "=" + URLEncoder.encode(params.get(key), StandardCharsets.UTF_8))
                 .collect(Collectors.joining("&", Config.getInstance().onlineTTSServer + "v1/tts/xtts-v2?", ""));
+        HttpURLConnection connection = null;
         try {
-            HttpURLConnection connection = (HttpURLConnection) (URI.create(url)).toURL().openConnection();
+            connection = (HttpURLConnection) (URI.create(url)).toURL().openConnection();
+            connection.setConnectTimeout(RealtimeSpeechManager.CONNECT_TIMEOUT_MS);
+            connection.setReadTimeout(RealtimeSpeechManager.READ_TIMEOUT_MS);
             connection.setRequestMethod("POST");
             connection.setDoOutput(true);
 
-            try (InputStream input = connection.getInputStream()) {
-                byte[] buffer = new byte[4096];
-                int bytesRead;
-                while ((bytesRead = input.read(buffer)) != -1) {
-                    output.write(buffer, 0, bytesRead);
-                }
+            RealtimeSpeechManager.copyAudioResponse(connection, output);
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
             }
-
-            connection.disconnect();
-        } catch (IOException | IllegalArgumentException e) {
-            MCA.LOGGER.warn("Failed to download {}: {}", url, e.getMessage());
         }
     }
 }

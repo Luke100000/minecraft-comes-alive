@@ -43,6 +43,33 @@ class SelectedFloorScannerRoofGapTest {
     }
 
     @Test
+    void steppedRoofGapRetainsPhysicalFloorCell() {
+        Room world = room();
+        for (int x = 3; x <= 6; x++) {
+            for (int z = 0; z <= 6; z++) {
+                BlockPos roof = new BlockPos(x, 68, z);
+                world.blocks.remove(roof);
+                world.blocks.put(roof.above(), Blocks.STONE.defaultBlockState());
+                if (z == 0 || z == 6 || x == 6) world.blocks.put(roof, Blocks.STONE.defaultBlockState());
+            }
+        }
+        world.blocks.remove(SOURCE.atY(69));
+
+        for (BlockPos seed : new BlockPos[]{SOURCE, SOURCE.west(), SOURCE.east()}) {
+            var result = SelectedFloorScanner.scan(world, seed, 512, 16);
+            assertEquals(Building.validationResult.SUCCESS, result.result(), "scan from " + seed);
+            assertEquals(25, result.floor().cells().size());
+            var cell = result.floor().cellAt(SOURCE).orElseThrow();
+            assertEquals(SOURCE, cell.feet());
+            assertEquals(69, cell.ceilingY());
+        }
+
+        for (BlockPos pos : BlockPos.betweenClosed(2, 68, 2, 4, 69, 4)) world.blocks.remove(pos);
+        assertEquals(Building.validationResult.NOT_IN_BUILDING,
+                SelectedFloorScanner.scan(world, SOURCE, 512, 16).result());
+    }
+
+    @Test
     void selectionUnderWideMissingRoofStillRequiresCover() {
         Room world = room();
         for (BlockPos pos : BlockPos.betweenClosed(2, 68, 2, 4, 68, 4)) world.blocks.remove(pos);
@@ -124,7 +151,8 @@ class SelectedFloorScannerRoofGapTest {
     void heightHintInOpenSkyDoesNotSynthesizeARoof() {
         Room world = new Room();
         assertEquals(OptionalInt.empty(), new FloorCeilingResolver(world).tolerantCeilingY(SOURCE, 68));
-        assertTrue(world.reads <= 132, "open sky expanded beyond one vertical ray and a tiny plane proof");
+        // The 128-block ray is followed by at most three small-gap and four stepped-roof probes.
+        assertTrue(world.reads <= 135, "open sky exceeded one vertical ray and bounded roof probes: " + world.reads);
     }
 
     private static void assertWholeRoom(Room world) {

@@ -92,7 +92,8 @@ public class SmarterOpenDoorsTask extends Behavior<LivingEntity> {
             // Keep it open while that node is active, just like a gate at foot level.
             if (PathingBlockInteraction.canInteractWithFenceGate(blockState)
                     && (isInPathBodyClearance(lastNode, blockPos, entity)
-                    || isInPathBodyClearance(currentNode, blockPos, entity))) {
+                    || isInPathBodyClearance(currentNode, blockPos, entity)
+                    || nextStepNeedsGateClearance(world, entity, currentNode, blockPos))) {
                 continue;
             }
 
@@ -132,6 +133,29 @@ public class SmarterOpenDoorsTask extends Behavior<LivingEntity> {
                 && node.x == gate.getX() && node.z == gate.getZ()
                 && gate.getY() > node.y
                 && gate.getY() - node.y < Mth.ceil(entity.getBbHeight());
+    }
+
+    private static boolean nextStepNeedsGateClearance(ServerLevel world, LivingEntity entity,
+                                                      @Nullable Node nextNode, BlockPos gate) {
+        if (nextNode == null || !gate.closerToCenterThan(entity.position(), PATHING_DISTANCE)) {
+            return false;
+        }
+
+        // A replacement path may start beyond a gate that the villager has not
+        // reached yet. Preserve the passage if the next physical step crosses it.
+        Vec3 nextFeet = entity instanceof Mob mob
+                ? PathNodeGeometry.walkingPosition(world, nextNode.asBlockPos(), mob)
+                : Vec3.atBottomCenterOf(nextNode.asBlockPos());
+        return movementNeedsGateClearance(entity, nextFeet, gate);
+    }
+
+    private static boolean movementNeedsGateClearance(LivingEntity entity, Vec3 nextFeet, BlockPos gate) {
+        AABB body = entity.getBoundingBox();
+        Vec3 nextBodyCenter = nextFeet.add(0.0D, body.getYsize() * 0.5D, 0.0D);
+        AABB gateClearance = new AABB(gate).inflate(
+                body.getXsize() * 0.5D, body.getYsize() * 0.5D, body.getZsize() * 0.5D);
+        return gateClearance.contains(body.getCenter())
+                || gateClearance.clip(body.getCenter(), nextBodyCenter).isPresent();
     }
 
     private static boolean hasOtherMobReachedToggleable(LivingEntity entity, BlockPos pos) {

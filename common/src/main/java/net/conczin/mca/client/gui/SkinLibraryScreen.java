@@ -50,17 +50,22 @@ import net.minecraft.world.entity.npc.VillagerProfession;
 import net.minecraft.world.item.Items;
 import org.lwjgl.glfw.GLFW;
 
-import java.io.FileInputStream;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.HttpURLConnection;
 import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.function.Consumer;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
-import static net.conczin.mca.client.gui.immersive_library.Api.request;
 
 public class SkinLibraryScreen extends Screen implements SkinListUpdateListener {
     static final int CLOTHES_H = 7;
@@ -72,6 +77,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private static final float CANVAS_SCALE = 2.35f;
     private static final long SEARCH_DEBOUNCE_MILLIS = 400;
     private static final String LIBRARY_NAMESPACE = "immersive_library:";
+    private static final Pattern WINDOWS_DRIVE_PATH = Pattern.compile("^[A-Za-z]:[\\\\/].*");
 
     private static final int PROFESSION_AREA_WIDTH = 105;
     private static final int PROFESSION_AREA_HEIGHT = 110;
@@ -83,6 +89,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private Thread thread;
     private Component error;
     private int timeSinceLastRebuild;
+    private final RequestEpoch requestEpoch = new RequestEpoch();
 
     // Preview
     protected final VillagerEntityMCA villagerVisualization = Objects.requireNonNull(EntitiesMCA.MALE_VILLAGER.create(Objects.requireNonNull(Minecraft.getInstance().level)));
@@ -94,6 +101,8 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private boolean isBrowserOpen = false;
     private User currentUser;
     private final Map<Integer, Boolean> likeOverrides = new HashMap<>();
+    private long nextAuthenticationPollAt;
+    private Page resumeAfterAuthentication = Page.LIBRARY;
 
     // Listed content
     private final List<LiteContent> serverContent = new ArrayList<>();
@@ -121,6 +130,9 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private LiteContent focusedContent;
     private LiteContent deleteConfirmationContent;
     private LiteContent reportConfirmationContent;
+    private ButtonWidget deleteConfirmButton;
+    private ToggleableTooltipIconButtonWidget detailLikeButton;
+    private final Set<String> pendingMutations = new HashSet<>();
 
     // Editor
     private Workspace workspace;
@@ -135,7 +147,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private boolean hasPanned;
     private double lastMouseX;
     private double lastMouseY;
-    private int activeMouseButton;
+    private int activeMouseButton = -1;
     private int lastPixelMouseX;
     private int lastPixelMouseY;
 
@@ -211,8 +223,97 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         }
     }
 
+    static final class RequestEpoch {
+        private volatile long account;
+        private long authPoll;
+        private long contentRequest;
+        private long page;
+        private long upload;
+        private long imageImport;
+
+        record Snapshot(long account, long authPoll, long contentRequest, long page, long upload, long imageImport,
+                        String token, Page originPage) {
+        }
+
+        Snapshot capture(String token, Page originPage) {
+            return new Snapshot(account, authPoll, contentRequest, page, upload, imageImport, token, originPage);
+        }
+
+        Snapshot beginAuthPoll(String token, Page originPage) {
+            authPoll++;
+            return capture(token, originPage);
+        }
+
+        Snapshot beginContentRequest(String token, Page originPage) {
+            contentRequest++;
+            return capture(token, originPage);
+        }
+
+        Snapshot beginUpload(String token, Page originPage) {
+            upload++;
+            return capture(token, originPage);
+        }
+
+        Snapshot beginImport(Page originPage) {
+            imageImport++;
+            return capture(null, originPage);
+        }
+
+        void onPageChange() {
+            imageImport++;
+            page++;
+        }
+
+        void invalidateContentRequest() {
+            contentRequest++;
+        }
+
+        void invalidateUpload() {
+            upload++;
+        }
+
+        void invalidateImport() {
+            imageImport++;
+        }
+
+        void invalidateAccount() {
+            account++;
+        }
+
+        boolean matchesAccount(long session, String token) {
+            return session == account && Auth.isCurrentToken(token);
+        }
+
+        boolean matchesAccount(Snapshot snapshot) {
+            return matchesAccount(snapshot.account(), snapshot.token());
+        }
+
+        boolean matchesAuthPoll(Snapshot snapshot, Page currentPage) {
+            return authPoll == snapshot.authPoll() && matchesAccount(snapshot) && currentPage == snapshot.originPage();
+        }
+
+        boolean matchesContentRequest(long generation, long session, String token, Page currentPage) {
+            return generation == contentRequest && matchesAccount(session, token) && currentPage == Page.LIBRARY;
+        }
+
+        boolean matchesUpload(Snapshot snapshot) {
+            return upload == snapshot.upload();
+        }
+
+        boolean matchesPage(Snapshot snapshot, Page currentPage) {
+            return page == snapshot.page() && currentPage == snapshot.originPage();
+        }
+
+        boolean matchesImport(Snapshot snapshot, Page currentPage) {
+            return imageImport == snapshot.imageImport() && currentPage == snapshot.originPage();
+        }
+    }
+
     @Override
     public void onClose() {
+        requestEpoch.invalidateImport();
+        invalidateAccountRequests();
+        discardWorkspace();
         if (previousScreen == null) {
             super.onClose();
         } else {
@@ -253,6 +354,9 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     }
 
     private void loadPage() {
+        if (page != Page.LIBRARY) {
+            return;
+        }
         ContentQuery query = createQuery();
         if (query.equals(loadedQuery) || query.equals(pendingQuery)) {
             return;
@@ -262,14 +366,17 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         hasMore = false;
         remoteContents.clear();
         pendingQuery = query;
+        RequestEpoch.Snapshot context = requestEpoch.beginContentRequest(Auth.getToken(), page);
 
         CompletableFuture
-                .supplyAsync(() -> request(Api.HttpMethod.GET, ContentListResponse.class, "v3/content/mca", query.parameters()))
-                .thenAccept(response -> Minecraft.getInstance().executeIfPossible(() -> acceptContents(query, response)));
+                .supplyAsync(() -> Api.requestWithToken(Api.HttpMethod.GET, ContentListResponse.class,
+                        "v3/content/mca", query.parameters(), null, context.token()))
+                .whenComplete((response, failure) -> Minecraft.getInstance().executeIfPossible(
+                        () -> acceptContents(query, context.contentRequest(), context.account(), context.token(), response, failure)));
     }
 
-    private void acceptContents(ContentQuery query, Response response) {
-        if (!query.equals(pendingQuery)) {
+    private void acceptContents(ContentQuery query, long generation, long session, String token, Response response, Throwable failure) {
+        if (!requestEpoch.matchesContentRequest(generation, session, token, page) || !query.equals(pendingQuery)) {
             return;
         }
 
@@ -278,11 +385,11 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
             return;
         }
 
-        if (response instanceof ContentListResponse(Content[] loadedContents, boolean more)) {
+        if (failure == null && response instanceof ContentListResponse(Content[] loadedContents, boolean more) && loadedContents != null) {
             loadedQuery = query;
             hasMore = more;
             remoteContents.clear();
-            Arrays.stream(loadedContents).map(Content::lite).forEach(remoteContents::add);
+            Arrays.stream(loadedContents).filter(Objects::nonNull).map(Content::lite).forEach(remoteContents::add);
             clearError();
             refreshContentList();
         } else {
@@ -640,12 +747,13 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double deltaX, double deltaY) {
-        if (!isPanning && activeMouseButton >= 0 && page == Page.EDITOR) {
-            int x = (int) getPixelX();
-            int y = (int) getPixelY();
+        if (!isPanning && button == activeMouseButton && page == Page.EDITOR) {
+            int x = canvasPixel(mouseX, width / 2.0, x0, x1);
+            int y = canvasPixel(mouseY, height / 2.0, y0, y1);
             ClientUtils.bethlehemLine(lastPixelMouseX, lastPixelMouseY, x, y, this::paint);
             lastPixelMouseX = x;
             lastPixelMouseY = y;
+            return true;
         }
 
         return super.mouseDragged(mouseX, mouseY, button, deltaX, deltaY);
@@ -654,18 +762,33 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (page == Page.EDITOR) {
-            float zoom = (float) (scrollY * 0.2f) * (x1 - x0);
-
-            float ox = getPixelX() / 64.0f;
-            x0 = x0 - zoom * ox;
-            x1 = x1 + zoom * (1 - ox);
-
-            float oy = getPixelY() / 64.0f;
-            y0 = y0 - zoom * oy;
-            y1 = y1 + zoom * (1 - oy);
+            if (!Double.isFinite(scrollY)) {
+                return true;
+            }
+            float[] horizontal = zoomSpan(x0, x1, mouseX, width / 2.0, scrollY);
+            float[] vertical = zoomSpan(y0, y1, mouseY, height / 2.0, scrollY);
+            x0 = horizontal[0];
+            x1 = horizontal[1];
+            y0 = vertical[0];
+            y1 = vertical[1];
+            return true;
         }
 
         return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+    }
+
+    private static int canvasPixel(double coordinate, double center, float start, float end) {
+        double normalized = (coordinate - center + 32 * CANVAS_SCALE) / CANVAS_SCALE / 64.0;
+        return (int) ((normalized - start) / (end - start) * 64.0);
+    }
+
+    private static float[] zoomSpan(float start, float end, double mouseCoordinate, double center, double scrollY) {
+        double span = end - start;
+        double proposed = span * (1.0 + scrollY * 0.2);
+        double newSpan = Math.clamp(proposed, 1.0 / 64.0, 16.0);
+        double cursor = (mouseCoordinate - center + 32 * CANVAS_SCALE) / CANVAS_SCALE / 64.0;
+        double newStart = cursor - (cursor - start) / span * newSpan;
+        return new float[]{(float) newStart, (float) (newStart + newSpan)};
     }
 
     @Override
@@ -685,7 +808,9 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         if (!search.equals(filteredString)) {
             filteredString = search;
             selectionPage = 0;
-            refreshContentList();
+            if (page == Page.LIBRARY) {
+                refreshContentList();
+            }
         }
     }
 
@@ -710,49 +835,59 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
             setFocused(null);
         }
 
+        // Widgets own their pointer presses; an editor canvas stroke must not start beneath one.
+        if (super.mouseClicked(mouseX, mouseY, button)) {
+            return true;
+        }
+
         if (page == Page.EDITOR) {
             if (button == 0 || button == 1) {
+                int x = canvasPixel(mouseX, width / 2.0, x0, x1);
+                int y = canvasPixel(mouseY, height / 2.0, y0, y1);
+                if (!workspace.validPixel(x, y) || isPanning) {
+                    return false;
+                }
+
                 activeMouseButton = button;
-
-                int x = (int) getPixelX();
-                int y = (int) getPixelY();
-
-                if (workspace.validPixel(x, y)) {
-                    workspace.saveSnapshot(true);
-                }
-
-                if (!isPanning) {
-                    paint(x, y);
-                }
-
+                workspace.saveSnapshot(true);
+                paint(x, y);
                 lastPixelMouseX = x;
                 lastPixelMouseY = y;
+                return true;
             } else if (button == 2) {
                 isPanning = true;
+                hasPanned = false;
+                return true;
             }
-        } else {
-            if (hoveredContent != null) {
+        } else if (page == Page.LIBRARY && button == 0) {
+            for (ContentSlot slot : contentSlots()) {
+                if (Math.abs(slot.cx() - mouseX) > 15 || Math.abs(slot.cy() - mouseY - 10) > 25) {
+                    continue;
+                }
+                LiteContent selected = slot.content();
                 if (previousScreen == null) {
-                    focusedContent = hoveredContent;
+                    focusedContent = selected;
                     setPage(Page.DETAIL);
                 } else {
-                    if (hoveredContent.hasTag("clothing")) {
+                    if (selected.hasTag("clothing")) {
                         var villager = previousScreen.getVillager();
-                        villager.setClothes(LIBRARY_NAMESPACE + hoveredContent.content_id());
+                        villager.setClothes(LIBRARY_NAMESPACE + selected.content_id());
                         previousScreen.markClothingSelected();
                         returnToPreviousScreen();
-                    } else if (hoveredContent.hasTag("hair")) {
-                        previousScreen.applyLibraryHair(LIBRARY_NAMESPACE + hoveredContent.content_id());
+                    } else if (selected.hasTag("hair")) {
+                        previousScreen.applyLibraryHair(LIBRARY_NAMESPACE + selected.content_id());
                         returnToPreviousScreen();
                     }
                 }
+                return true;
             }
         }
 
-        return super.mouseClicked(mouseX, mouseY, button);
+        return false;
     }
 
     private void returnToPreviousScreen() {
+        discardWorkspace();
         previousScreen.syncVillagerData();
         if (previousScreen instanceof DestinyScreen) {
             onClose();
@@ -763,7 +898,9 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        activeMouseButton = -1;
+        if (button == activeMouseButton) {
+            activeMouseButton = -1;
+        }
 
         if (button == 2) {
             isPanning = false;
@@ -812,6 +949,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
     private void rebuild() {
         clearWidgets();
+        detailLikeButton = null;
 
         timeSinceLastRebuild = 0;
 
@@ -1004,8 +1142,6 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                 String tag = tagNameWidget.getValue().trim().toLowerCase(Locale.ROOT);
                 if (!tag.isEmpty()) {
                     setTag(focusedContent.content_id(), tag, true);
-                    tagNameWidget.setValue("");
-                    rebuild();
                 }
             }));
         }
@@ -1027,7 +1163,6 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                         Component.literal("X"),
                         v -> {
                             setTag(focusedContent.content_id(), tag, false);
-                            rebuild();
                         }));
             }
             addRenderableWidget(new ButtonWidget(width / 2 - 200 + 20, ty, font.width(tag) + 10, 20,
@@ -1042,12 +1177,12 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         addRenderableWidget(new ButtonWidget(width / 2 - 65, height / 2, 60, 20,
                 Component.translatable("gui.skin_library.cancel"),
                 v -> setPage(Page.DETAIL)));
-        addRenderableWidget(new ButtonWidget(width / 2 + 5, height / 2, 60, 20,
+        deleteConfirmButton = addRenderableWidget(new ButtonWidget(width / 2 + 5, height / 2, 60, 20,
                 Component.translatable("gui.skin_library.delete"),
                 v -> {
                     removeContent(deleteConfirmationContent.content_id());
-                    setPage(Page.LIBRARY);
                 }));
+        updateDeleteConfirmState();
     }
 
     private void buildReport() {
@@ -1286,17 +1421,22 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
         // like
         if (authenticated) {
-            widgets.add(new ToggleableTooltipIconButtonWidget(0, 0, 16, 3 * 16,
+            ToggleableTooltipIconButtonWidget likeButton = new ToggleableTooltipIconButtonWidget(0, 0, 16, 3 * 16,
                     isLiked(content),
                     Component.translatable("gui.skin_library.like"),
                     v -> {
                         ToggleableTooltipButtonWidget button = (ToggleableTooltipButtonWidget) v;
-                        boolean liked = !button.toggle;
-                        if (setLike(content, liked)) {
-                            button.toggle = liked;
-                            refreshContentList();
-                        }
-                    }));
+                        boolean liked = !isLiked(content);
+                        setLike(content, liked, success -> {
+                            if (success && !advanced) {
+                                button.toggle = liked;
+                            }
+                        });
+                    });
+            widgets.add(likeButton);
+            if (advanced) {
+                detailLikeButton = likeButton;
+            }
         }
 
         // edit
@@ -1307,7 +1447,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                     v -> {
                         SkinCache.getImage(content).ifPresent(image -> {
                             SkinCache.getMeta(content).ifPresent(meta -> {
-                                workspace = new Workspace(image, meta, content);
+                                replaceWorkspace(new Workspace(image, meta, content));
                                 setPage(Page.EDITOR);
                                 if (workspace.skinType == SkinType.HAIR) color.setHSV(0, 0, 0.5);
                             });
@@ -1363,7 +1503,6 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                     Component.translatable("gui.skin_library.ban"),
                     v -> {
                         setBan(content.user_id(), true);
-                        refreshContentList();
                     }));
 
             widgets.add(new ToggleableTooltipIconButtonWidget(cx - 12 + 25, cy, 11 * 16, 3 * 16,
@@ -1371,7 +1510,6 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                     Component.translatable("gui.skin_library.unban"),
                     v -> {
                         setBan(content.user_id(), false);
-                        refreshContentList();
                     }));
         }
 
@@ -1420,7 +1558,6 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                 Component.translatable(key + "_tooltip"),
                 v -> {
                     setReport(content, reason, !reported);
-                    setPage(Page.DETAIL);
                 }));
     }
 
@@ -1461,7 +1598,22 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
             return;
         }
 
+        if (this.page != page) {
+            requestEpoch.onPageChange();
+        }
+
+        // Authentication temporarily replaces this screen; its editor survives that trip.
+        if (page != Page.EDITOR && page != Page.EDITOR_TYPE && page != Page.LOGIN) {
+            discardWorkspace();
+        }
+
+        if (page == Page.LOGIN && this.page != Page.LOGIN) {
+            resumeAfterAuthentication = workspace != null && (this.page == Page.EDITOR || this.page == Page.EDITOR_TYPE)
+                    ? this.page : Page.LIBRARY;
+        }
+
         if (page == Page.LOGIN && !Auth.hasToken()) {
+            invalidateAccountRequests();
             String authUrl = Auth.authenticate(getPlayerName());
             isBrowserOpen = true;
             this.page = page;
@@ -1470,6 +1622,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         }
 
         if (page == Page.LOGOUT) {
+            invalidateAccountRequests();
             authenticated = false;
             currentUser = null;
             likeOverrides.clear();
@@ -1480,13 +1633,16 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         }
 
         this.page = page;
+        if (page != Page.LIBRARY) {
+            requestEpoch.invalidateContentRequest();
+            pendingQuery = null;
+        }
 
         if (page == Page.EDITOR) {
             x0 = 0.0f;
             x1 = 1.0f;
             y0 = 0.0f;
             y1 = 1.0f;
-            uploading = false;
             professionSearchWidget = null;
         }
 
@@ -1497,65 +1653,89 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         }
     }
 
+    private void replaceWorkspace(Workspace replacement) {
+        discardWorkspace();
+        workspace = replacement;
+    }
+
+    private void discardWorkspace() {
+        if (workspace == null) {
+            return;
+        }
+        requestEpoch.invalidateUpload();
+        uploading = false;
+        var textures = Minecraft.getInstance().getTextureManager();
+        if (textures.getTexture(CANVAS_IDENTIFIER, null) == workspace.backendTexture) {
+            textures.release(CANVAS_IDENTIFIER);
+        }
+        workspace.close();
+        workspace = null;
+    }
+
+    private void invalidateAccountRequests() {
+        requestEpoch.invalidateAccount();
+        awaitingAuthentication = false;
+        uploading = false;
+        pendingMutations.clear();
+        updateDeleteConfirmState();
+        invalidateRemotePage();
+    }
+
     private void pollAuthentication() {
-        if (awaitingAuthentication) {
+        if (awaitingAuthentication || Util.getMillis() < nextAuthenticationPollAt) {
             return;
         }
         awaitingAuthentication = true;
-        CompletableFuture.runAsync(() -> {
+        RequestEpoch.Snapshot context = requestEpoch.beginAuthPoll(Auth.getToken(), page);
+        CompletableFuture.supplyAsync(() -> {
             try {
-                String token = Auth.getToken();
-                Response response = token == null ? null : request(Api.HttpMethod.GET, IsAuthResponse.class, "v1/auth");
-                if (page != Page.LOGIN || !Objects.equals(token, Auth.getToken())) {
-                    return;
-                }
+                String token = context.token();
+                Response response = token == null ? null
+                        : Api.requestWithToken(Api.HttpMethod.GET, IsAuthResponse.class, "v1/auth", null, null, token);
                 if (response instanceof IsAuthResponse(boolean success)) {
                     if (success) {
-                        Response userResponse = request(Api.HttpMethod.GET, UserResponse.class, "v3/user/mca/me");
-
-                        Minecraft.getInstance().executeIfPossible(() -> {
-                            if (page != Page.LOGIN || !Objects.equals(token, Auth.getToken())) {
-                                return;
-                            }
-
-                            if (userResponse instanceof UserResponse(User user)) {
-                                authenticated = true;
-                                currentUser = user;
-                                likeOverrides.clear();
-                                isBrowserOpen = false;
-                                clearError();
-                                invalidateRemotePage();
-
-                                //token accepted, save
-                                Auth.saveToken();
-
-                                setPage(Page.LIBRARY);
-                            } else {
-                                isBrowserOpen = false;
-                                setError(Component.translatable("gui.skin_library.list_fetch_failed"));
-                            }
-                        });
-                    } else {
-                        // A generated token may still be waiting for browser approval.
-                        if (!isBrowserOpen) {
-                            Auth.clearToken();
-                            setPage(Page.LIBRARY);
-                            setError(Component.translatable("gui.skin_library.is_auth_failed"));
-                        }
+                        return Api.requestWithToken(Api.HttpMethod.GET, UserResponse.class,
+                                "v3/user/mca/me", null, null, token);
                     }
-                } else {
+                }
+                return response;
+            } catch (RuntimeException e) {
+                return new ErrorResponse(-1, e.toString());
+            }
+        }).whenComplete((response, failure) -> Minecraft.getInstance().executeIfPossible(() -> {
+            if (!requestEpoch.matchesAuthPoll(context, page)) {
+                return;
+            }
+            awaitingAuthentication = false;
+            nextAuthenticationPollAt = Util.getMillis() + 2000;
+
+            if (failure == null && response instanceof UserResponse(User user) && user != null) {
+                authenticated = true;
+                currentUser = user;
+                likeOverrides.clear();
+                isBrowserOpen = false;
+                clearError();
+                invalidateRemotePage();
+                Auth.saveToken();
+                setPage(workspace != null ? resumeAfterAuthentication : Page.LIBRARY);
+            } else if (failure == null && response instanceof IsAuthResponse(boolean success) && !success) {
+                // A generated token may still be waiting for browser approval.
+                if (!isBrowserOpen) {
+                    invalidateAccountRequests();
+                    Auth.clearToken();
+                    setPage(Page.LIBRARY);
                     setError(Component.translatable("gui.skin_library.is_auth_failed"));
                 }
-                Thread.sleep(2000);
-            } catch (Exception e) {
-                MCA.LOGGER.error(e);
-            } finally {
-                awaitingAuthentication = false;
+            } else {
+                isBrowserOpen = false;
+                setError(Component.translatable("gui.skin_library.is_auth_failed"));
             }
-        });
+        }));
     }
 
     private void cancelAuthentication() {
+        invalidateAccountRequests();
+        requestEpoch.invalidateImport();
         Auth.clearToken();
         authenticated = false;
         currentUser = null;
@@ -1615,6 +1795,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     }
 
     private void invalidateRemotePage() {
+        requestEpoch.invalidateContentRequest();
         loadedQuery = null;
         pendingQuery = null;
         remoteContents.clear();
@@ -1648,6 +1829,9 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         // add to visual list
         contents.clear();
         contents.addAll(newList);
+        if (subscriptionFilter == SubscriptionFilter.LIKED) {
+            contents.removeIf(content -> Boolean.FALSE.equals(likeOverrides.get(content.content_id())));
+        }
 
         // last page reached, go one back
         if (contents.isEmpty() && selectionPage > 0 && pendingQuery == null) {
@@ -1681,42 +1865,162 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         }
     }
 
+    @FunctionalInterface
+    private interface ImageStreamSupplier {
+        InputStream open() throws IOException;
+    }
+
     @Override
     public void onFilesDrop(List<Path> paths) {
+        if (paths.isEmpty()) {
+            return;
+        }
         Path path = paths.getFirst();
-        loadImage(path.toString());
+        loadImageFromSource(() -> Files.newInputStream(path));
     }
 
     private void loadImage(String path) {
-        try (InputStream stream = openImage(path)) {
-            NativeImage image = NativeImage.read(stream);
-            if (image.getWidth() == 64 && image.getHeight() == 64) {
-                if (SkinPorter.isSlimFormat(image)) {
+        loadImageFromSource(() -> openImage(path));
+    }
+
+    private void loadImageFromSource(ImageStreamSupplier source) {
+        RequestEpoch.Snapshot context = requestEpoch.beginImport(page);
+        CompletableFuture.supplyAsync(() -> {
+            try (InputStream stream = source.open()) {
+                NativeImage image = NativeImage.read(stream);
+                if (image.getWidth() == 64 && (image.getHeight() == 64 || image.getHeight() == 32)) {
+                    return image;
+                }
+                image.close();
+                return null;
+            } catch (IOException e) {
+                throw new CompletionException(e);
+            }
+        }).whenComplete((image, error) -> Minecraft.getInstance().executeIfPossible(() -> {
+            if (!requestEpoch.matchesImport(context, page) || Minecraft.getInstance().screen != this) {
+                if (image != null) image.close();
+                return;
+            }
+            if (error != null) {
+                MCA.LOGGER.warn("Unable to load skin library image", error);
+                setError(Component.literal("Unable to load image."));
+                return;
+            }
+            if (image == null) {
+                setError(Component.translatable("gui.skin_library.not_64"));
+                return;
+            }
+
+            NativeImage prepared = image;
+            try {
+                if (image.getHeight() == 32) {
+                    // The legacy porter owns and closes its input on success.
+                    prepared = SkinPorter.portLegacySkin(image);
+                } else if (SkinPorter.isSlimFormat(image)) {
                     SkinPorter.convertSlimToDefault(image);
                 }
-                workspace = new Workspace(image);
+                replaceWorkspace(new Workspace(prepared));
                 setPage(Page.EDITOR_TYPE);
-            } else if (image.getWidth() == 64 && image.getHeight() == 32) {
-                // port legacy skins
-                workspace = new Workspace(SkinPorter.portLegacySkin(image));
-                setPage(Page.EDITOR_TYPE);
-            } else {
-                setError(Component.translatable("gui.skin_library.not_64"));
+            } catch (RuntimeException e) {
+                prepared.close();
+                MCA.LOGGER.error("Unable to prepare skin library image", e);
+                setError(Component.literal("Unable to load image."));
+            } finally {
+                if (prepared != image) {
+                    image.close();
+                }
             }
-        } catch (IOException e) {
-            MCA.LOGGER.error(e);
+        }));
+    }
+
+    public static boolean isLocalPathInput(String input) {
+        if (input == null || input.isBlank()) {
+            return false;
+        }
+        String candidate = input.strip();
+        if (WINDOWS_DRIVE_PATH.matcher(candidate).matches() || candidate.startsWith("\\\\")) {
+            return true;
+        }
+        try {
+            if (Files.isRegularFile(Path.of(candidate))) {
+                return true;
+            }
+        } catch (InvalidPathException ignored) {
+            // Fall through to URI classification
+        }
+        try {
+            URI uri = URI.create(candidate);
+            return uri.getScheme() == null;
+        } catch (IllegalArgumentException e) {
+            return true;
         }
     }
 
     /**
-     * Opens the path as a URL, falling back to a local file.
+     * Reads remote images with a bounded response; local file imports are handled separately.
      */
     private static InputStream openImage(String path) throws IOException {
-        try {
-            return URI.create(path).toURL().openStream();
-        } catch (IllegalArgumentException | IOException e) {
-            return new FileInputStream(path);
+        if (path == null || path.isBlank()) {
+            throw new IOException("Empty image path");
         }
+        String candidate = path.strip();
+        if (isLocalPathInput(candidate)) {
+            try {
+                return Files.newInputStream(Path.of(candidate));
+            } catch (InvalidPathException e) {
+                throw new IOException("Invalid local file path: " + candidate, e);
+            }
+        }
+        URI uri;
+        try {
+            uri = URI.create(candidate);
+        } catch (IllegalArgumentException e) {
+            throw new IOException("Invalid image URL: " + candidate, e);
+        }
+        if (!isHttpImageUrl(uri)) {
+            throw new IOException("Only HTTP(S) image URLs or local files are supported");
+        }
+        for (int redirects = 0; redirects <= 3; redirects++) {
+            HttpURLConnection connection = (HttpURLConnection) uri.toURL().openConnection();
+            connection.setConnectTimeout(5_000);
+            connection.setReadTimeout(10_000);
+            connection.setInstanceFollowRedirects(false);
+            try {
+                int status = connection.getResponseCode();
+                if (status >= 300 && status < 400) {
+                    String location = connection.getHeaderField("Location");
+                    if (location == null || redirects == 3) {
+                        throw new IOException("Image URL redirect limit exceeded");
+                    }
+                    uri = uri.resolve(location);
+                    if (!isHttpImageUrl(uri)) {
+                        throw new IOException("Image URL redirected outside HTTP(S)");
+                    }
+                    continue;
+                }
+                if (status < 200 || status >= 300) {
+                    throw new IOException("Image download failed with HTTP " + status);
+                }
+                try (InputStream input = connection.getInputStream(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+                    byte[] buffer = new byte[8192];
+                    int count;
+                    while ((count = input.read(buffer)) != -1) {
+                        if (output.size() + count > 2 * 1024 * 1024) {
+                            throw new IOException("Image download exceeds 2 MiB");
+                        }
+                        output.write(buffer, 0, count);
+                    }
+                    return new ByteArrayInputStream(output.toByteArray());
+                }
+            } finally {
+                connection.disconnect();
+            }
+        }
+        throw new IOException("Image URL redirect limit exceeded");
+    }
+
+    private static boolean isHttpImageUrl(URI uri) {
+        return "http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme());
     }
 
     private void publish() {
@@ -1743,57 +2047,89 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         }
         skipHairWarning = false;
 
-        if (!uploading) {
-            uploading = true;
-            CompletableFuture.runAsync(() -> {
-                if (Auth.hasToken()) {
-                    boolean isNew = workspace.contentid == -1;
-                    Response request = null;
-                    try {
-                        request = request(
-                                isNew ? Api.HttpMethod.POST : Api.HttpMethod.PUT,
-                                isNew ? ContentIdResponse.class : SuccessResponse.class,
-                                isNew ? "v1/content/mca" : "v1/content/mca/" + workspace.contentid,
-                                Map.of(),
-                                Map.of(
-                                        "title", title,
-                                        "meta", workspace.toListEntry().toJson().toString(),
-                                        "data", new String(Base64.getEncoder().encode(workspace.currentImage.asByteArray())),
-                                        "tags", workspace.getUploadTags()
-                                ));
-                    } catch (IOException e) {
-                        MCA.LOGGER.error(e);
-                    }
-
-                    if (request instanceof ContentIdResponse || request instanceof SuccessResponse) {
-                        int contentid = request instanceof ContentIdResponse(
-                                int createdId
-                        ) ? createdId : workspace.contentid;
-
-                        invalidateRemotePage();
-                        Response contentResponse = request(Api.HttpMethod.GET, ContentResponse.class, "v3/content/mca/" + contentid);
-                        if (contentResponse instanceof ContentResponse(Content content)) {
-                            SkinCache.store(content);
-                            focusedContent = content.lite();
-                            setPage(Page.DETAIL);
-                        } else {
-                            SkinCache.enforceSync(contentid);
-                            setPage(Page.LIBRARY);
-                        }
-                        uploading = false;
-                    } else if (request instanceof ErrorResponse response) {
-                        if (response.code() == 428) {
-                            setError(Component.translatable("gui.skin_library.upload_duplicate"));
-                        } else {
-                            setError(Component.translatable("gui.skin_library.upload_failed"));
-                        }
-                        uploading = false;
-                    }
-                }
-            });
-        } else {
+        if (uploading) {
             setError(Component.translatable("gui.skin_library.already_uploading"));
+            return;
         }
+        String token = Auth.getToken();
+        if (token == null) {
+            setError(Component.translatable("gui.skin_library.upload_failed"));
+            return;
+        }
+
+        UploadSnapshot snapshot;
+        try {
+            snapshot = snapshotUpload(workspace, title);
+        } catch (IOException e) {
+            MCA.LOGGER.error("Unable to capture skin library upload", e);
+            setError(Component.translatable("gui.skin_library.upload_failed"));
+            return;
+        }
+        RequestEpoch.Snapshot context = requestEpoch.beginUpload(token, page);
+        Workspace uploadedWorkspace = workspace;
+        uploading = true;
+        CompletableFuture.supplyAsync(() -> {
+            Response sent = Api.requestWithToken(snapshot.method(), snapshot.newContent() ? ContentIdResponse.class : SuccessResponse.class,
+                    snapshot.endpoint(), Map.of(), snapshot.body(), token);
+            if (!(sent instanceof ContentIdResponse) && !(sent instanceof SuccessResponse)) {
+                return new UploadResult(sent, null);
+            }
+            int contentId = sent instanceof ContentIdResponse(int createdId) ? createdId : snapshot.contentId();
+            Response fetched = Api.requestWithToken(Api.HttpMethod.GET, ContentResponse.class,
+                    "v3/content/mca/" + contentId, null, null, token);
+            Content content = fetched instanceof ContentResponse(Content value) ? value : null;
+            SkinCache.updateAfterUpload(contentId, content, () -> requestEpoch.matchesAccount(context));
+            return new UploadResult(sent, content == null ? null : content.lite());
+        }).whenComplete((result, failure) -> Minecraft.getInstance().executeIfPossible(() -> {
+            if (!requestEpoch.matchesAccount(context)) {
+                return;
+            }
+            boolean currentUpload = requestEpoch.matchesUpload(context) && workspace == uploadedWorkspace;
+            if (currentUpload) {
+                uploading = false;
+            }
+            boolean currentEditor = currentUpload && page == Page.EDITOR && requestEpoch.matchesPage(context, page);
+            if (failure != null || result == null) {
+                MCA.LOGGER.warn("Skin library upload failed", failure);
+                if (currentEditor) {
+                    setError(Component.translatable("gui.skin_library.upload_failed"));
+                }
+                return;
+            }
+            if (!currentEditor) {
+                return;
+            }
+            if (result.sent() instanceof ContentIdResponse || result.sent() instanceof SuccessResponse) {
+                invalidateRemotePage();
+                if (result.content() != null) {
+                    focusedContent = result.content();
+                    setPage(Page.DETAIL);
+                } else {
+                    setPage(Page.LIBRARY);
+                }
+            } else {
+                setError(Component.translatable(result.sent() instanceof ErrorResponse response && response.code() == 428
+                        ? "gui.skin_library.upload_duplicate" : "gui.skin_library.upload_failed"));
+            }
+        }));
+    }
+
+    private record UploadSnapshot(Api.HttpMethod method, String endpoint, int contentId, boolean newContent, Map<String, Object> body) {
+    }
+
+    private record UploadResult(Response sent, LiteContent content) {
+    }
+
+    private static UploadSnapshot snapshotUpload(Workspace workspace, String title) throws IOException {
+        boolean creating = workspace.contentid == -1;
+        Map<String, Object> body = Map.of(
+                "title", title,
+                "meta", workspace.toListEntry().toJson().toString(),
+                "data", Base64.getEncoder().encodeToString(workspace.currentImage.asByteArray()),
+                "tags", workspace.getUploadTags()
+        );
+        return new UploadSnapshot(creating ? Api.HttpMethod.POST : Api.HttpMethod.PUT,
+                creating ? "v1/content/mca" : "v1/content/mca/" + workspace.contentid, workspace.contentid, creating, body);
     }
 
     private Optional<LiteContent> getContentById(int contentid) {
@@ -1805,8 +2141,12 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     }
 
     private void setTag(int contentid, String tag, boolean add) {
-        if (Auth.hasToken()) {
-            request(add ? Api.HttpMethod.POST : Api.HttpMethod.DELETE, SuccessResponse.class, "v1/tag/mca/" + contentid + "/" + tag);
+        runMutation(add ? Api.HttpMethod.POST : Api.HttpMethod.DELETE,
+                contentMutationTarget(contentid), "v1/tag/mca/" + contentid + "/" + tag, null, response -> {
+            if (!(response instanceof SuccessResponse)) {
+                setError(Component.translatable("gui.skin_library.upload_failed"));
+                return;
+            }
             getContentById(contentid).ifPresent(c -> {
                 if (add) {
                     c.tags().add(tag);
@@ -1814,14 +2154,20 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                     c.tags().remove(tag);
                 }
             });
-        }
+            rebuild();
+        });
     }
 
     private void removeContent(int contentId) {
-        if (Auth.hasToken()) {
-            request(Api.HttpMethod.DELETE, SuccessResponse.class, "v1/content/mca/" + contentId);
+        runMutation(Api.HttpMethod.DELETE, contentMutationTarget(contentId), "v1/content/mca/" + contentId, null, response -> {
+            if (!(response instanceof SuccessResponse)) {
+                setError(Component.translatable("gui.skin_library.upload_failed"));
+                return;
+            }
             removeContentLocally(contentId);
-        }
+            invalidateRemotePage();
+            setPage(Page.LIBRARY);
+        });
     }
 
     private void removeContentLocally(int contentId) {
@@ -1829,51 +2175,115 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     }
 
     private void setReport(LiteContent content, String reason, boolean add) {
-        if (!Auth.hasToken()) {
-            return;
-        }
-
-        Response response = request(add ? Api.HttpMethod.POST : Api.HttpMethod.DELETE, SuccessResponse.class, "v1/report/mca/" + content.content_id() + "/" + reason);
-        if (!(response instanceof SuccessResponse)) {
-            return;
-        }
-
-        if (add) {
-            content.reports().add(reason);
-            // the server hides what the viewer reported as inappropriate
-            if (reason.equals("DEFAULT")) {
-                removeContentLocally(content.content_id());
+        runMutation(add ? Api.HttpMethod.POST : Api.HttpMethod.DELETE,
+                contentMutationTarget(content.content_id()), "v1/report/mca/" + content.content_id() + "/" + reason, null, response -> {
+            if (!(response instanceof SuccessResponse)) {
+                setError(Component.translatable("gui.skin_library.upload_failed"));
+                return;
             }
-        } else {
-            content.reports().remove(reason);
-        }
-
-        setError(Component.translatable(add ? "gui.skin_library.reported" : "gui.skin_library.report_withdrawn"));
+            if (add) {
+                content.reports().add(reason);
+                if (reason.equals("DEFAULT")) {
+                    removeContentLocally(content.content_id());
+                }
+            } else {
+                content.reports().remove(reason);
+            }
+            setPage(Page.DETAIL);
+            setError(Component.translatable(add ? "gui.skin_library.reported" : "gui.skin_library.report_withdrawn"));
+        });
     }
 
-    private boolean setLike(LiteContent content, boolean add) {
-        if (!Auth.hasToken()) {
-            return false;
-        }
-
-        Response response = request(add ? Api.HttpMethod.POST : Api.HttpMethod.DELETE, SuccessResponse.class, "v1/like/mca/" + content.content_id());
-        if (!(response instanceof SuccessResponse)) {
-            return false;
-        }
-
-        // list responses are cached for a minute, so remember the change locally
-        likeOverrides.put(content.content_id(), add);
-        if (!add && subscriptionFilter == SubscriptionFilter.LIKED) {
-            removeContentLocally(content.content_id());
-        }
-        return true;
+    private void setLike(LiteContent content, boolean add, Consumer<Boolean> completion) {
+        int contentId = content.content_id();
+        runMutation(add ? Api.HttpMethod.POST : Api.HttpMethod.DELETE,
+                contentMutationTarget(contentId), "v1/like/mca/" + contentId, null, () -> {
+            // List responses are cached for a minute, so remember the change locally.
+            likeOverrides.put(contentId, add);
+            if (page == Page.LIBRARY) {
+                refreshContentList();
+            } else if (page == Page.DETAIL && selectedId(focusedContent) == contentId && detailLikeButton != null) {
+                detailLikeButton.toggle = isLiked(focusedContent);
+            }
+        }, response -> {
+            boolean success = response instanceof SuccessResponse;
+            if (!success) {
+                setError(Component.translatable("gui.skin_library.upload_failed"));
+            }
+            completion.accept(success);
+        });
     }
 
     private void setBan(int userid, boolean banned) {
-        if (Auth.hasToken() && currentUser != null) {
-            request(Api.HttpMethod.PUT, SuccessResponse.class, "v1/user/" + userid, Map.of(
-                    "banned", Boolean.toString(banned)
-            ));
+        if (currentUser == null) {
+            return;
+        }
+        runMutation(Api.HttpMethod.PUT, "user:" + userid, "v1/user/" + userid,
+                Map.of("banned", Boolean.toString(banned)), response -> {
+            if (response instanceof SuccessResponse) {
+                refreshContentList();
+            } else {
+                setError(Component.translatable("gui.skin_library.upload_failed"));
+            }
+        });
+    }
+
+    private void runMutation(Api.HttpMethod method, String target, String path, Map<String, ?> body, Consumer<Response> resultHandler) {
+        runMutation(method, target, path, body, null, resultHandler);
+    }
+
+    private void runMutation(Api.HttpMethod method, String target, String path, Map<String, ?> body,
+                             Runnable onAccountSuccess, Consumer<Response> resultHandler) {
+        String token = Auth.getToken();
+        if (token == null) {
+            setError(Component.translatable("gui.skin_library.upload_failed"));
+            return;
+        }
+        if (!pendingMutations.add(target)) {
+            return;
+        }
+        updateDeleteConfirmState();
+        RequestEpoch.Snapshot context = requestEpoch.capture(token, page);
+        int focusedId = selectedId(focusedContent);
+        int deletionId = selectedId(deleteConfirmationContent);
+        int reportId = selectedId(reportConfirmationContent);
+        CompletableFuture.supplyAsync(() ->
+                requestEpoch.matchesAccount(context) ? Api.requestWithToken(method, SuccessResponse.class, path, null, body, token) : null
+        ).whenComplete((response, failure) -> Minecraft.getInstance().executeIfPossible(() -> {
+            if (!requestEpoch.matchesAccount(context)) {
+                return;
+            }
+            pendingMutations.remove(target);
+            updateDeleteConfirmState();
+            if (onAccountSuccess != null && response instanceof SuccessResponse) {
+                onAccountSuccess.run();
+            }
+            if (!requestEpoch.matchesPage(context, page)
+                    || (page == Page.DETAIL && selectedId(focusedContent) != focusedId)
+                    || (page == Page.DELETE && selectedId(deleteConfirmationContent) != deletionId)
+                    || (page == Page.REPORT && selectedId(reportConfirmationContent) != reportId)) {
+                return;
+            }
+            if (failure != null) {
+                MCA.LOGGER.warn("Skin library action failed", failure);
+                setError(Component.translatable("gui.skin_library.upload_failed"));
+                return;
+            }
+            resultHandler.accept(response);
+        }));
+    }
+
+    private static int selectedId(LiteContent content) {
+        return content == null ? -1 : content.content_id();
+    }
+
+    private static String contentMutationTarget(int contentId) {
+        return "content:" + contentId;
+    }
+
+    private void updateDeleteConfirmState() {
+        if (deleteConfirmButton != null && page == Page.DELETE && deleteConfirmationContent != null) {
+            deleteConfirmButton.active = !pendingMutations.contains(contentMutationTarget(deleteConfirmationContent.content_id()));
         }
     }
 

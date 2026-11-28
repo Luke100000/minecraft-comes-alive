@@ -2,7 +2,9 @@ package net.conczin.mca.network.c2s;
 
 import net.conczin.mca.MCA;
 import net.conczin.mca.network.HandleablePayload;
+import net.conczin.mca.resources.Rank;
 import net.conczin.mca.server.world.data.RoomWorkflow;
+import net.conczin.mca.server.world.data.Village;
 import net.conczin.mca.server.world.data.VillageManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
@@ -15,26 +17,33 @@ public record ConfirmBuildingPolymorphMessage(BlockPos source,
                                               ReportBuildingMessage.Action action,
                                               int expectedTargetId,
                                               String chosenType) implements HandleablePayload {
-    public static final CustomPacketPayload.Type<ConfirmBuildingPolymorphMessage> TYPE = new CustomPacketPayload.Type<>(MCA.locate("confirm_building_polymorph"));
+    public static final CustomPacketPayload.Type<ConfirmBuildingPolymorphMessage> TYPE =
+            new CustomPacketPayload.Type<>(MCA.locate("confirm_building_polymorph"));
 
     public static final StreamCodec<FriendlyByteBuf, ConfirmBuildingPolymorphMessage> STREAM_CODEC = StreamCodec.composite(
             BlockPos.STREAM_CODEC, ConfirmBuildingPolymorphMessage::source,
-            ByteBufCodecs.idMapper(i -> ReportBuildingMessage.Action.VALUES[i], ReportBuildingMessage.Action::ordinal), ConfirmBuildingPolymorphMessage::action,
+            ReportBuildingMessage.ACTION_CODEC, ConfirmBuildingPolymorphMessage::action,
             ByteBufCodecs.VAR_INT, ConfirmBuildingPolymorphMessage::expectedTargetId,
-            ByteBufCodecs.STRING_UTF8, ConfirmBuildingPolymorphMessage::chosenType,
+            ByteBufCodecs.stringUtf8(ReportBuildingMessage.MAX_DATA_LENGTH), ConfirmBuildingPolymorphMessage::chosenType,
             ConfirmBuildingPolymorphMessage::new
     );
 
     @Override
     public void handleServer(ServerPlayer player) {
+        if (!ReportBuildingMessage.canUseBlueprint(player)) {
+            return;
+        }
         try {
             BlockPos currentPosition = player.blockPosition();
             if (!matchesContinuationSource(source, currentPosition)) return;
+            VillageManager manager = VillageManager.get(player.serverLevel());
+            Village nearestVillage = ReportBuildingMessage.editTarget(manager, source, action);
+            if (!ReportBuildingMessage.hasVillagePermission(player, nearestVillage, Rank.PEASANT)) return;
+            if (!player.serverLevel().hasChunk(source.getX() >> 4, source.getZ() >> 4)) return;
             // A stale choice must not normalize an embedded player onto a different surface.
             if (player.serverLevel().getBlockState(source)
                     .isCollisionShapeFullBlock(player.serverLevel(), source)) return;
 
-            VillageManager manager = VillageManager.get(player.serverLevel());
             ReportBuildingMessage.executeScanAction(
                     new RoomWorkflow(manager, player.serverLevel()), player, source,
                     chosenType, action, expectedTargetId);

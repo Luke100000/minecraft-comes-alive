@@ -67,7 +67,7 @@ class VillageManagerExpectedTargetTest {
             VillageManager manager = new TargetManager(village);
             BlockPos source = SOURCE.above(8 * floorNumber);
             assertTrue(village.findInteractionRoomAt(source).isEmpty());
-            assertEquals(Village.RoomScanMode.ADD_ROOM, village.getRoomScanPlan(null, source).mode());
+            assertEquals(Village.RoomScanMode.ADD_ROOM, RoomWorkflow.plan(village, null, source).mode());
 
             assertEquals(VillageManager.BuildingEditResult.SUCCESS,
                     manager.removeFloor(source, floorNumber, 10, 10, 1));
@@ -138,7 +138,7 @@ class VillageManagerExpectedTargetTest {
         upperRoom.setGeometry(roomSource, roomSource.above(3), Set.of(roomSource));
         village.registerRoom(upperRoom);
         VillageManager manager = new TargetManager(village);
-        assertEquals(Village.RoomScanMode.ADD_ROOM, village.getRoomScanPlan(null, source).mode());
+        assertEquals(Village.RoomScanMode.ADD_ROOM, RoomWorkflow.plan(village, null, source).mode());
 
         assertEquals(VillageManager.BuildingEditResult.NO_FLOOR,
                 manager.removeFloor(source, 1, 10, 10, 1));
@@ -299,8 +299,9 @@ class VillageManagerExpectedTargetTest {
         }
 
         @Override
-        public RoomScanPlan getRoomScanPlan(Level level, BlockPos pos) {
-            return RoomScanPlan.updateRoom(room, pos);
+        Optional<ResolvedInteraction> resolveInteractionPosition(Level level, BlockPos pos) {
+            return Optional.of(new ResolvedInteraction(
+                    structure, new Structure.InteractionPosition(structure.getFloor(0).orElseThrow(), room)));
         }
 
         @Override

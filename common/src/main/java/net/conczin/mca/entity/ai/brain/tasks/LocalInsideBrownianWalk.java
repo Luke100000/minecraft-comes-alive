@@ -21,13 +21,16 @@ public final class LocalInsideBrownianWalk {
     }
 
     public static BehaviorControl<PathfinderMob> create(float speedModifier) {
-        WalkTargetRetryGate retryGate = new WalkTargetRetryGate(40L, 1.0D);
+        Object gateKey = new Object();
         return BehaviorBuilder.create(context -> context.group(context.absent(MemoryModuleType.WALK_TARGET))
                 .apply(context, walkTarget -> (level, mob, gameTime) -> {
                     BlockPos origin = mob.blockPosition();
                     if (!(mob instanceof VillagerEntityMCA villager)) {
                         return false;
                     }
+                    WalkTargetRetryGate retryGate = villager.getVillagerBrain().getOrCreateRetryGate(
+                            gateKey,
+                            () -> new WalkTargetRetryGate(40L, 1.0D));
                     var chunk = level.getChunkSource().getChunkNow(origin.getX() >> 4, origin.getZ() >> 4);
                     if (chunk == null) return false;
                     // A changed column (for example a newly added roof) permits an immediate retry.

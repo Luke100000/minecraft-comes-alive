@@ -53,6 +53,7 @@ public class InteractScreen extends AbstractDynamicScreen {
     private final UUID interactionId;
     private final Player player = Objects.requireNonNull(Minecraft.getInstance().player);
     private boolean inGiftMode;
+    private int heldGiftKeys;
     private int timeSinceLastClick;
     private String father;
     private String mother;
@@ -307,6 +308,19 @@ public class InteractScreen extends AbstractDynamicScreen {
             }
             return true;
         }
+        // Track physical presses even outside gift mode so held keys cannot give repeatedly.
+        int giftKey = giftKeyMask(keyChar);
+        if (giftKey != 0) {
+            boolean newPress = (heldGiftKeys & giftKey) == 0;
+            heldGiftKeys |= giftKey;
+            if (inGiftMode && !dialogueMode) {
+                if (newPress) {
+                    timeSinceLastClick = 0;
+                    Network.sendToServer(new InteractionVillagerMessage("gift", villager.asEntity().getUUID(), interactionId));
+                }
+                return true;
+            }
+        }
         if (dialogueMode && (keyChar == GLFW.GLFW_KEY_UP || keyChar == GLFW.GLFW_KEY_DOWN)) {
             int direction = keyChar == GLFW.GLFW_KEY_DOWN ? 1 : -1;
             dialogueKeyboardIndex = DialogueMenuOrdering.nextFocus(dialogueKeyboardIndex, dialogueHits.size(), direction);
@@ -320,15 +334,6 @@ public class InteractScreen extends AbstractDynamicScreen {
                 return handleDialogueClick(dialogueHits.get(dialogueKeyboardIndex).click());
             }
         }
-        // Allow keyboard gifting without repeating a transfer for every held-key event.
-        if (inGiftMode && !dialogueMode
-                && (keyChar == GLFW.GLFW_KEY_ENTER || keyChar == GLFW.GLFW_KEY_KP_ENTER)) {
-            if (timeSinceLastClick > 2) {
-                timeSinceLastClick = 0;
-                Network.sendToServer(new InteractionVillagerMessage("gift", villager.asEntity().getUUID(), interactionId));
-            }
-            return true;
-        }
         return super.keyPressed(keyChar, keyCode, unknown);
     }
 
@@ -338,7 +343,9 @@ public class InteractScreen extends AbstractDynamicScreen {
             qHeld = false;
             return true;
         }
-        return super.keyReleased(keyCode, scanCode, modifiers);
+        int giftKey = giftKeyMask(keyCode);
+        heldGiftKeys &= ~giftKey;
+        return (inGiftMode && !dialogueMode && giftKey != 0) || super.keyReleased(keyCode, scanCode, modifiers);
     }
 
     private void navigateBack() {
@@ -356,6 +363,14 @@ public class InteractScreen extends AbstractDynamicScreen {
         } else if (!getActiveScreen().equals("main")) {
             setLayout("main");
         }
+    }
+
+    private static int giftKeyMask(int key) {
+        return switch (key) {
+            case GLFW.GLFW_KEY_ENTER -> 1;
+            case GLFW.GLFW_KEY_KP_ENTER -> 2;
+            default -> 0;
+        };
     }
 
     private void drawIcons(GuiGraphics context, int hearts) {
